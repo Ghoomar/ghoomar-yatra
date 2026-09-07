@@ -6,19 +6,25 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
-import { Users, Plus, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { EmployeeModal } from '@/components/people/EmployeeModal';
+import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
+import { Users, Plus, RefreshCw, Network, Edit2, Power, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Employee {
   id: string;
   employee_code?: string;
   name: string;
   phone?: string;
+  department_id?: string;
+  team_id?: string;
+  role_id?: string;
   department_name?: string;
   team_name?: string;
   role_name?: string;
   joining_date: string;
   employment_status: string;
   monthly_salary: number;
+  bank_details?: any;
 }
 
 export default function EmployeesPage() {
@@ -28,29 +34,33 @@ export default function EmployeesPage() {
   const [teams, setTeams] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Form
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
-  const [teamId, setTeamId] = useState('');
-  const [roleId, setRoleId] = useState('');
-  const [salary, setSalary] = useState<number>(18000);
-  const [saving, setSaving] = useState(false);
+  // Filters
+  const [search, setSearch] = useState('');
+  const [selectedDept, setSelectedDept] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+
+  // Modals
+  const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [orgHierarchyModalOpen, setOrgHierarchyModalOpen] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: empData } = await supabase
+      const { data: empData, error: empErr } = await supabase
         .from('employees')
         .select('*, department:departments(name), team:teams(name), role:employee_roles(name)')
         .order('name');
 
-      const { data: dData } = await supabase.from('departments').select('*').order('name');
-      const { data: tData } = await supabase.from('teams').select('*').order('name');
-      const { data: rData } = await supabase.from('employee_roles').select('*').order('name');
+      if (empErr) throw empErr;
+
+      const [{ data: dData }, { data: tData }, { data: rData }] = await Promise.all([
+        supabase.from('departments').select('*').order('name'),
+        supabase.from('teams').select('*').order('name'),
+        supabase.from('employee_roles').select('*').order('name'),
+      ]);
 
       setDepartments(dData || []);
       setTeams(tData || []);
@@ -64,8 +74,8 @@ export default function EmployeesPage() {
         }))
       );
     } catch (err: any) {
-      console.error(err);
-      setMessage({ type: 'error', text: 'Failed to load employee directory.' });
+      console.error('Error loading employees:', err);
+      setMessage({ type: 'error', text: 'Failed to load employee directory: ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -75,46 +85,45 @@ export default function EmployeesPage() {
     loadData();
   }, []);
 
-  const filteredTeams = teams.filter((t) => !departmentId || t.department_id === departmentId);
-  const filteredRoles = roles.filter((r) => !teamId || r.team_id === teamId);
-
-  const handleAddEmployee = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setMessage(null);
-
+  const handleToggleStatus = async (emp: any) => {
+    const isCurrentlyActive = emp.employment_status === 'Active';
+    const nextStatus = isCurrentlyActive ? 'Inactive' : 'Active';
     try {
-      const code = `GY-EMP-${Date.now().toString().slice(-4)}`;
-      const { error } = await supabase.from('employees').insert({
-        employee_code: code,
-        name,
-        phone,
-        department_id: departmentId || null,
-        team_id: teamId || null,
-        role_id: roleId || null,
-        monthly_salary: salary,
-        employment_status: 'Active',
-      });
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          employment_status: nextStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', emp.id);
 
       if (error) throw error;
-
-      setMessage({ type: 'success', text: `Employee ${name} (${code}) added successfully.` });
-      setShowAddModal(false);
-      setName('');
-      setPhone('');
-      setSalary(18000);
       loadData();
     } catch (err: any) {
-      console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Failed to add employee.' });
-    } finally {
-      setSaving(false);
+      alert('Failed to update status: ' + err.message);
     }
   };
 
-  const totalMonthlyPayroll = employees
-    .filter((e) => e.employment_status === 'Active')
-    .reduce((sum, e) => sum + (Number(e.monthly_salary) || 0), 0);
+  const filteredEmployees = employees.filter((e) => {
+    const matchesDept = selectedDept === 'ALL' || e.department_id === selectedDept;
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      (statusFilter === 'ACTIVE' && e.employment_status === 'Active') ||
+      (statusFilter === 'INACTIVE' && e.employment_status !== 'Active');
+    const matchesSearch =
+      !search ||
+      e.name?.toLowerCase().includes(search.toLowerCase()) ||
+      e.employee_code?.toLowerCase().includes(search.toLowerCase()) ||
+      e.phone?.includes(search);
+    return matchesDept && matchesStatus && matchesSearch;
+  });
+
+  const activeEmployees = employees.filter((e) => e.employment_status === 'Active');
+  const inactiveEmployees = employees.filter((e) => e.employment_status !== 'Active');
+  const totalMonthlyPayroll = activeEmployees.reduce(
+    (sum, e) => sum + (Number(e.monthly_salary) || 0),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -130,18 +139,40 @@ export default function EmployeesPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="amber" size="sm" onClick={() => setShowAddModal(true)} className="gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setEditingEmployee(null);
+              setEmployeeModalOpen(true);
+            }}
+            className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+          >
             <Plus className="h-4 w-4" /> Add Employee
           </Button>
-          <Button variant="outline" size="sm" onClick={loadData}>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOrgHierarchyModalOpen(true)}
+            className="gap-1.5"
+          >
+            <Network className="h-4 w-4 text-stone-500" /> Manage Org Structure
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={loadData} title="Refresh directory">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       {message && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+        <div
+          className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
+            message.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+          }`}
+        >
           {message.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           {message.text}
         </div>
@@ -150,48 +181,124 @@ export default function EmployeesPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Total Active Employees</CardDescription>
-          <div className="text-2xl font-bold text-stone-900 mt-1">
-            {employees.filter((e) => e.employment_status === 'Active').length}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">Across {departments.length} departments</div>
+          <CardHeader className="pb-1">
+            <CardDescription>Total Active Employees</CardDescription>
+            <div className="text-2xl font-bold text-stone-900 mt-1">
+              {activeEmployees.length}{' '}
+              {inactiveEmployees.length > 0 && (
+                <span className="text-xs font-normal text-stone-400">
+                  (+{inactiveEmployees.length} inactive)
+                </span>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 text-[11px] text-stone-500">
+            Across {departments.length} departments & {roles.length} operational roles
+          </CardContent>
         </Card>
 
         <Card>
-          <CardDescription>Monthly Payroll Commitment</CardDescription>
-          <div className="text-2xl font-bold text-amber-600 mt-1">
-            {formatINR(totalMonthlyPayroll)}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">
+          <CardHeader className="pb-1">
+            <CardDescription>Monthly Payroll Commitment</CardDescription>
+            <div className="text-2xl font-bold text-amber-600 mt-1">
+              {formatINR(totalMonthlyPayroll)}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 text-[11px] text-stone-500">
             Daily fixed cost allocation: {formatINR(totalMonthlyPayroll / 30)}/day
-          </div>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardDescription>Operational Hierarchy</CardDescription>
-          <div className="text-base font-semibold text-stone-800 mt-1">
-            Department → Team → Role
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">Configurable organizational structure</div>
+          <CardHeader className="pb-1">
+            <CardDescription>Operational Hierarchy</CardDescription>
+            <div className="text-base font-semibold text-stone-800 mt-1">
+              Department → Team → Role
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 text-[11px] text-stone-500">
+            Configurable organizational structure with store issue permissions
+          </CardContent>
         </Card>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-xl text-xs shadow-xs">
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+          <button
+            onClick={() => setSelectedDept('ALL')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 ${
+              selectedDept === 'ALL'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+            }`}
+          >
+            All Departments
+          </button>
+          {departments.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => setSelectedDept(d.id)}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 ${
+                selectedDept === d.id
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+              }`}
+            >
+              {d.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Status Filter */}
+          <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0">
+            {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                  statusFilter === st
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            placeholder="Search name, code, phone..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full sm:w-56 rounded-lg border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
+          />
+        </div>
       </div>
 
       {/* Employees Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Staff Members ({employees.length})</CardTitle>
-          <CardDescription>Operational roles, departments and compensation</CardDescription>
+          <CardTitle>Staff Members ({filteredEmployees.length})</CardTitle>
+          <CardDescription>Operational roles, departments, active status and compensation</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
-          {employees.length === 0 ? (
+          {loading ? (
+            <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
+              <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading staff directory...
+            </div>
+          ) : filteredEmployees.length === 0 ? (
             <div className="py-12 text-center text-stone-400 text-xs">
-              No employees registered yet. Click &quot;Add Employee&quot; to seed initial staff.
+              No employees found matching criteria. Click &quot;Add Employee&quot; to create staff records.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-stone-200 text-stone-500 font-semibold">
+                  <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                     <th className="py-2.5 px-3">Code</th>
                     <th className="py-2.5 px-3">Employee Name</th>
                     <th className="py-2.5 px-3">Department / Team</th>
@@ -199,28 +306,68 @@ export default function EmployeesPage() {
                     <th className="py-2.5 px-3">Phone</th>
                     <th className="py-2.5 px-3 text-right">Monthly Salary</th>
                     <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {employees.map((e) => (
-                    <tr key={e.id} className="hover:bg-stone-50/80 transition-colors">
-                      <td className="py-3 px-3 font-mono text-stone-500">{e.employee_code || 'EMP'}</td>
-                      <td className="py-3 px-3 font-medium text-stone-900">{e.name}</td>
-                      <td className="py-3 px-3 text-stone-700">
-                        {e.department_name || 'General'} {e.team_name && `• ${e.team_name}`}
-                      </td>
-                      <td className="py-3 px-3 text-stone-800 font-medium">{e.role_name || 'Staff'}</td>
-                      <td className="py-3 px-3 text-stone-600">{e.phone || '—'}</td>
-                      <td className="py-3 px-3 text-right font-medium text-stone-900">
-                        {formatINR(Number(e.monthly_salary))}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <Badge variant={e.employment_status === 'Active' ? 'success' : 'outline'}>
-                          {e.employment_status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredEmployees.map((e) => {
+                    const isActive = e.employment_status === 'Active';
+                    return (
+                      <tr
+                        key={e.id}
+                        className={`hover:bg-stone-50/80 transition-colors ${
+                          !isActive ? 'opacity-60 bg-stone-50/30' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-3 font-mono text-stone-500 font-medium">
+                          {e.employee_code || 'EMP'}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-stone-900">{e.name}</td>
+                        <td className="py-3 px-3 text-stone-700">
+                          {e.department_name || 'General'} {e.team_name && <span className="text-stone-400">• {e.team_name}</span>}
+                        </td>
+                        <td className="py-3 px-3 text-stone-800 font-medium">{e.role_name || 'Staff'}</td>
+                        <td className="py-3 px-3 text-stone-600">{e.phone || '—'}</td>
+                        <td className="py-3 px-3 text-right font-medium text-stone-900">
+                          {formatINR(Number(e.monthly_salary))}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <Badge variant={isActive ? 'success' : 'outline'}>
+                            {e.employment_status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingEmployee(e);
+                                setEmployeeModalOpen(true);
+                              }}
+                              className="h-7 px-2 text-stone-600 hover:text-stone-900"
+                              title="Edit Employee"
+                            >
+                              <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleStatus(e)}
+                              className={`h-7 px-2 ${
+                                isActive
+                                  ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50'
+                                  : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
+                              }`}
+                              title={isActive ? 'Deactivate Employee' : 'Activate Employee'}
+                            >
+                              <Power className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -228,112 +375,27 @@ export default function EmployeesPage() {
         </CardContent>
       </Card>
 
-      {/* Add Employee Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-base font-bold text-stone-900">Add New Employee</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
-            </div>
+      {/* Employee Modal (Add & Edit) */}
+      <EmployeeModal
+        isOpen={employeeModalOpen}
+        onClose={() => {
+          setEmployeeModalOpen(false);
+          setEditingEmployee(null);
+        }}
+        employee={editingEmployee}
+        onSaved={() => {
+          setEmployeeModalOpen(false);
+          setEditingEmployee(null);
+          loadData();
+        }}
+      />
 
-            <form onSubmit={handleAddEmployee} className="space-y-3">
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Rajesh Kumar"
-                  required
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Contact Phone</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91 9876543210"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">Department</label>
-                  <select
-                    value={departmentId}
-                    onChange={(e) => {
-                      setDepartmentId(e.target.value);
-                      setTeamId('');
-                      setRoleId('');
-                    }}
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                  >
-                    <option value="">Select Dept...</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">Team</label>
-                  <select
-                    value={teamId}
-                    onChange={(e) => {
-                      setTeamId(e.target.value);
-                      setRoleId('');
-                    }}
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                  >
-                    <option value="">Select Team...</option>
-                    {filteredTeams.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Designated Role</label>
-                <select
-                  value={roleId}
-                  onChange={(e) => setRoleId(e.target.value)}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                >
-                  <option value="">Select Role...</option>
-                  {filteredRoles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Monthly Salary (₹)</label>
-                <input
-                  type="number"
-                  step="100"
-                  value={salary}
-                  onChange={(e) => setSalary(parseFloat(e.target.value) || 0)}
-                  placeholder="18000"
-                  required
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 font-bold focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
-                <Button type="submit" variant="amber" disabled={saving}>
-                  {saving ? 'Saving...' : 'Add Employee'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Org Hierarchy Modal */}
+      <OrgHierarchyModal
+        isOpen={orgHierarchyModalOpen}
+        onClose={() => setOrgHierarchyModalOpen(false)}
+        onUpdated={loadData}
+      />
     </div>
   );
 }

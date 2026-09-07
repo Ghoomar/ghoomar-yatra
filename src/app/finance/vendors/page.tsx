@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
 import { Vendor, VendorOutstandingSummary } from '@/lib/types/database';
 import { VendorModal } from '@/components/vendors/VendorModal';
+import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
 import {
   Building2,
   Plus,
@@ -23,7 +24,8 @@ import {
   Phone,
   Filter,
   Power,
-  Info
+  Info,
+  Tag
 } from 'lucide-react';
 
 export default function VendorsPage() {
@@ -40,6 +42,7 @@ export default function VendorsPage() {
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
   // Delete Safeguard State
   const [deleteModalVendor, setDeleteModalVendor] = useState<VendorOutstandingSummary | null>(null);
@@ -252,6 +255,10 @@ export default function VendorsPage() {
               Purchases & Bills
             </Button>
           </Link>
+          <Button variant="outline" size="sm" onClick={() => setCategoryModalOpen(true)} className="gap-1.5 text-stone-700">
+            <Tag className="h-4 w-4 text-amber-600" />
+            Categories
+          </Button>
           <Button variant="amber" size="sm" onClick={handleOpenAddModal} className="gap-1.5">
             <Plus className="h-4 w-4" />
             Add Vendor
@@ -551,6 +558,13 @@ export default function VendorsPage() {
           });
           loadData();
         }}
+      />
+
+      {/* Vendor Category Master Modal */}
+      <VendorCategoryModal
+        isOpen={categoryModalOpen}
+        onClose={() => setCategoryModalOpen(false)}
+        onUpdated={loadData}
       />
 
       {/* Delete Safeguard Confirmation Modal */}

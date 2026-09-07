@@ -381,23 +381,49 @@ export default function VendorDetailPage({
     if (!selectedItemId) return;
     setLinkingItem(true);
     try {
-      const { error } = await supabase.from('vendor_items').insert({
-        vendor_id: vendorId,
-        inventory_item_id: selectedItemId,
-        last_purchase_rate: customRate,
-        last_purchase_date: new Date().toISOString().split('T')[0],
-        is_preferred: true,
-      });
+      const { data: existing } = await supabase
+        .from('vendor_items')
+        .select('id')
+        .eq('vendor_id', vendorId)
+        .eq('inventory_item_id', selectedItemId)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existing) {
+        const { error } = await supabase
+          .from('vendor_items')
+          .update({
+            last_purchase_rate: customRate,
+            last_purchase_date: new Date().toISOString().split('T')[0],
+            is_preferred: true,
+          })
+          .eq('id', existing.id);
 
-      setMessage({ type: 'success', text: 'Item linked to vendor catalog successfully.' });
+        if (error) throw error;
+        setMessage({ type: 'success', text: 'Existing catalog link updated with new agreed rate.' });
+      } else {
+        const { error } = await supabase.from('vendor_items').insert({
+          vendor_id: vendorId,
+          inventory_item_id: selectedItemId,
+          last_purchase_rate: customRate,
+          last_purchase_date: new Date().toISOString().split('T')[0],
+          is_preferred: true,
+        });
+
+        if (error) throw error;
+        setMessage({ type: 'success', text: 'Item linked to vendor catalog successfully.' });
+      }
+
       setShowLinkItemModal(false);
       setSelectedItemId('');
       setCustomRate(0);
       loadVendorData();
     } catch (err: any) {
-      setMessage({ type: 'error', text: 'Failed to link item: ' + err.message });
+      console.error(err);
+      if (err.code === '23505' || err.message?.includes('duplicate key')) {
+        setMessage({ type: 'error', text: 'This item is already linked to this vendor.' });
+      } else {
+        setMessage({ type: 'error', text: 'Failed to link item: ' + (err.message || 'Database error') });
+      }
     } finally {
       setLinkingItem(false);
     }

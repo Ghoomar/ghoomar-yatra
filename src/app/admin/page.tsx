@@ -6,30 +6,62 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
-import { Settings, Shield, Plus, RefreshCw, CheckCircle, AlertCircle, Database, Award, DollarSign } from 'lucide-react';
+import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
+import { UnitModal } from '@/components/admin/UnitModal';
+import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
+import {
+  Settings,
+  Shield,
+  Plus,
+  RefreshCw,
+  Network,
+  Scale,
+  Tag,
+  CreditCard,
+  Building2,
+  Users2
+} from 'lucide-react';
 
 export default function AdminSettingsPage() {
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'masters' | 'cost_rules' | 'targets' | 'users'>('masters');
 
   const [departments, setDepartments] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [employeeRoles, setEmployeeRoles] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
+  const [vendorCategories, setVendorCategories] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [costRules, setCostRules] = useState<any[]>([]);
   const [targets, setTargets] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Modals
+  const [orgModalOpen, setOrgModalOpen] = useState(false);
+  const [orgModalTab, setOrgModalTab] = useState<'departments' | 'teams' | 'roles'>('departments');
+  const [unitModalOpen, setUnitModalOpen] = useState(false);
+  const [vendorCategoryModalOpen, setVendorCategoryModalOpen] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const [
         { data: dData },
+        { data: tData },
+        { data: erData },
+        { data: uData },
+        { data: vcData },
         { data: pmData },
         { data: crData },
         { data: tgData },
         { data: rData },
       ] = await Promise.all([
         supabase.from('departments').select('*').order('name'),
+        supabase.from('teams').select('*').order('name'),
+        supabase.from('employee_roles').select('*').order('name'),
+        supabase.from('units').select('*').order('name'),
+        supabase.from('vendor_categories').select('*').order('name'),
         supabase.from('payment_methods').select('*').order('name'),
         supabase.from('financial_cost_rules').select('*').order('cost_name'),
         supabase.from('financial_targets').select('*').order('weekday'),
@@ -37,12 +69,16 @@ export default function AdminSettingsPage() {
       ]);
 
       setDepartments(dData || []);
+      setTeams(tData || []);
+      setEmployeeRoles(erData || []);
+      setUnits(uData || []);
+      setVendorCategories(vcData || []);
       setPaymentMethods(pmData || []);
       setCostRules(crData || []);
       setTargets(tgData || []);
       setRoles(rData || []);
     } catch (err: any) {
-      console.error(err);
+      console.error('Error loading admin masters:', err);
     } finally {
       setLoading(false);
     }
@@ -68,8 +104,8 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={loadData} title="Refresh configuration">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
@@ -120,48 +156,230 @@ export default function AdminSettingsPage() {
 
       {/* TAB 1: OPERATIONAL MASTERS */}
       {activeTab === 'masters' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Departments &amp; Divisions</CardTitle>
-              <CardDescription>Organizational hierarchy roots</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {loading ? (
-                <div className="py-8 text-center text-stone-400 text-xs">Loading departments...</div>
-              ) : (
-                <div className="divide-y divide-stone-100 text-xs">
-                  {departments.map((d) => (
-                    <div key={d.id} className="py-2.5 flex items-center justify-between">
-                      <span className="font-semibold text-stone-900">{d.name}</span>
-                      <Badge variant="outline">Code: {d.code || 'N/A'}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <div className="space-y-6">
+          {/* Quick Actions Bar */}
+          <div className="flex flex-wrap items-center gap-2 bg-stone-50 p-3 rounded-xl border border-stone-200">
+            <span className="text-xs font-bold text-stone-700 mr-2">Configure Masters:</span>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setOrgModalTab('departments');
+                setOrgModalOpen(true);
+              }}
+              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              <Network className="h-4 w-4" /> Org Hierarchy (Dept / Team / Role)
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUnitModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <Scale className="h-4 w-4 text-stone-500" /> Units of Measurement ({units.length})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setVendorCategoryModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <Tag className="h-4 w-4 text-stone-500" /> Vendor Categories ({vendorCategories.length})
+            </Button>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Methods &amp; Commissions</CardTitle>
-              <CardDescription>Gateway and card merchant discount rates (MDR)</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {loading ? (
-                <div className="py-8 text-center text-stone-400 text-xs">Loading payment methods...</div>
-              ) : (
-                <div className="divide-y divide-stone-100 text-xs">
-                  {paymentMethods.map((pm) => (
-                    <div key={pm.id} className="py-2.5 flex items-center justify-between">
-                      <span className="font-semibold text-stone-900">{pm.name}</span>
-                      <span className="text-stone-600 font-mono">Commission: {pm.commission_percent}%</span>
-                    </div>
-                  ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Org Structure Summary */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-amber-600" />
+                    Organizational Structure
+                  </CardTitle>
+                  <CardDescription>Departments, operational teams, and roles</CardDescription>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setOrgModalTab('departments');
+                    setOrgModalOpen(true);
+                  }}
+                  className="h-7 text-xs"
+                >
+                  Manage
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3 text-xs">
+                <div className="grid grid-cols-3 gap-2 bg-stone-50 p-2.5 rounded-lg border border-stone-100 text-center">
+                  <div>
+                    <div className="font-bold text-base text-stone-900">{departments.length}</div>
+                    <div className="text-[10px] text-stone-500">Departments</div>
+                  </div>
+                  <div>
+                    <div className="font-bold text-base text-stone-900">{teams.length}</div>
+                    <div className="text-[10px] text-stone-500">Teams</div>
+                  </div>
+                  <div>
+                    <div className="font-bold text-base text-stone-900">{employeeRoles.length}</div>
+                    <div className="text-[10px] text-stone-500">Roles</div>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-stone-100 max-h-48 overflow-y-auto pr-1">
+                  {departments.map((d) => {
+                    const dTeams = teams.filter((t) => t.department_id === d.id);
+                    return (
+                      <div key={d.id} className="py-2 flex items-center justify-between">
+                        <div>
+                          <span className="font-semibold text-stone-900">{d.name}</span>
+                          <span className="text-[10px] text-stone-400 ml-1.5">
+                            ({dTeams.length} {dTeams.length === 1 ? 'team' : 'teams'})
+                          </span>
+                        </div>
+                        <Badge variant={d.is_active !== false ? 'success' : 'outline'}>
+                          {d.is_active !== false ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Units of Measurement */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Scale className="h-4 w-4 text-amber-600" />
+                    Units of Measurement
+                  </CardTitle>
+                  <CardDescription>Authoritative metrics for store SKU inventory</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUnitModalOpen(true)}
+                  className="h-7 text-xs"
+                >
+                  Manage
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs">
+                {units.length === 0 ? (
+                  <div className="py-6 text-center text-stone-400">No units defined.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
+                    {units.map((u) => (
+                      <div
+                        key={u.id}
+                        className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                          u.is_active !== false
+                            ? 'bg-stone-50 border-stone-200 text-stone-800'
+                            : 'bg-stone-100/50 border-stone-200/50 text-stone-400 line-through'
+                        }`}
+                      >
+                        <span className="font-semibold">{u.symbol}</span>
+                        <span className="text-[10px] text-stone-500">({u.name})</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Vendor Categories */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-amber-600" />
+                    Vendor Supplier Categories
+                  </CardTitle>
+                  <CardDescription>Procurement classifications for vendor onboarding</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVendorCategoryModalOpen(true)}
+                  className="h-7 text-xs"
+                >
+                  Manage
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs">
+                {vendorCategories.length === 0 ? (
+                  <div className="py-6 text-center text-stone-400">No categories defined.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
+                    {vendorCategories.map((vc) => (
+                      <div
+                        key={vc.id}
+                        className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                          vc.is_active !== false
+                            ? 'bg-amber-50/60 border-amber-200/80 text-stone-800'
+                            : 'bg-stone-100/50 border-stone-200/50 text-stone-400 line-through'
+                        }`}
+                      >
+                        <span className="font-medium">{vc.name}</span>
+                        {vc.code && <span className="text-[10px] text-stone-400 font-mono">[{vc.code}]</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Payment Methods */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-amber-600" />
+                    Payment Methods &amp; Commissions
+                  </CardTitle>
+                  <CardDescription>Gateway and card merchant discount rates (MDR)</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {loading ? (
+                  <div className="py-8 text-center text-stone-400 text-xs">Loading payment methods...</div>
+                ) : (
+                  <div className="divide-y divide-stone-100 text-xs max-h-56 overflow-y-auto">
+                    {paymentMethods.map((pm) => (
+                      <div key={pm.id} className="py-2 flex items-center justify-between">
+                        <span className="font-semibold text-stone-900">{pm.name}</span>
+                        <span className="text-stone-600 font-mono">MDR: {pm.commission_percent}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Master Modals */}
+          <OrgHierarchyModal
+            isOpen={orgModalOpen}
+            onClose={() => setOrgModalOpen(false)}
+            defaultTab={orgModalTab}
+            onUpdated={loadData}
+          />
+
+          <UnitModal
+            isOpen={unitModalOpen}
+            onClose={() => setUnitModalOpen(false)}
+            onUpdated={loadData}
+          />
+
+          <VendorCategoryModal
+            isOpen={vendorCategoryModalOpen}
+            onClose={() => setVendorCategoryModalOpen(false)}
+            onUpdated={loadData}
+          />
         </div>
       )}
 

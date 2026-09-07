@@ -61,20 +61,24 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
   const [isActive, setIsActive] = useState(true);
 
   const [paymentMethods, setPaymentMethods] = useState<{ id: string; name: string }[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Fetch payment methods
+  // Fetch payment methods and active vendor categories
   useEffect(() => {
-    async function fetchPaymentMethods() {
-      const { data } = await supabase
-        .from('payment_methods')
-        .select('id, name')
-        .order('name');
-      if (data) setPaymentMethods(data);
+    async function fetchMasters() {
+      const [{ data: pmData }, { data: catData }] = await Promise.all([
+        supabase.from('payment_methods').select('id, name').order('name'),
+        supabase.from('vendor_categories').select('name').eq('is_active', true).order('name'),
+      ]);
+      if (pmData) setPaymentMethods(pmData);
+      if (catData && catData.length > 0) {
+        setAvailableCategories(catData.map((c) => c.name));
+      }
     }
     if (isOpen) {
-      fetchPaymentMethods();
+      fetchMasters();
     }
   }, [isOpen, supabase]);
 
@@ -350,7 +354,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
             </h3>
 
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {DEFAULT_CATEGORIES.map((cat) => {
+              {availableCategories.map((cat) => {
                 const isSelected = supplierCategories.includes(cat);
                 return (
                   <button

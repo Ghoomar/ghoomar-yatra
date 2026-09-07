@@ -19,6 +19,7 @@ export default function StoreIssuesPage() {
   const [items, setItems] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [chefs, setChefs] = useState<any[]>([]);
+  const [rolesMapState, setRolesMapState] = useState<Record<string, any>>({});
   const [recentIssues, setRecentIssues] = useState<any[]>([]);
 
   // Form State
@@ -35,9 +36,29 @@ export default function StoreIssuesPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: iData } = await supabase.from('inventory_current_position').select('*').order('name');
-      const { data: dData } = await supabase.from('departments').select('*').order('name');
-      const { data: cData } = await supabase.from('employees').select('id, name').order('name');
+      const [{ data: iData }, { data: dData }, { data: eData }, { data: rData }] = await Promise.all([
+        supabase.from('inventory_current_position').select('*').order('name'),
+        supabase.from('departments').select('*').order('name'),
+        supabase.from('employees').select('id, name, employment_status, department_id, role_id').order('name'),
+        supabase.from('employee_roles').select('*').order('name'),
+      ]);
+
+      const rMap: Record<string, any> = {};
+      (rData || []).forEach((r: any) => {
+        rMap[r.id] = r;
+      });
+      setRolesMapState(rMap);
+
+      const activeEmployees = (eData || []).filter((e: any) => e.employment_status === 'Active');
+      const eligibleChefs = activeEmployees.filter((e: any) => {
+        const role = rMap[e.role_id];
+        if (role?.can_receive_store_issues) return true;
+        const roleName = role?.name?.toLowerCase() || '';
+        return roleName.includes('chef') || roleName.includes('cook');
+      });
+      const chefsList = eligibleChefs.length > 0 ? eligibleChefs : activeEmployees;
+
+      const activeDepts = (dData || []).filter((d: any) => d.is_active !== false);
 
       const { data: issData, error: issError } = await supabase
         .from('consumption_issues')
@@ -56,8 +77,8 @@ export default function StoreIssuesPage() {
       if (issError) throw issError;
 
       setItems(iData || []);
-      setDepartments(dData || []);
-      setChefs(cData || []);
+      setDepartments(activeDepts);
+      setChefs(chefsList);
       setRecentIssues(issData || []);
     } catch (err: any) {
       console.error(err);
@@ -69,6 +90,10 @@ export default function StoreIssuesPage() {
   useEffect(() => {
     loadData();
   }, [businessDate]);
+
+  const selectableItems = items.filter(
+    (i) => i.is_active !== false && (i.inventory_class === 'Food Raw Material' || i.inventory_class === 'Non-Food Consumable')
+  );
 
   const handleAddLine = () => {
     setLines([...lines, { item_id: '', quantity: 1 }]);
@@ -94,6 +119,20 @@ export default function StoreIssuesPage() {
       alert('Please fill out all line items with valid quantities.');
       return;
     }
+
+    if (chefId && !chefs.some((c) => c.id === chefId)) {
+      alert('Selected chef / employee is inactive or not authorized to receive store issues.');
+      return;
+    }
+
+    for (const line of lines) {
+      const it = selectableItems.find((i) => i.item_id === line.item_id);
+      if (!it) {
+        alert('One or more selected items are inactive or not raw materials/consumables.');
+        return;
+      }
+    }
+
     setSaving(true);
     setMessage(null);
 
@@ -244,10 +283,15 @@ export default function StoreIssuesPage() {
                   onChange={(e) => setChefId(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Chef...</option>
-                  {chefs.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  <option value="">Select Chef / Kitchen Staff...</option>
+                  {chefs.map((c) => {
+                    const r = rolesMapState[c.role_id];
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {r?.name ? `(${r.name})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -296,9 +340,9 @@ export default function StoreIssuesPage() {
                         className="flex-1 rounded border border-stone-300 bg-white p-1.5 text-stone-900 text-xs focus:outline-none"
                       >
                         <option value="">Select Item SKU...</option>
-                        {items.map((i) => (
+                        {selectableItems.map((i) => (
                           <option key={i.item_id} value={i.item_id}>
-                            {i.name} (Stock: {Number(i.current_quantity).toFixed(1)} {i.unit_symbol})
+                            {i.name} [{i.item_code}] (Stock: {Number(i.current_quantity || 0).toFixed(1)} {i.unit_symbol || 'units'})
                           </option>
                         ))}
                       </select>

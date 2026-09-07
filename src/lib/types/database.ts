@@ -38,6 +38,83 @@ export interface InventoryItemPosition {
   wac_cost: number;
   current_stock_value: number;
   last_movement_at?: string;
+  is_active?: boolean;
+}
+
+export interface VendorCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Unit {
+  id: string;
+  name: string;
+  symbol: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface InventoryCategory {
+  id: string;
+  name: string;
+  inventory_class: 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code?: string | null;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface Team {
+  id: string;
+  department_id: string;
+  name: string;
+  code?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  department?: { id: string; name: string };
+}
+
+export interface EmployeeRole {
+  id: string;
+  team_id: string;
+  name: string;
+  can_receive_store_issues?: boolean;
+  is_active: boolean;
+  created_at?: string;
+  team?: { id: string; name: string; department_id: string; department?: { id: string; name: string } };
+}
+
+export interface InventoryItemMaster {
+  id: string;
+  item_code: string;
+  name: string;
+  category_id?: string | null;
+  inventory_class: 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
+  unit_id?: string | null;
+  secondary_unit_id?: string | null;
+  minimum_stock: number;
+  preferred_stock: number;
+  replenishment_frequency?: string | null;
+  storage_type?: string | null;
+  shelf_life_days?: number | null;
+  current_stock: number;
+  current_weighted_average_cost: number;
+  is_active: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  unit?: { symbol: string; name: string };
+  category?: { name: string };
 }
 
 export interface Vendor {

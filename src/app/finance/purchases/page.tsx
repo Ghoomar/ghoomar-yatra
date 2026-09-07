@@ -20,12 +20,15 @@ interface VendorSummary {
   total_purchased: number;
   total_paid: number;
   outstanding_balance: number;
+  is_active?: boolean;
 }
 
 interface PurchaseLineForm {
   item_id: string;
   quantity: number;
   rate: number;
+  previous_rate?: number;
+  previous_date?: string;
 }
 
 export default function PurchasesPage() {
@@ -43,6 +46,7 @@ export default function PurchasesPage() {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [lines, setLines] = useState<PurchaseLineForm[]>([{ item_id: '', quantity: 1, rate: 0 }]);
   const [purchaseSaving, setPurchaseSaving] = useState(false);
+  const [vendorPriceMemory, setVendorPriceMemory] = useState<Record<string, { rate: number; date: string }>>({});
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentVendorId, setPaymentVendorId] = useState('');
@@ -50,6 +54,36 @@ export default function PurchasesPage() {
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentSaving, setPaymentSaving] = useState(false);
+
+  // Fetch vendor price memory whenever selectedVendorId changes
+  useEffect(() => {
+    async function fetchVendorPrices() {
+      if (!selectedVendorId) {
+        setVendorPriceMemory({});
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from('vendor_items')
+          .select('inventory_item_id, last_purchase_rate, last_purchase_date')
+          .eq('vendor_id', selectedVendorId);
+
+        if (data) {
+          const map: Record<string, { rate: number; date: string }> = {};
+          data.forEach((row: any) => {
+            map[row.inventory_item_id] = {
+              rate: Number(row.last_purchase_rate) || 0,
+              date: row.last_purchase_date || '',
+            };
+          });
+          setVendorPriceMemory(map);
+        }
+      } catch (err) {
+        console.error('Error fetching vendor price memory:', err);
+      }
+    }
+    fetchVendorPrices();
+  }, [selectedVendorId, supabase]);
 
   const loadData = async () => {
     setLoading(true);
@@ -61,7 +95,7 @@ export default function PurchasesPage() {
 
       const { data: iData } = await supabase
         .from('inventory_items')
-        .select('id, item_code, name, unit_id, current_stock, current_weighted_average_cost')
+        .select('id, item_code, name, unit_id, is_active, current_stock, current_weighted_average_cost, unit:units(symbol, name)')
         .order('name');
 
       const { data: pmData } = await supabase
@@ -109,6 +143,13 @@ export default function PurchasesPage() {
       alert('Please select a vendor.');
       return;
     }
+
+    const vSelected = vendors.find((v) => v.vendor_id === selectedVendorId);
+    if (vSelected && vSelected.is_active === false) {
+      alert('Selected vendor is inactive. Inactive vendors cannot receive new purchase invoices.');
+      return;
+    }
+
     setPurchaseSaving(true);
     setMessage(null);
 
@@ -174,6 +215,39 @@ export default function PurchasesPage() {
             })
             .eq('id', line.item_id);
         }
+
+        // Upsert vendor-item price memory
+        try {
+          const { data: existingLink } = await supabase
+            .from('vendor_items')
+            .select('id')
+            .eq('vendor_id', selectedVendorId)
+            .eq('inventory_item_id', line.item_id)
+            .maybeSingle();
+
+          if (existingLink) {
+            await supabase
+              .from('vendor_items')
+              .update({
+                last_purchase_rate: line.rate,
+                last_purchase_date: businessDate,
+                is_preferred: true,
+              })
+              .eq('id', existingLink.id);
+          } else {
+            await supabase
+              .from('vendor_items')
+              .insert({
+                vendor_id: selectedVendorId,
+                inventory_item_id: line.item_id,
+                last_purchase_rate: line.rate,
+                last_purchase_date: businessDate,
+                is_preferred: true,
+              });
+          }
+        } catch (memErr) {
+          console.warn('Could not update vendor price memory:', memErr);
+        }
       }
 
       setMessage({ type: 'success', text: `Purchase invoice ${purchaseNumber} recorded and stock updated!` });
@@ -195,6 +269,13 @@ export default function PurchasesPage() {
       alert('Please select a vendor and enter a valid payment amount.');
       return;
     }
+
+    const vPayment = vendors.find((v) => v.vendor_id === paymentVendorId);
+    if (vPayment && vPayment.is_active === false) {
+      alert('Selected vendor is inactive. Payments cannot be disbursed to inactive vendor accounts.');
+      return;
+    }
+
     setPaymentSaving(true);
     setMessage(null);
 
@@ -417,11 +498,13 @@ export default function PurchasesPage() {
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
                     <option value="">Select Supplier...</option>
-                    {vendors.map((v) => (
-                      <option key={v.vendor_id} value={v.vendor_id}>
-                        {v.vendor_name}
-                      </option>
-                    ))}
+                    {vendors
+                      .filter((v) => v.is_active !== false)
+                      .map((v) => (
+                        <option key={v.vendor_id} value={v.vendor_id}>
+                          {v.vendor_name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>
@@ -444,67 +527,116 @@ export default function PurchasesPage() {
                   </Button>
                 </div>
 
-                {lines.map((line, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 bg-stone-50 rounded-lg border border-stone-200">
-                    <select
-                      value={line.item_id}
-                      onChange={(e) => {
-                        const next = [...lines];
-                        next[idx].item_id = e.target.value;
-                        setLines(next);
-                      }}
-                      required
-                      className="flex-1 rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
-                    >
-                      <option value="">Select Item SKU...</option>
-                      {items.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.name} ({i.item_code})
-                        </option>
-                      ))}
-                    </select>
+                {lines.map((line, idx) => {
+                  const currentItem = items.find((i) => i.id === line.item_id);
+                  const isDeviation =
+                    line.previous_rate &&
+                    line.rate > 0 &&
+                    Math.abs(line.rate - line.previous_rate) / line.previous_rate > 0.2;
+                  const deviationPct = line.previous_rate
+                    ? Math.round(((line.rate - line.previous_rate) / line.previous_rate) * 100)
+                    : 0;
 
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={line.quantity || ''}
-                      onChange={(e) => {
-                        const next = [...lines];
-                        next[idx].quantity = parseFloat(e.target.value) || 0;
-                        setLines(next);
-                      }}
-                      placeholder="Qty"
-                      required
-                      className="w-20 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
-                    />
+                  return (
+                    <div key={idx} className="p-2.5 bg-stone-50 rounded-lg border border-stone-200 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={line.item_id}
+                          onChange={(e) => {
+                            const next = [...lines];
+                            const selectedId = e.target.value;
+                            next[idx].item_id = selectedId;
+                            const mem = vendorPriceMemory[selectedId];
+                            if (mem && mem.rate > 0) {
+                              next[idx].rate = mem.rate;
+                              next[idx].previous_rate = mem.rate;
+                              next[idx].previous_date = mem.date;
+                            } else {
+                              next[idx].previous_rate = undefined;
+                              next[idx].previous_date = undefined;
+                            }
+                            setLines(next);
+                          }}
+                          required
+                          className="flex-1 rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
+                        >
+                          <option value="">Select Item SKU...</option>
+                          {items
+                            .filter((i) => i.is_active !== false || i.id === line.item_id)
+                            .map((i) => (
+                              <option key={i.id} value={i.id}>
+                                {i.name} ({i.item_code})
+                              </option>
+                            ))}
+                        </select>
 
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={line.rate || ''}
-                      onChange={(e) => {
-                        const next = [...lines];
-                        next[idx].rate = parseFloat(e.target.value) || 0;
-                        setLines(next);
-                      }}
-                      placeholder="Rate (₹)"
-                      required
-                      className="w-24 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
-                    />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.001"
+                            value={line.quantity || ''}
+                            onChange={(e) => {
+                              const next = [...lines];
+                              next[idx].quantity = parseFloat(e.target.value) || 0;
+                              setLines(next);
+                            }}
+                            placeholder="Qty"
+                            required
+                            className="w-16 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
+                          />
+                          <span className="px-2 py-1.5 bg-stone-200/80 border border-stone-300 rounded text-stone-700 font-mono text-[11px] font-bold">
+                            {currentItem?.unit?.symbol || 'Units'}
+                          </span>
+                        </div>
 
-                    <div className="w-24 text-right font-semibold text-stone-800">
-                      {formatINR(line.quantity * line.rate)}
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={line.rate || ''}
+                            onChange={(e) => {
+                              const next = [...lines];
+                              next[idx].rate = parseFloat(e.target.value) || 0;
+                              setLines(next);
+                            }}
+                            placeholder="Rate (₹)"
+                            required
+                            className={`w-24 rounded-md border p-2 text-right text-stone-900 text-xs focus:outline-none bg-white ${
+                              isDeviation ? 'border-amber-400 bg-amber-50/50' : 'border-stone-300'
+                            }`}
+                          />
+                        </div>
+
+                        <div className="w-24 text-right font-semibold text-stone-800">
+                          {formatINR(line.quantity * line.rate)}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLine(idx)}
+                          className="text-stone-400 hover:text-rose-600 p-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Price Memory Helper & Deviation Badge */}
+                      {line.previous_rate !== undefined && line.previous_rate > 0 && (
+                        <div className="flex items-center justify-between text-[11px] px-1 text-stone-500">
+                          <span>
+                            Previous Purchase: <strong className="text-stone-700">{formatINR(line.previous_rate)}</strong>
+                            {line.previous_date && ` on ${line.previous_date}`}
+                          </span>
+                          {isDeviation && (
+                            <span className="text-amber-700 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                              ⚠️ {deviationPct > 0 ? `+${deviationPct}% higher` : `${deviationPct}% lower`} than previous rate
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveLine(idx)}
-                      className="text-stone-400 hover:text-rose-600 p-1"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="flex items-center justify-between border-t pt-3">
@@ -543,11 +675,13 @@ export default function PurchasesPage() {
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
                   <option value="">Select Supplier...</option>
-                  {vendors.map((v) => (
-                    <option key={v.vendor_id} value={v.vendor_id}>
-                      {v.vendor_name} (Due: {formatINR(Number(v.outstanding_balance))})
-                    </option>
-                  ))}
+                  {vendors
+                    .filter((v) => v.is_active !== false)
+                    .map((v) => (
+                      <option key={v.vendor_id} value={v.vendor_id}>
+                        {v.vendor_name} (Due: {formatINR(Number(v.outstanding_balance))})
+                      </option>
+                    ))}
                 </select>
               </div>
 
