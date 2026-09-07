@@ -1,4 +1,4 @@
-﻿export type RoleName = 
+export type RoleName = 
   | 'Admin'
   | 'Owner'
   | 'General Manager'
@@ -40,16 +40,51 @@ export interface InventoryItemPosition {
   last_movement_at?: string;
 }
 
+export interface Vendor {
+  id: string;
+  vendor_code: string;
+  name: string;
+  contact_person?: string | null;
+  phone?: string | null;
+  alternate_phone?: string | null;
+  address?: string | null;
+  payment_terms?: string | null;
+  payment_frequency?: string | null;
+  preferred_payment_method_id?: string | null;
+  supplier_categories?: string[] | null;
+  is_active: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface VendorOutstandingSummary {
   vendor_id: string;
   vendor_code: string;
   vendor_name: string;
   contact_person?: string;
   phone?: string;
+  alternate_phone?: string;
   total_purchased: number;
   total_paid: number;
   outstanding_balance: number;
   last_purchase_date?: string;
+  is_active?: boolean;
+  payment_terms?: string;
+  payment_frequency?: string;
+  supplier_categories?: string[];
+}
+
+export interface VendorLedgerEntry {
+  id: string;
+  date: string;
+  type: 'purchase' | 'payment';
+  reference_number: string;
+  invoice_number?: string;
+  description: string;
+  debit: number;   // payment reduces liability
+  credit: number;  // purchase increases liability
+  running_balance: number;
 }
 
 export interface DailySalesSummary {

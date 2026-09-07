@@ -1,13 +1,15 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { calculateNewWAC } from '@/lib/inventory-engine';
-import { ShoppingBag, Plus, CreditCard, RefreshCw, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { VendorModal } from '@/components/vendors/VendorModal';
+import { ShoppingBag, Plus, CreditCard, RefreshCw, CheckCircle, AlertCircle, Trash2, Building2, ExternalLink } from 'lucide-react';
 
 interface VendorSummary {
   vendor_id: string;
@@ -36,6 +38,7 @@ export default function PurchasesPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showQuickVendorModal, setShowQuickVendorModal] = useState(false);
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [lines, setLines] = useState<PurchaseLineForm[]>([{ item_id: '', quantity: 1, rate: 0 }]);
@@ -274,6 +277,11 @@ export default function PurchasesPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/finance/vendors">
+            <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
+              <Building2 className="h-4 w-4 text-amber-600" /> Manage Vendors
+            </Button>
+          </Link>
           <Button variant="amber" size="sm" onClick={() => setShowPurchaseModal(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> New Purchase Invoice
           </Button>
@@ -342,7 +350,15 @@ export default function PurchasesPage() {
                   return (
                     <tr key={v.vendor_id} className="hover:bg-stone-50/80 transition-colors">
                       <td className="py-3 px-3 font-mono text-stone-500">{v.vendor_code || 'VEND'}</td>
-                      <td className="py-3 px-3 font-medium text-stone-900">{v.vendor_name}</td>
+                      <td className="py-3 px-3 font-semibold text-stone-900">
+                        <Link
+                          href={`/finance/vendors/${v.vendor_id}`}
+                          className="hover:text-amber-600 hover:underline flex items-center gap-1.5"
+                        >
+                          {v.vendor_name}
+                          <ExternalLink className="h-3 w-3 text-stone-400 opacity-60" />
+                        </Link>
+                      </td>
                       <td className="py-3 px-3 text-stone-600">
                         {v.contact_person} {v.phone && `(${v.phone})`}
                       </td>
@@ -384,7 +400,16 @@ export default function PurchasesPage() {
             <form onSubmit={handleCreatePurchase} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Supplier / Vendor</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-medium text-stone-700">Supplier / Vendor</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickVendorModal(true)}
+                      className="text-[11px] text-amber-600 hover:text-amber-800 font-semibold hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus className="h-3 w-3" /> Quick Add Vendor
+                    </button>
+                  </div>
                   <select
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
@@ -576,6 +601,20 @@ export default function PurchasesPage() {
           </div>
         </div>
       )}
+
+      {/* Quick Add Vendor Modal */}
+      <VendorModal
+        isOpen={showQuickVendorModal}
+        onClose={() => setShowQuickVendorModal(false)}
+        onSaved={(newVendor) => {
+          loadData();
+          setSelectedVendorId(newVendor.id);
+          setMessage({
+            type: 'success',
+            text: `Vendor "${newVendor.name}" (${newVendor.vendor_code}) created and selected!`,
+          });
+        }}
+      />
     </div>
   );
 }

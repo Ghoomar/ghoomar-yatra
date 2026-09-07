@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import Link from 'next/link';
@@ -23,6 +23,7 @@ import {
   BarChart3, 
   Settings,
   Lock,
+  Building2,
   X
 } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
@@ -58,6 +59,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       items: [
         { href: '/finance/sales', label: 'Daily Sales', icon: Receipt, roles: ['Admin', 'Owner', 'Accountant', 'Cashier'] },
         { href: '/finance/purchases', label: 'Purchases & Bills', icon: ShoppingBag, roles: ['Admin', 'Owner', 'Accountant', 'Storekeeper'] },
+        { href: '/finance/vendors', label: 'Vendors Master', icon: Building2, roles: ['Admin', 'Owner', 'Accountant', 'Storekeeper'] },
         { href: '/finance/expenses', label: 'Expenses', icon: IndianRupee, roles: ['Admin', 'Owner', 'Accountant', 'General Manager'] },
         { href: '/finance/utilities', label: 'Utilities & Fuel', icon: Zap, roles: ['Admin', 'Owner', 'Accountant', 'General Manager'] },
         { href: '/finance/profitability', label: 'Profitability P&L', icon: TrendingUp, roles: ['Admin', 'Owner', 'General Manager', 'Accountant'] },
