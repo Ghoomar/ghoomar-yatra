@@ -36,9 +36,9 @@ export default function ReportsPage() {
         .from('stock_movements')
         .select(`
           id, created_at, movement_type, purpose, quantity, unit_cost, total_value,
-          item:inventory_items(name, item_code, unit:units(symbol)),
+          item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)),
           department:departments(name),
-          chef:employees(name)
+          responsible_person:employees(name)
         `)
         .eq('business_date', businessDate)
         .order('created_at', { ascending: false });

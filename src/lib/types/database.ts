@@ -242,3 +242,11 @@ export interface MTDFinancialSummary {
   days_reported: number;
 }
 
+export type EmploymentStatus = 'Active' | 'On Leave' | 'Resigned' | 'Terminated';
+
+export type InventoryStorageType = 'Ambient' | 'Refrigerated' | 'Frozen' | 'Fresh' | 'Other';
+
+export type ReplenishmentFrequency = 'Daily' | 'Periodic' | 'Monthly' | 'As Required';
+
+export type InventoryClass = 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
+

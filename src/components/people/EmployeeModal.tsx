@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
-import { Department, Team, EmployeeRole } from '@/lib/types/database';
+import { Department, Team, EmployeeRole, EmploymentStatus } from '@/lib/types/database';
 import { X, User, Plus, AlertCircle, Phone, Calendar, IndianRupee } from 'lucide-react';
 import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
 
@@ -14,7 +14,7 @@ interface EmployeeModalProps {
   onSaved?: (emp: any) => void;
 }
 
-const EMPLOYMENT_STATUSES = ['Active', 'On Leave', 'Inactive', 'Resigned', 'Terminated'];
+const EMPLOYMENT_STATUSES: EmploymentStatus[] = ['Active', 'On Leave', 'Resigned', 'Terminated'];
 
 export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeModalProps) {
   const supabase = createClient();

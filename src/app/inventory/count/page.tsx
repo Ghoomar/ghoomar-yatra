@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -180,12 +181,31 @@ export default function StockCountPage() {
 
       {message && (
         <div
-          className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
-            message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+          className={`p-3.5 rounded-lg text-xs font-medium flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border ${
+            message.type === 'success'
+              ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+              : 'bg-rose-50 text-rose-900 border-rose-200'
           }`}
         >
-          {message.type === 'success' ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
-          {message.text}
+          <div className="flex items-center gap-2">
+            {message.type === 'success' ? (
+              <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+            ) : (
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            )}
+            <span>{message.text}</span>
+          </div>
+          {message.type === 'success' && (
+            <Link href="/inventory?tab=movements">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-100 whitespace-nowrap"
+              >
+                Inspect in Movement Ledger →
+              </Button>
+            </Link>
+          )}
         </div>
       )}
 

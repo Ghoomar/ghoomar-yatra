@@ -95,7 +95,7 @@ export default function PurchasesPage() {
 
       const { data: iData } = await supabase
         .from('inventory_items')
-        .select('id, item_code, name, unit_id, is_active, current_stock, current_weighted_average_cost, unit:units(symbol, name)')
+        .select('id, item_code, name, unit_id, is_active, current_stock, current_weighted_average_cost, unit:units!inventory_items_unit_id_fkey(symbol, name)')
         .order('name');
 
       const { data: pmData } = await supabase

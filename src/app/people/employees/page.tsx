@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
 import { EmployeeModal } from '@/components/people/EmployeeModal';
 import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
-import { Users, Plus, RefreshCw, Network, Edit2, Power, AlertCircle, CheckCircle } from 'lucide-react';
+import { Users, Plus, RefreshCw, Network, Edit2, AlertCircle, CheckCircle } from 'lucide-react';
+import { EmploymentStatus } from '@/lib/types/database';
 
 interface Employee {
   id: string;
@@ -22,7 +22,7 @@ interface Employee {
   team_name?: string;
   role_name?: string;
   joining_date: string;
-  employment_status: string;
+  employment_status: EmploymentStatus;
   monthly_salary: number;
   bank_details?: any;
 }
@@ -39,7 +39,7 @@ export default function EmployeesPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | EmploymentStatus>('ALL');
 
   // Modals
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
@@ -85,9 +85,7 @@ export default function EmployeesPage() {
     loadData();
   }, []);
 
-  const handleToggleStatus = async (emp: any) => {
-    const isCurrentlyActive = emp.employment_status === 'Active';
-    const nextStatus = isCurrentlyActive ? 'Inactive' : 'Active';
+  const handleUpdateStatus = async (employeeId: string, nextStatus: EmploymentStatus) => {
     try {
       const { error } = await supabase
         .from('employees')
@@ -95,21 +93,23 @@ export default function EmployeesPage() {
           employment_status: nextStatus,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', emp.id);
+        .eq('id', employeeId);
 
       if (error) throw error;
+      setMessage({
+        type: 'success',
+        text: `Employee status updated to "${nextStatus}".`,
+      });
       loadData();
     } catch (err: any) {
-      alert('Failed to update status: ' + err.message);
+      setMessage({ type: 'error', text: 'Failed to update status: ' + err.message });
     }
   };
 
   const filteredEmployees = employees.filter((e) => {
     const matchesDept = selectedDept === 'ALL' || e.department_id === selectedDept;
     const matchesStatus =
-      statusFilter === 'ALL' ||
-      (statusFilter === 'ACTIVE' && e.employment_status === 'Active') ||
-      (statusFilter === 'INACTIVE' && e.employment_status !== 'Active');
+      statusFilter === 'ALL' || e.employment_status === statusFilter;
     const matchesSearch =
       !search ||
       e.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -252,13 +252,13 @@ export default function EmployeesPage() {
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
           {/* Status Filter */}
-          <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0">
-            {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((st) => (
+          <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0 overflow-x-auto">
+            {(['ALL', 'Active', 'On Leave', 'Resigned', 'Terminated'] as const).map((st) => (
               <button
                 key={st}
                 type="button"
                 onClick={() => setStatusFilter(st)}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                   statusFilter === st
                     ? 'bg-white text-stone-900 shadow-xs'
                     : 'text-stone-500 hover:text-stone-800'
@@ -332,9 +332,25 @@ export default function EmployeesPage() {
                           {formatINR(Number(e.monthly_salary))}
                         </td>
                         <td className="py-3 px-3 text-center">
-                          <Badge variant={isActive ? 'success' : 'outline'}>
-                            {e.employment_status}
-                          </Badge>
+                          <select
+                            value={e.employment_status}
+                            onChange={(ev) => handleUpdateStatus(e.id, ev.target.value as EmploymentStatus)}
+                            className={`text-[11px] font-semibold py-1 px-2.5 rounded-full border cursor-pointer transition-colors outline-none ${
+                              e.employment_status === 'Active'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                : e.employment_status === 'On Leave'
+                                ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                : e.employment_status === 'Resigned'
+                                ? 'bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200'
+                                : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
+                            }`}
+                            title="Change employment status"
+                          >
+                            <option value="Active">Active</option>
+                            <option value="On Leave">On Leave</option>
+                            <option value="Resigned">Resigned</option>
+                            <option value="Terminated">Terminated</option>
+                          </select>
                         </td>
                         <td className="py-3 px-3 text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -349,19 +365,6 @@ export default function EmployeesPage() {
                               title="Edit Employee"
                             >
                               <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleToggleStatus(e)}
-                              className={`h-7 px-2 ${
-                                isActive
-                                  ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50'
-                                  : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
-                              }`}
-                              title={isActive ? 'Deactivate Employee' : 'Activate Employee'}
-                            >
-                              <Power className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </td>

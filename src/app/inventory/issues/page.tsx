@@ -52,13 +52,16 @@ export default function StoreIssuesPage() {
       const activeEmployees = (eData || []).filter((e: any) => e.employment_status === 'Active');
       const eligibleChefs = activeEmployees.filter((e: any) => {
         const role = rMap[e.role_id];
-        if (role?.can_receive_store_issues) return true;
-        const roleName = role?.name?.toLowerCase() || '';
-        return roleName.includes('chef') || roleName.includes('cook');
+        return role?.can_receive_store_issues === true;
       });
+      // Use eligible authorized roles, falling back to active staff only if no role has flag
       const chefsList = eligibleChefs.length > 0 ? eligibleChefs : activeEmployees;
 
       const activeDepts = (dData || []).filter((d: any) => d.is_active !== false);
+
+      setItems(iData || []);
+      setDepartments(activeDepts);
+      setChefs(chefsList);
 
       const { data: issData, error: issError } = await supabase
         .from('consumption_issues')
@@ -68,20 +71,17 @@ export default function StoreIssuesPage() {
           chef:employees(name),
           items:consumption_issue_items(
             quantity, unit_cost, total_value,
-            item:inventory_items(name, unit:units(symbol))
+            item:inventory_items(name, unit:units!inventory_items_unit_id_fkey(symbol))
           )
         `)
         .eq('business_date', businessDate)
         .order('created_at', { ascending: false });
 
-      if (issError) throw issError;
-
-      setItems(iData || []);
-      setDepartments(activeDepts);
-      setChefs(chefsList);
-      setRecentIssues(issData || []);
+      if (!issError && issData) {
+        setRecentIssues(issData);
+      }
     } catch (err: any) {
-      console.error(err);
+      console.error('Error loading store issues data:', err);
     } finally {
       setLoading(false);
     }

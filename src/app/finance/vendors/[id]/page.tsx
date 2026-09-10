@@ -212,7 +212,7 @@ export default function VendorDetailPage({
       setPayments(parsedPayments);
 
       // 4. Fetch Vendor Items
-      const { data: viData } = await supabase
+      const { data: viData, error: viErr } = await supabase
         .from('vendor_items')
         .select(`
           id,
@@ -223,19 +223,23 @@ export default function VendorDetailPage({
           inventory_items (
             name,
             item_code,
-            item_categories (name),
-            units_of_measure (symbol)
+            inventory_categories (name),
+            units!inventory_items_unit_id_fkey (symbol)
           )
         `)
         .eq('vendor_id', vendorId);
+
+      if (viErr) {
+        console.error('Error fetching vendor items:', viErr);
+      }
 
       const parsedVendorItems: VendorItemRecord[] = (viData || []).map((vi: any) => ({
         id: vi.id,
         inventory_item_id: vi.inventory_item_id,
         item_code: vi.inventory_items?.item_code || 'SKU',
         item_name: vi.inventory_items?.name || 'Item',
-        category_name: vi.inventory_items?.item_categories?.name,
-        unit_symbol: vi.inventory_items?.units_of_measure?.symbol,
+        category_name: vi.inventory_items?.inventory_categories?.name,
+        unit_symbol: vi.inventory_items?.units?.symbol,
         last_purchase_rate: Number(vi.last_purchase_rate) || 0,
         last_purchase_date: vi.last_purchase_date,
         is_preferred: vi.is_preferred,
@@ -246,6 +250,7 @@ export default function VendorDetailPage({
       const { data: itemCatalog } = await supabase
         .from('inventory_items')
         .select('id, name, item_code, current_weighted_average_cost')
+        .eq('is_active', true)
         .order('name');
       setAllItems(itemCatalog || []);
     } catch (err: any) {
@@ -413,10 +418,10 @@ export default function VendorDetailPage({
         setMessage({ type: 'success', text: 'Item linked to vendor catalog successfully.' });
       }
 
+      await loadVendorData();
       setShowLinkItemModal(false);
       setSelectedItemId('');
       setCustomRate(0);
-      loadVendorData();
     } catch (err: any) {
       console.error(err);
       if (err.code === '23505' || err.message?.includes('duplicate key')) {
@@ -1162,11 +1167,14 @@ export default function VendorDetailPage({
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
                 >
                   <option value="">Select Item SKU...</option>
-                  {allItems.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name} ({i.item_code})
-                    </option>
-                  ))}
+                  {allItems.map((i) => {
+                    const isAlreadyLinked = vendorItems.some((vi) => vi.inventory_item_id === i.id);
+                    return (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({i.item_code}){isAlreadyLinked ? ' — [Already Linked]' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

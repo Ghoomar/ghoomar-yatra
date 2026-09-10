@@ -33,10 +33,13 @@ export default function VendorsPage() {
 
   const [vendors, setVendors] = useState<VendorOutstandingSummary[]>([]);
   const [rawVendors, setRawVendors] = useState<Vendor[]>([]);
+  const [catalogItems, setCatalogItems] = useState<any[]>([]);
+  const [vendorItems, setVendorItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [itemFilter, setItemFilter] = useState<string>('all');
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 
   // Modal State
@@ -53,22 +56,25 @@ export default function VendorsPage() {
     setLoading(true);
     setMessage(null);
     try {
-      const { data: vSummary, error: summaryErr } = await supabase
-        .from('vendor_outstanding_summary')
-        .select('*')
-        .order('vendor_name');
+      const [
+        { data: vSummary, error: summaryErr },
+        { data: vFull, error: fullErr },
+        { data: itemsData },
+        { data: viData }
+      ] = await Promise.all([
+        supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
+        supabase.from('vendors').select('*').order('name'),
+        supabase.from('inventory_items').select('id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)').eq('is_active', true).order('name'),
+        supabase.from('vendor_items').select('id, vendor_id, inventory_item_id, last_purchase_rate, last_purchase_date'),
+      ]);
 
       if (summaryErr) throw summaryErr;
-
-      const { data: vFull, error: fullErr } = await supabase
-        .from('vendors')
-        .select('*')
-        .order('name');
-
       if (fullErr) throw fullErr;
 
       setVendors(vSummary || []);
       setRawVendors(vFull || []);
+      setCatalogItems(itemsData || []);
+      setVendorItems(viData || []);
     } catch (err: any) {
       console.error('Failed to load vendors:', err);
       setMessage({ type: 'error', text: 'Failed to load vendor registry. ' + (err.message || '') });
@@ -119,9 +125,17 @@ export default function VendorsPage() {
         }
       }
 
+      // Item Supplied
+      if (itemFilter !== 'all') {
+        const suppliesItem = vendorItems.some(
+          (vi) => vi.vendor_id === v.vendor_id && vi.inventory_item_id === itemFilter
+        );
+        if (!suppliesItem) return false;
+      }
+
       return true;
     });
-  }, [vendors, searchQuery, statusFilter, categoryFilter]);
+  }, [vendors, searchQuery, statusFilter, categoryFilter, itemFilter, vendorItems]);
 
   // Aggregate KPIs
   const totalVendors = vendors.length;
@@ -364,6 +378,41 @@ export default function VendorsPage() {
                 </select>
               </div>
             )}
+
+            {/* Item Supplied Filter */}
+            {catalogItems.length > 0 && (
+              <div className="flex items-center gap-1.5 w-full md:w-auto">
+                <span className="text-xs text-stone-500 font-medium">Item Supplied:</span>
+                <select
+                  value={itemFilter}
+                  onChange={(e) => setItemFilter(e.target.value)}
+                  className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white max-w-[220px] truncate"
+                >
+                  <option value="all">All Items</option>
+                  {catalogItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.item_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {(categoryFilter !== 'all' || itemFilter !== 'all' || statusFilter !== 'all' || searchQuery.trim()) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setCategoryFilter('all');
+                  setItemFilter('all');
+                  setStatusFilter('all');
+                  setSearchQuery('');
+                }}
+                className="text-xs text-stone-500 hover:text-stone-800"
+              >
+                Reset
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -432,6 +481,23 @@ export default function VendorsPage() {
                             {v.vendor_name}
                             <ExternalLink className="h-3 w-3 text-stone-400 opacity-60" />
                           </Link>
+                          {(() => {
+                            if (itemFilter === 'all') return null;
+                            const vi = vendorItems.find(
+                              (item) => item.vendor_id === v.vendor_id && item.inventory_item_id === itemFilter
+                            );
+                            if (!vi) return null;
+                            const rate = vi.agreed_rate ?? vi.last_purchase_rate;
+                            return (
+                              <div className="mt-1 flex items-center gap-1.5 text-[11px] font-normal text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/70 w-fit">
+                                <span className="font-semibold">Agreed / Last Purchase Rate:</span>
+                                <span>{rate != null ? `₹${rate}` : 'N/A'}</span>
+                                {vi.last_purchase_date && (
+                                  <span className="text-stone-500">(Date: {vi.last_purchase_date})</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Categories */}

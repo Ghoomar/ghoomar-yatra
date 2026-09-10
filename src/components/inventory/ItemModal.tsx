@@ -22,17 +22,15 @@ const INVENTORY_CLASSES = [
 
 const STORAGE_TYPES = [
   'Ambient',
-  'Dry Store',
-  'Cold Storage / Chiller',
-  'Deep Freezer',
-  'Locked Cabinet',
+  'Refrigerated',
+  'Frozen',
+  'Fresh',
+  'Other',
 ];
 
 const REPLENISHMENT_FREQUENCIES = [
   'Daily',
-  'Alternate Days',
-  'Weekly',
-  'Bi-weekly',
+  'Periodic',
   'Monthly',
   'As Required',
 ];
