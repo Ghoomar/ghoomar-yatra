@@ -161,7 +161,14 @@ export default function StaffFinancialsPage() {
                   const bal = Number(b.outstanding_advance_balance) || 0;
                   return (
                     <tr key={b.employee_id} className="hover:bg-stone-50/80 transition-colors">
-                      <td className="py-3 px-3 font-semibold text-stone-900">{b.employee_name}</td>
+                      <td className="py-3 px-3 font-semibold text-stone-900">
+                        {b.employee_name}
+                        {b.employment_status !== 'Active' && (
+                          <span className="ml-2 inline-block text-[9px] font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
+                            {b.employment_status}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-3 text-stone-600">
                         {b.department_name || 'General'} • {b.role_name || 'Staff'}
                       </td>
@@ -198,7 +205,7 @@ export default function StaffFinancialsPage() {
 
             <form onSubmit={handleRecordTransaction} className="space-y-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Employee</label>
+                <label className="block font-medium text-stone-700 mb-1">Active Employee</label>
                 <select
                   value={selectedEmpId}
                   onChange={(e) => setSelectedEmpId(e.target.value)}
@@ -206,11 +213,13 @@ export default function StaffFinancialsPage() {
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
                   <option value="">Select Staff...</option>
-                  {balances.map((b) => (
-                    <option key={b.employee_id} value={b.employee_id}>
-                      {b.employee_name} ({formatINR(Number(b.outstanding_advance_balance))})
-                    </option>
-                  ))}
+                  {balances
+                    .filter((b) => b.employment_status === 'Active')
+                    .map((b) => (
+                      <option key={b.employee_id} value={b.employee_id}>
+                        {b.employee_name} ({formatINR(Number(b.outstanding_advance_balance))})
+                      </option>
+                    ))}
                 </select>
               </div>
 

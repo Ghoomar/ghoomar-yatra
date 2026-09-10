@@ -35,12 +35,16 @@ export default function ActivitiesPage() {
         .select('*')
         .eq('business_date', businessDate);
 
+      const relevantActivities = (acts || []).filter(
+        (a) => a.is_active !== false || (recs || []).some((r) => r.activity_id === a.id)
+      );
+
       setRecords(
-        (acts || []).map((a) => {
+        relevantActivities.map((a) => {
           const found = (recs || []).find((r) => r.activity_id === a.id);
           return {
             activity_id: a.id,
-            name: a.name,
+            name: a.name + (a.is_active === false ? ' (Archived)' : ''),
             default_price: Number(a.default_price) || 50,
             is_reported: found ? found.is_reported : false,
             units_sold: found ? Number(found.units_sold) : 0,

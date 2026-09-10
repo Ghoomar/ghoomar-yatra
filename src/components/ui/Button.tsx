@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -24,16 +24,16 @@ export function Button({
   };
 
   const sizes = {
-    sm: 'h-8 px-3 text-xs rounded-lg',
-    md: 'h-10 px-4 text-sm rounded-lg',
+    sm: 'min-h-[40px] sm:min-h-0 h-9 sm:h-8 px-3 text-xs rounded-lg',
+    md: 'min-h-[42px] sm:min-h-0 h-10 px-4 text-sm rounded-lg',
     lg: 'h-12 px-6 text-base rounded-xl font-medium',
-    icon: 'h-9 w-9 p-0 rounded-lg flex items-center justify-center',
+    icon: 'min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 h-10 w-10 sm:h-9 sm:w-9 p-0 rounded-lg flex items-center justify-center',
   };
 
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer',
+        'inline-flex items-center justify-center font-medium transition-all focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer touch-manipulation select-none active:scale-[0.98]',
         variants[variant],
         sizes[size],
         className

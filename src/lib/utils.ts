@@ -49,12 +49,42 @@ export function formatPercent(val: number | null | undefined): string {
 }
 
 export function getTodayBusinessDate(): string {
-  // Financial business day 12:00 AM - 11:59 PM (IST / local)
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // Financial business day 12:00 AM - 11:59 PM in Indian Standard Time (IST, UTC+05:30)
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(new Date());
+}
+
+export function getDaysInMonth(year: number, month: number): number {
+  // month is 1-indexed (1 = Jan, 2 = Feb, etc.)
+  return new Date(year, month, 0).getDate();
+}
+
+export function getMonthDateRange(businessDate: string) {
+  const [yearStr, monthStr, dayStr] = businessDate.split('-');
+  const year = parseInt(yearStr, 10) || new Date().getFullYear();
+  const month = parseInt(monthStr, 10) || (new Date().getMonth() + 1);
+  const day = parseInt(dayStr, 10) || 1;
+
+  const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+  const daysInMonth = getDaysInMonth(year, month);
+  const daysElapsed = Math.min(day, daysInMonth);
+  const daysRemaining = Math.max(0, daysInMonth - daysElapsed);
+
+  return {
+    monthStart,
+    businessDate,
+    year,
+    month,
+    day,
+    daysInMonth,
+    daysElapsed,
+    daysRemaining,
+  };
 }
 
 export function formatTimeAgo(dateInput: string | Date | null | undefined): string {

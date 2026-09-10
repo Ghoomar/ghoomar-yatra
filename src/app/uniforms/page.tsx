@@ -29,7 +29,11 @@ export default function UniformsPage() {
     setLoading(true);
     try {
       const { data: uData, error: uError } = await supabase.from('uniform_items').select('*').order('name');
-      const { data: empData, error: eError } = await supabase.from('employees').select('id, name, employee_code').order('name');
+      const { data: empData, error: eError } = await supabase
+        .from('employees')
+        .select('id, name, employee_code')
+        .eq('employment_status', 'Active')
+        .order('name');
       const { data: issData, error: issError } = await supabase
         .from('employee_uniform_issues')
         .select(`
@@ -279,11 +283,13 @@ export default function UniformsPage() {
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
                   <option value="">Select Item...</option>
-                  {uniforms.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} (Size: {u.size}) — {u.available_quantity} Available
-                    </option>
-                  ))}
+                  {uniforms
+                    .filter((u) => u.is_active !== false && Number(u.available_quantity) > 0)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} (Size: {u.size}) — {u.available_quantity} Available
+                      </option>
+                    ))}
                 </select>
               </div>
 

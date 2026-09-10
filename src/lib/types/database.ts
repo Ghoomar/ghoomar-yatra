@@ -219,3 +219,26 @@ export interface EmployeeFinancialBalance {
   outstanding_advance_balance: number;
   last_transaction_at?: string;
 }
+
+export type BreakEvenStatus = 'Healthy' | 'At Risk' | 'Below Break-Even';
+
+export interface MTDFinancialSummary {
+  month_start_date: string;
+  selected_date: string;
+  days_in_month: number;
+  day_of_month: number;
+  days_elapsed: number;
+  days_remaining: number;
+  mtd_net_sales: number;
+  mtd_gross_sales: number;
+  mtd_discounts: number;
+  mtd_customer_food_cost: number;
+  mtd_staff_food_cost: number;
+  mtd_wastage_cost: number;
+  mtd_total_material_consumption: number;
+  mtd_variable_expenses: number;
+  mtd_payment_commissions: number;
+  mtd_gross_operating_surplus: number;
+  days_reported: number;
+}
+

@@ -412,11 +412,16 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
             {/* Bank Details */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
-              <h3 className="font-semibold text-stone-800">Bank Disbursement Account</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-stone-800">Bank Disbursement Account</h3>
+                <span className="text-[11px] text-stone-400 font-normal">(Optional)</span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="block font-medium text-stone-700 mb-1">Account Number</label>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    Account Number <span className="text-stone-400 font-normal">(Optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={bankAccount}
@@ -427,7 +432,9 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">IFSC Code</label>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    IFSC Code <span className="text-stone-400 font-normal">(Optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={bankIfsc}

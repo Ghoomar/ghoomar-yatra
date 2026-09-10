@@ -33,8 +33,16 @@ export default function TipsPage() {
         .eq('business_date', businessDate)
         .order('created_at', { ascending: false });
 
-      const { data: empData } = await supabase.from('employees').select('id, name').order('name');
-      const { data: deptData } = await supabase.from('departments').select('id, name').order('name');
+      const { data: empData } = await supabase
+        .from('employees')
+        .select('id, name')
+        .eq('employment_status', 'Active')
+        .order('name');
+      const { data: deptData } = await supabase
+        .from('departments')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
 
       setTips(tipData || []);
       setEmployees(empData || []);

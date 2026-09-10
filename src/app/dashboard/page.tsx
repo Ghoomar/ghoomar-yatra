@@ -4,13 +4,20 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate, formatINR } from '@/lib/utils';
-import { calculateDailyProfitability, calculateBreakEvenPacing, calculateVisitorPacing } from '@/lib/finance-engine';
+import { 
+  calculateDailyProfitability, 
+  calculateBreakEvenPacing, 
+  calculateVisitorPacing,
+  fetchMTDFinancialSummary 
+} from '@/lib/finance-engine';
 import { KPICards } from '@/components/dashboard/KPICards';
 import { TargetPacing } from '@/components/dashboard/TargetPacing';
 import { MonthlyPosition } from '@/components/dashboard/MonthlyPosition';
 import { ActionRequiredFlags, ActionFlag } from '@/components/dashboard/ActionRequiredFlags';
 import { BusinessHealth } from '@/components/dashboard/BusinessHealth';
 import { LayoutDashboard, RefreshCw } from 'lucide-react';
+import { MTDFinancialSummary } from '@/lib/types/database';
+import { getMonthDateRange } from '@/lib/utils';
 
 export default function DashboardPage() {
   const supabase = createClient();
@@ -27,6 +34,14 @@ export default function DashboardPage() {
   const [activeStaffCount, setActiveStaffCount] = useState<number>(0);
   const [absentStaffCount, setAbsentStaffCount] = useState<number>(0);
   const [isDayClosed, setIsDayClosed] = useState<boolean>(false);
+
+  // Hardened Dynamic Financial States
+  const [mtdSummary, setMtdSummary] = useState<MTDFinancialSummary | null>(null);
+  const [monthlySalaries, setMonthlySalaries] = useState<number>(0);
+  const [otherFixedCosts, setOtherFixedCosts] = useState<number>(3500);
+  const [planningBreakEven, setPlanningBreakEven] = useState<number>(3000000);
+  const [rentRate, setRentRate] = useState<number>(0.10);
+  const [investorRate, setInvestorRate] = useState<number>(0.08);
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -70,16 +85,44 @@ export default function DashboardPage() {
       const low = (items || []).filter((i) => Number(i.current_quantity) <= Number(i.minimum_stock) && Number(i.minimum_stock) > 0);
       setLowStockItems(low);
 
-      // 6. Fetch attendance for date
-      const [{ count: activeCount }, { data: attRecords }, { data: bDay }] = await Promise.all([
-        supabase.from('employees').select('*', { count: 'exact', head: true }).eq('employment_status', 'Active'),
+      // 6. Fetch attendance for date and active employee salaries
+      const [{ data: activeEmps }, { data: attRecords }, { data: bDay }] = await Promise.all([
+        supabase.from('employees').select('id, monthly_salary').eq('employment_status', 'Active'),
         supabase.from('attendance').select('status').eq('business_date', businessDate),
         supabase.from('business_days').select('status').eq('business_date', businessDate).maybeSingle(),
       ]);
 
-      setActiveStaffCount(activeCount || 0);
+      const activeList = activeEmps || [];
+      setActiveStaffCount(activeList.length);
+      const totalSal = activeList.reduce((acc: number, emp: any) => acc + (Number(emp.monthly_salary) || 0), 0);
+      setMonthlySalaries(totalSal > 0 ? totalSal : activeList.length * 18000);
       setAbsentStaffCount((attRecords || []).filter((a) => a.status === 'Absent').length);
       setIsDayClosed(bDay?.status === 'closed');
+
+      // 7. Authoritative MTD Financial RPC & Fixed Cost Rules & Targets
+      const [mtdRes, { data: costRules }, { data: bepTarget }] = await Promise.all([
+        fetchMTDFinancialSummary(supabase, businessDate),
+        supabase.from('financial_cost_rules').select('*').eq('is_active', true),
+        supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
+      ]);
+
+      setMtdSummary(mtdRes);
+
+      if (costRules && costRules.length > 0) {
+        const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
+        const fixedSum = fixedRules.reduce((sum, r) => sum + (Number(r.amount_or_rate) || 0), 0);
+        if (fixedSum > 0) setOtherFixedCosts(fixedSum);
+
+        const rentRule = costRules.find((r) => r.category === 'Rent' && r.calculation_method === 'percentage_of_revenue');
+        if (rentRule) setRentRate(Number(rentRule.amount_or_rate) || 0.10);
+
+        const investorRule = costRules.find((r) => r.category === 'Finance' && r.calculation_method === 'percentage_of_revenue');
+        if (investorRule) setInvestorRate(Number(investorRule.amount_or_rate) || 0.08);
+      }
+
+      if (bepTarget?.target_value) {
+        setPlanningBreakEven(Number(bepTarget.target_value) || 3000000);
+      }
     } catch (err: any) {
       console.error('Error loading dashboard:', err);
     } finally {
@@ -106,6 +149,9 @@ export default function DashboardPage() {
   const { actualSpendPerVisitor, remainingRevenue, requiredVisitorsAtTargetSpend, achievementPercent } = 
     calculateVisitorPacing(revenue, totalVisitors, dailyTarget);
 
+  const { daysInMonth, daysElapsed } = getMonthDateRange(businessDate);
+  const actualSalariesPool = monthlySalaries > 0 ? monthlySalaries : (activeStaffCount * 18000);
+
   const profitResult = calculateDailyProfitability({
     businessDate,
     isReported: isSalesReported,
@@ -117,18 +163,26 @@ export default function DashboardPage() {
     staffFoodConsumption: Number(financialSummary?.staff_food_consumption) || 0,
     wastageCost: Number(financialSummary?.wastage_cost) || 0,
     variableExpenses: Number(financialSummary?.variable_expenses) || 0,
-    revenueLinkedRates: { rentPercent: 0.10, investorSharePercent: 0.08 },
-    monthlyFixedAllocations: { totalMonthlySalaries: activeStaffCount * 18000, otherMonthlyFixedCosts: 3500, daysInMonth: 30 },
+    revenueLinkedRates: { rentPercent: rentRate, investorSharePercent: investorRate },
+    monthlyFixedAllocations: { 
+      totalMonthlySalaries: actualSalariesPool, 
+      otherMonthlyFixedCosts: otherFixedCosts, 
+      daysInMonth 
+    },
   });
 
-  const dayOfMonth = parseInt(businessDate.slice(8, 10)) || 1;
+  const mtdNetSales = mtdSummary ? mtdSummary.mtd_net_sales : (isSalesReported ? revenue : 0);
+  const mtdContribution = mtdSummary && mtdSummary.mtd_gross_operating_surplus > 0 
+    ? mtdSummary.mtd_gross_operating_surplus 
+    : mtdNetSales * 0.45;
+
   const breakEven = calculateBreakEvenPacing({
-    mtdRevenue: revenue * dayOfMonth,
-    daysElapsed: dayOfMonth,
-    daysInMonth: 30,
-    planningBreakEven: 3000000,
-    totalMonthlyFixedCosts: (activeStaffCount * 18000) + 3500,
-    mtdContributionMargin: (revenue * dayOfMonth) * 0.45,
+    mtdRevenue: mtdNetSales,
+    daysElapsed: mtdSummary?.days_elapsed || daysElapsed,
+    daysInMonth: mtdSummary?.days_in_month || daysInMonth,
+    planningBreakEven: planningBreakEven,
+    totalMonthlyFixedCosts: actualSalariesPool + otherFixedCosts,
+    mtdContributionMargin: mtdContribution,
   });
 
   // Action Required Flags
@@ -239,7 +293,7 @@ export default function DashboardPage() {
           calculatedBreakEven={breakEven.calculatedBreakEven}
           mtdRevenue={breakEven.mtdRevenue}
           daysElapsed={breakEven.daysElapsed}
-          daysInMonth={30}
+          daysInMonth={mtdSummary?.days_in_month || daysInMonth}
           averageDailyRevenue={breakEven.averageDailyRevenue}
           requiredDailyRevenue={breakEven.requiredDailyRevenuePlanning}
           projectedMonthEndRevenue={breakEven.projectedMonthEndRevenue}

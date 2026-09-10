@@ -1,4 +1,4 @@
-﻿export interface DailyFinanceInput {
+export interface DailyFinanceInput {
   businessDate: string;
   isReported: boolean;
   grossSales: number;
@@ -97,6 +97,8 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
   };
 }
 
+export type BreakEvenStatus = 'Healthy' | 'At Risk' | 'Below Break-Even';
+
 export interface BreakEvenInput {
   mtdRevenue: number;
   daysElapsed: number;
@@ -117,7 +119,7 @@ export interface BreakEvenOutput {
   requiredDailyRevenueCalculated: number;
   projectedMonthEndRevenue: number;
   planningVariance: number;
-  status: 'Healthy' | 'At Risk' | 'Below Break-Even';
+  status: BreakEvenStatus;
 }
 
 export function calculateBreakEvenPacing({
@@ -151,7 +153,7 @@ export function calculateBreakEvenPacing({
 
   const planningVariance = Number((projectedMonthEndRevenue - planningBreakEven).toFixed(2));
 
-  let status: 'Healthy' | 'At Risk' | 'Below Break-Even' = 'Healthy';
+  let status: BreakEvenStatus = 'Healthy';
   if (planningVariance < -0.10 * planningBreakEven) {
     status = 'Below Break-Even';
   } else if (planningVariance < 0) {
@@ -194,3 +196,92 @@ export function calculateVisitorPacing(revenue: number, visitors: number, dailyT
     achievementPercent,
   };
 }
+
+import { MTDFinancialSummary } from './types/database';
+import { getMonthDateRange } from './utils';
+
+export async function fetchMTDFinancialSummary(
+  supabase: any,
+  businessDate: string
+): Promise<MTDFinancialSummary> {
+  const { monthStart, daysInMonth, daysElapsed, daysRemaining } = getMonthDateRange(businessDate);
+
+  try {
+    // 1. Try authoritative RPC
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('get_mtd_financial_summary', { p_business_date: businessDate });
+
+    if (!rpcError && rpcData && rpcData.length > 0) {
+      const row = rpcData[0];
+      return {
+        month_start_date: row.month_start_date || monthStart,
+        selected_date: row.selected_date || businessDate,
+        days_in_month: Number(row.days_in_month) || daysInMonth,
+        day_of_month: Number(row.day_of_month) || daysElapsed,
+        days_elapsed: Number(row.days_elapsed) || daysElapsed,
+        days_remaining: Number(row.days_remaining) || daysRemaining,
+        mtd_net_sales: Number(row.mtd_net_sales) || 0,
+        mtd_gross_sales: Number(row.mtd_gross_sales) || 0,
+        mtd_discounts: Number(row.mtd_discounts) || 0,
+        mtd_customer_food_cost: Number(row.mtd_customer_food_cost) || 0,
+        mtd_staff_food_cost: Number(row.mtd_staff_food_cost) || 0,
+        mtd_wastage_cost: Number(row.mtd_wastage_cost) || 0,
+        mtd_total_material_consumption: Number(row.mtd_total_material_consumption) || 0,
+        mtd_variable_expenses: Number(row.mtd_variable_expenses) || 0,
+        mtd_payment_commissions: Number(row.mtd_payment_commissions) || 0,
+        mtd_gross_operating_surplus: Number(row.mtd_gross_operating_surplus) || 0,
+        days_reported: Number(row.days_reported) || 0,
+      };
+    }
+  } catch (e) {
+    console.warn('RPC get_mtd_financial_summary failed, using query fallback:', e);
+  }
+
+  // 2. Resilient fallback query directly from sales_reports and daily_financial_summary
+  const [{ data: salesRows }, { data: finRows }] = await Promise.all([
+    supabase
+      .from('sales_reports')
+      .select('net_sales, gross_sales, discounts, is_reported')
+      .gte('business_date', monthStart)
+      .lte('business_date', businessDate),
+    supabase
+      .from('daily_financial_summary')
+      .select('customer_food_consumption, staff_food_consumption, wastage_cost, total_material_consumption, variable_expenses, payment_commissions, gross_operating_surplus')
+      .gte('business_date', monthStart)
+      .lte('business_date', businessDate),
+  ]);
+
+  const mtd_net_sales = (salesRows || []).reduce((s: number, r: any) => s + (Number(r.net_sales) || 0), 0);
+  const mtd_gross_sales = (salesRows || []).reduce((s: number, r: any) => s + (Number(r.gross_sales) || 0), 0);
+  const mtd_discounts = (salesRows || []).reduce((s: number, r: any) => s + (Number(r.discounts) || 0), 0);
+  const days_reported = (salesRows || []).filter((r: any) => r.is_reported).length;
+
+  const mtd_customer_food_cost = (finRows || []).reduce((s: number, r: any) => s + (Number(r.customer_food_consumption) || 0), 0);
+  const mtd_staff_food_cost = (finRows || []).reduce((s: number, r: any) => s + (Number(r.staff_food_consumption) || 0), 0);
+  const mtd_wastage_cost = (finRows || []).reduce((s: number, r: any) => s + (Number(r.wastage_cost) || 0), 0);
+  const mtd_total_material_consumption = (finRows || []).reduce((s: number, r: any) => s + (Number(r.total_material_consumption) || 0), 0);
+  const mtd_variable_expenses = (finRows || []).reduce((s: number, r: any) => s + (Number(r.variable_expenses) || 0), 0);
+  const mtd_payment_commissions = (finRows || []).reduce((s: number, r: any) => s + (Number(r.payment_commissions) || 0), 0);
+  const mtd_gross_operating_surplus = (finRows || []).reduce((s: number, r: any) => s + (Number(r.gross_operating_surplus) || 0), 0);
+
+  return {
+    month_start_date: monthStart,
+    selected_date: businessDate,
+    days_in_month: daysInMonth,
+    day_of_month: daysElapsed,
+    days_elapsed: daysElapsed,
+    days_remaining: daysRemaining,
+    mtd_net_sales,
+    mtd_gross_sales,
+    mtd_discounts,
+    mtd_customer_food_cost,
+    mtd_staff_food_cost,
+    mtd_wastage_cost,
+    mtd_total_material_consumption,
+    mtd_variable_expenses,
+    mtd_payment_commissions,
+    mtd_gross_operating_surplus,
+    days_reported,
+  };
+}
+

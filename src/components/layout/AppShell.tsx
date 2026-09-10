@@ -21,12 +21,106 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<RoleName>('Admin');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Gesture state refs
+  const touchStartX = React.useRef<number | null>(null);
+  const touchStartY = React.useRef<number | null>(null);
+  const touchStartTime = React.useRef<number>(0);
+  const isEdgeSwipe = React.useRef<boolean>(false);
+  const isCloseSwipe = React.useRef<boolean>(false);
+
   useEffect(() => {
     const saved = localStorage.getItem('ghoomar_active_role') as RoleName;
     if (saved) {
       setRole(saved);
     }
   }, []);
+
+  // Global Edge Swipe Navigation Handler
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (window.innerWidth >= 1024) return; // Desktop uses persistent sidebar
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      const x = touch.clientX;
+      const y = touch.clientY;
+      touchStartX.current = x;
+      touchStartY.current = y;
+      touchStartTime.current = Date.now();
+
+      // Narrow 25px activation zone from the left edge to open drawer
+      if (!sidebarOpen && x <= 25) {
+        isEdgeSwipe.current = true;
+        isCloseSwipe.current = false;
+      } else if (sidebarOpen) {
+        isEdgeSwipe.current = false;
+        isCloseSwipe.current = true;
+      } else {
+        isEdgeSwipe.current = false;
+        isCloseSwipe.current = false;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isEdgeSwipe.current && !isCloseSwipe.current) return;
+      const touch = e.touches[0];
+      if (!touch || touchStartX.current === null || touchStartY.current === null) return;
+
+      const deltaX = touch.clientX - touchStartX.current;
+      const deltaY = touch.clientY - touchStartY.current;
+
+      // Quick-trigger open if horizontal swipe > 70px and predominantly horizontal
+      if (isEdgeSwipe.current && deltaX >= 70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        setSidebarOpen(true);
+        isEdgeSwipe.current = false;
+      }
+
+      // Quick-trigger close if horizontal swipe < -60px while open
+      if (isCloseSwipe.current && deltaX <= -60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        setSidebarOpen(false);
+        isCloseSwipe.current = false;
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if ((isEdgeSwipe.current || isCloseSwipe.current) && touchStartX.current !== null && touchStartY.current !== null) {
+        const touch = e.changedTouches[0];
+        if (touch) {
+          const deltaX = touch.clientX - touchStartX.current;
+          const deltaY = touch.clientY - touchStartY.current;
+
+          if (isEdgeSwipe.current && deltaX >= 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+            setSidebarOpen(true);
+          } else if (isCloseSwipe.current && deltaX <= -50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+            setSidebarOpen(false);
+          }
+        }
+      }
+      touchStartX.current = null;
+      touchStartY.current = null;
+      isEdgeSwipe.current = false;
+      isCloseSwipe.current = false;
+    };
+
+    const handleTouchCancel = () => {
+      touchStartX.current = null;
+      touchStartY.current = null;
+      isEdgeSwipe.current = false;
+      isCloseSwipe.current = false;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchCancel);
+    };
+  }, [sidebarOpen]);
 
   const handleRoleChange = (newRole: RoleName) => {
     setRole(newRole);

@@ -5,8 +5,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { formatINR, getTodayBusinessDate, formatPercent } from '@/lib/utils';
-import { calculateDailyProfitability, calculateBreakEvenPacing } from '@/lib/finance-engine';
+import { formatINR, getTodayBusinessDate, formatPercent, getMonthDateRange } from '@/lib/utils';
+import { calculateDailyProfitability, calculateBreakEvenPacing, fetchMTDFinancialSummary } from '@/lib/finance-engine';
+import { MTDFinancialSummary } from '@/lib/types/database';
 import { TrendingUp, RefreshCw } from 'lucide-react';
 
 export default function ProfitabilityPage() {
@@ -22,9 +23,12 @@ export default function ProfitabilityPage() {
     wastage: 0,
   });
   const [variableExpenses, setVariableExpenses] = useState(0);
-  const [totalSalaries, setTotalSalaries] = useState(300000);
+  const [totalSalaries, setTotalSalaries] = useState(68000);
   const [monthlyOtherFixed, setMonthlyOtherFixed] = useState(3500);
-  const [mtdRevenue, setMtdRevenue] = useState(0);
+  const [planningBreakEven, setPlanningBreakEven] = useState(3000000);
+  const [rentRate, setRentRate] = useState(0.10);
+  const [investorRate, setInvestorRate] = useState(0.08);
+  const [mtdSummary, setMtdSummary] = useState<MTDFinancialSummary | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -71,18 +75,32 @@ export default function ProfitabilityPage() {
         .eq('employment_status', 'Active');
 
       const payroll = (emps || []).reduce((s, e) => s + (Number(e.monthly_salary) || 0), 0);
-      setTotalSalaries(payroll > 0 ? payroll : 300000);
+      setTotalSalaries(payroll > 0 ? payroll : 68000);
 
-      // 5. Fetch MTD Revenue
-      const currentYearMonth = businessDate.slice(0, 7);
-      const { data: mtdSales } = await supabase
-        .from('sales_reports')
-        .select('net_sales')
-        .gte('business_date', `${currentYearMonth}-01`)
-        .lte('business_date', businessDate);
+      // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules & Break-Even Targets
+      const [mtdRes, { data: costRules }, { data: bepTarget }] = await Promise.all([
+        fetchMTDFinancialSummary(supabase, businessDate),
+        supabase.from('financial_cost_rules').select('*').eq('is_active', true),
+        supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
+      ]);
 
-      const mtd = (mtdSales || []).reduce((s, r) => s + (Number(r.net_sales) || 0), 0);
-      setMtdRevenue(mtd);
+      setMtdSummary(mtdRes);
+
+      if (costRules && costRules.length > 0) {
+        const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
+        const fixedSum = fixedRules.reduce((sum, r) => sum + (Number(r.amount_or_rate) || 0), 0);
+        if (fixedSum > 0) setMonthlyOtherFixed(fixedSum);
+
+        const rentRule = costRules.find((r) => r.category === 'Rent' && r.calculation_method === 'percentage_of_revenue');
+        if (rentRule) setRentRate(Number(rentRule.amount_or_rate) || 0.10);
+
+        const investorRule = costRules.find((r) => r.category === 'Finance' && r.calculation_method === 'percentage_of_revenue');
+        if (investorRule) setInvestorRate(Number(investorRule.amount_or_rate) || 0.08);
+      }
+
+      if (bepTarget?.target_value) {
+        setPlanningBreakEven(Number(bepTarget.target_value) || 3000000);
+      }
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -93,6 +111,8 @@ export default function ProfitabilityPage() {
   useEffect(() => {
     loadData();
   }, [businessDate]);
+
+  const { daysInMonth, daysElapsed } = getMonthDateRange(businessDate);
 
   const pnl = calculateDailyProfitability({
     businessDate,
@@ -106,25 +126,31 @@ export default function ProfitabilityPage() {
     wastageCost: materialConsumption.wastage,
     variableExpenses: variableExpenses,
     revenueLinkedRates: {
-      rentPercent: 0.10,
-      investorSharePercent: 0.08,
+      rentPercent: rentRate,
+      investorSharePercent: investorRate,
     },
     monthlyFixedAllocations: {
       totalMonthlySalaries: totalSalaries,
       otherMonthlyFixedCosts: monthlyOtherFixed,
-      daysInMonth: 30,
+      daysInMonth: daysInMonth,
     },
   });
 
-  const dayOfMonth = parseInt(businessDate.slice(8, 10)) || 1;
+  const mtdNetSales = mtdSummary ? mtdSummary.mtd_net_sales : (salesReport?.is_reported ? pnl.revenue : 0);
+  const mtdContribution = mtdSummary && mtdSummary.mtd_gross_operating_surplus > 0
+    ? mtdSummary.mtd_gross_operating_surplus
+    : mtdNetSales * 0.45;
+
   const breakEven = calculateBreakEvenPacing({
-    mtdRevenue: mtdRevenue || pnl.revenue,
-    daysElapsed: dayOfMonth,
-    daysInMonth: 30,
-    planningBreakEven: 3000000,
+    mtdRevenue: mtdNetSales,
+    daysElapsed: mtdSummary?.days_elapsed || daysElapsed,
+    daysInMonth: mtdSummary?.days_in_month || daysInMonth,
+    planningBreakEven: planningBreakEven,
     totalMonthlyFixedCosts: totalSalaries + monthlyOtherFixed,
-    mtdContributionMargin: (mtdRevenue || pnl.revenue) * 0.45,
+    mtdContributionMargin: mtdContribution,
   });
+
+  const cmRatioPercent = mtdNetSales > 0 ? Math.round((mtdContribution / mtdNetSales) * 100) : 45;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -185,7 +211,7 @@ export default function ProfitabilityPage() {
             </Badge>
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            Projected Month-End: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (Target: ₹30L)
+            Projected Month-End: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (Target: {formatINR(planningBreakEven, true)})
           </div>
         </Card>
       </div>
@@ -238,12 +264,12 @@ export default function ProfitabilityPage() {
               </div>
               <div className="pl-4 space-y-1 text-xs text-stone-500">
                 <div className="flex items-center justify-between">
-                  <span>• Property Rent (10% of Revenue)</span>
-                  <span>{formatINR(pnl.revenue * 0.10)}</span>
+                  <span>• Property Rent ({(rentRate * 100).toFixed(0)}% of Revenue)</span>
+                  <span>{formatINR(pnl.revenue * rentRate)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>• Investor Share (8% of Revenue)</span>
-                  <span>{formatINR(pnl.revenue * 0.08)}</span>
+                  <span>• Investor Share ({(investorRate * 100).toFixed(0)}% of Revenue)</span>
+                  <span>{formatINR(pnl.revenue * investorRate)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>• Direct Logged Expenses (Vouchers)</span>
@@ -263,12 +289,12 @@ export default function ProfitabilityPage() {
               </div>
               <div className="pl-4 space-y-1 text-xs text-stone-500">
                 <div className="flex items-center justify-between">
-                  <span>• Staff Salaries ({formatINR(totalSalaries)} ÷ 30 days)</span>
-                  <span>{formatINR(totalSalaries / 30)}</span>
+                  <span>• Staff Salaries ({formatINR(totalSalaries)} ÷ {daysInMonth} days)</span>
+                  <span>{formatINR(totalSalaries / daysInMonth)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>• Fixed Contracts &amp; Wi-Fi ({formatINR(monthlyOtherFixed)} ÷ 30 days)</span>
-                  <span>{formatINR(monthlyOtherFixed / 30)}</span>
+                  <span>• Fixed Contracts &amp; Utilities ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
+                  <span>{formatINR(monthlyOtherFixed / daysInMonth)}</span>
                 </div>
               </div>
             </div>
@@ -294,7 +320,7 @@ export default function ProfitabilityPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
               <div className="text-xs font-bold text-stone-700 uppercase">1. Planning Break-Even Target</div>
-              <div className="text-2xl font-black text-stone-900">₹30,00,000 / month</div>
+              <div className="text-2xl font-black text-stone-900">{formatINR(planningBreakEven)} / month</div>
               <p className="text-stone-500 text-[11px]">
                 Fixed management objective. Requires <strong>{formatINR(breakEven.requiredDailyRevenuePlanning)}/day</strong> across the remaining {breakEven.daysRemaining} days.
               </p>
@@ -306,7 +332,7 @@ export default function ProfitabilityPage() {
                 {formatINR(breakEven.calculatedBreakEven)} / month
               </div>
               <p className="text-stone-500 text-[11px]">
-                Dynamically derived from actual fixed costs divided by current contribution margin ratio (CM Ratio: 45%).
+                Dynamically derived from actual fixed costs divided by current contribution margin ratio (CM Ratio: {cmRatioPercent}%).
               </p>
             </div>
           </div>

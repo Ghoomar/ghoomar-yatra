@@ -34,6 +34,7 @@ export default function StockCountPage() {
       const { data: pos, error } = await supabase
         .from('inventory_current_position')
         .select('*')
+        .eq('is_active', true)
         .order('name');
 
       if (error) throw error;
