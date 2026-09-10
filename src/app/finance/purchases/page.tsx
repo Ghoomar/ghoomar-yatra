@@ -345,7 +345,7 @@ export default function PurchasesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
@@ -357,7 +357,7 @@ export default function PurchasesPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href="/finance/vendors">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
               <Building2 className="h-4 w-4 text-amber-600" /> Manage Vendors

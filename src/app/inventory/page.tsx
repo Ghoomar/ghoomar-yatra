@@ -202,7 +202,7 @@ function InventoryContent() {
   const totalIssuesValue = totalIssuesLogged.reduce((sum, m) => sum + Number(m.total_value || 0), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-hidden">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -264,36 +264,38 @@ function InventoryContent() {
       </div>
 
       {/* Primary Tab Navigation */}
-      <div className="flex border-b border-stone-200 bg-white rounded-t-xl px-2">
-        <button
-          onClick={() => {
-            setActiveTab('catalog');
-            router.push('/inventory?tab=catalog');
-          }}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'catalog'
-              ? 'border-amber-600 text-amber-700 bg-amber-50/50'
-              : 'border-transparent text-stone-500 hover:text-stone-800'
-          }`}
-        >
-          <Package className="h-4 w-4" />
-          Store Catalog &amp; Positions ({items.length})
-        </button>
+      <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
+        <div className="flex border-b border-stone-200 bg-white rounded-t-xl min-w-max">
+          <button
+            onClick={() => {
+              setActiveTab('catalog');
+              router.push('/inventory?tab=catalog');
+            }}
+            className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+              activeTab === 'catalog'
+                ? 'border-amber-600 text-amber-700 bg-amber-50/50'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Package className="h-4 w-4" />
+            Store Catalog &amp; Positions ({items.length})
+          </button>
 
-        <button
-          onClick={() => {
-            setActiveTab('movements');
-            router.push('/inventory?tab=movements');
-          }}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'movements'
-              ? 'border-amber-600 text-amber-700 bg-amber-50/50'
-              : 'border-transparent text-stone-500 hover:text-stone-800'
-          }`}
-        >
-          <ArrowRightLeft className="h-4 w-4" />
-          Stock Movement Ledger ({movements.length})
-        </button>
+          <button
+            onClick={() => {
+              setActiveTab('movements');
+              router.push('/inventory?tab=movements');
+            }}
+            className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+              activeTab === 'movements'
+                ? 'border-amber-600 text-amber-700 bg-amber-50/50'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            Stock Movement Ledger ({movements.length})
+          </button>
+        </div>
       </div>
 
       {activeTab === 'catalog' ? (
@@ -629,7 +631,7 @@ function InventoryContent() {
 
           {/* Movement Ledger Table */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-stone-100">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-stone-100">
               <div>
                 <CardTitle>Stock Movement Ledger ({filteredMovements.length})</CardTitle>
                 <CardDescription>

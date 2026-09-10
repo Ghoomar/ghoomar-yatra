@@ -249,7 +249,7 @@ export default function VendorsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -262,7 +262,7 @@ export default function VendorsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
           <Link href="/finance/purchases">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
               <ShoppingBag className="h-4 w-4 text-stone-500" />
@@ -419,7 +419,7 @@ export default function VendorsPage() {
 
       {/* Vendors Table */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-stone-100">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-stone-100">
           <div>
             <CardTitle>Registered Suppliers</CardTitle>
             <CardDescription>

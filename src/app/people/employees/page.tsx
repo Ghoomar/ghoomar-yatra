@@ -126,7 +126,7 @@ export default function EmployeesPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -250,9 +250,9 @@ export default function EmployeesPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           {/* Status Filter */}
-          <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0 overflow-x-auto">
+          <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0 overflow-x-auto max-w-full scrollbar-none">
             {(['ALL', 'Active', 'On Leave', 'Resigned', 'Terminated'] as const).map((st) => (
               <button
                 key={st}

@@ -457,31 +457,31 @@ export default function VendorDetailPage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-hidden">
       {/* Top Breadcrumb & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-1.5 min-w-0">
           <Link
             href="/finance/vendors"
             className="text-xs text-stone-500 hover:text-amber-600 flex items-center gap-1 font-medium transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Vendor Master
           </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
-              <Building2 className="h-6 w-6 text-amber-600" />
-              {vendor.name}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2 break-words">
+              <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600 shrink-0" />
+              <span>{vendor.name}</span>
             </h1>
-            <span className="font-mono text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-700 font-bold">
+            <span className="font-mono text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-700 font-bold shrink-0">
               {vendor.vendor_code || 'VEND'}
             </span>
-            <Badge variant={vendor.is_active ? 'success' : 'default'}>
+            <Badge variant={vendor.is_active ? 'success' : 'default'} className="shrink-0">
               {vendor.is_active ? 'Active Supplier' : 'Inactive'}
             </Badge>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -531,43 +531,43 @@ export default function VendorDetailPage({
       )}
 
       {/* Summary Metrics Strip (Required) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Card>
-          <CardDescription>Total Purchased (This Month)</CardDescription>
-          <div className="text-xl font-bold text-stone-900 mt-1">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">Purchased (Month)</CardDescription>
+          <div className="text-lg sm:text-xl font-bold text-stone-900 mt-1 truncate">
             {formatINR(summaryMetrics.purchasedThisMonth)}
           </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Current month inward bills</div>
+          <div className="text-[10px] text-stone-400 mt-0.5 truncate">Current month inward bills</div>
         </Card>
 
-        <Card>
-          <CardDescription>Total Paid (This Month)</CardDescription>
-          <div className="text-xl font-bold text-emerald-700 mt-1">
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">Paid (Month)</CardDescription>
+          <div className="text-lg sm:text-xl font-bold text-emerald-700 mt-1 truncate">
             {formatINR(summaryMetrics.paidThisMonth)}
           </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Disbursed settlements</div>
+          <div className="text-[10px] text-stone-400 mt-0.5 truncate">Disbursed settlements</div>
         </Card>
 
-        <Card>
-          <CardDescription>Current Outstanding</CardDescription>
-          <div className="text-xl font-bold text-rose-600 mt-1">
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">Current Outstanding</CardDescription>
+          <div className="text-lg sm:text-xl font-bold text-rose-600 mt-1 truncate">
             {formatINR(summaryMetrics.outstandingBalance)}
           </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Net derived payable</div>
+          <div className="text-[10px] text-stone-400 mt-0.5 truncate">Net derived payable</div>
         </Card>
 
-        <Card>
-          <CardDescription>Payment Terms</CardDescription>
-          <div className="text-base font-bold text-stone-800 mt-1 truncate">
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">Payment Terms</CardDescription>
+          <div className="text-sm sm:text-base font-bold text-stone-800 mt-1 truncate">
             {vendor.payment_terms || 'Net 7 Days'}
           </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">
+          <div className="text-[10px] text-stone-400 mt-0.5 truncate">
             {vendor.payment_frequency || 'Weekly schedule'}
           </div>
         </Card>
 
-        <Card>
-          <CardDescription>Account Status</CardDescription>
+        <Card className="min-w-0 overflow-hidden col-span-2 sm:col-span-1">
+          <CardDescription className="truncate">Account Status</CardDescription>
           <div className="mt-1">
             <span
               className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -580,18 +580,18 @@ export default function VendorDetailPage({
               {vendor.is_active ? 'Active' : 'Inactive'}
             </span>
           </div>
-          <div className="text-[10px] text-stone-400 mt-0.5">
+          <div className="text-[10px] text-stone-400 mt-0.5 truncate">
             {vendor.is_active ? 'Authorized for POs' : 'Purchases suspended'}
           </div>
         </Card>
       </div>
 
       {/* Tabs Navigation */}
-      <div className="border-b border-stone-200">
-        <nav className="flex space-x-6 text-xs font-medium">
+      <div className="border-b border-stone-200 overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
+        <nav className="flex space-x-3 sm:space-x-6 text-xs font-medium min-w-max pb-0.5">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'overview'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -603,7 +603,7 @@ export default function VendorDetailPage({
 
           <button
             onClick={() => setActiveTab('purchases')}
-            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'purchases'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -615,7 +615,7 @@ export default function VendorDetailPage({
 
           <button
             onClick={() => setActiveTab('payments')}
-            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'payments'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -627,7 +627,7 @@ export default function VendorDetailPage({
 
           <button
             onClick={() => setActiveTab('ledger')}
-            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'ledger'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -639,7 +639,7 @@ export default function VendorDetailPage({
 
           <button
             onClick={() => setActiveTab('items')}
-            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+            className={`py-3 border-b-2 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'items'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -773,39 +773,39 @@ export default function VendorDetailPage({
 
       {/* Tab 2: Purchases */}
       {activeTab === 'purchases' && (
-        <Card>
-          <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <CardTitle className="text-sm">Procurement Invoices</CardTitle>
               <CardDescription>
                 Historical bills and material receipts received from {vendor.name}
               </CardDescription>
             </div>
-            <Link href="/finance/purchases">
-              <Button variant="outline" size="sm" className="gap-1 text-xs">
+            <Link href="/finance/purchases" className="shrink-0">
+              <Button variant="outline" size="sm" className="gap-1 text-xs w-full sm:w-auto">
                 <Plus className="h-3.5 w-3.5" /> Record Purchase Invoice
               </Button>
             </Link>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="p-0 sm:p-6 sm:pt-0 overflow-hidden">
             {purchases.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">
+              <div className="py-12 px-4 text-center text-stone-400 text-xs">
                 No purchase invoices recorded yet for this vendor.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto w-full max-w-full">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                       <th className="py-2.5 px-3"></th>
-                      <th className="py-2.5 px-3">Purchase #</th>
-                      <th className="py-2.5 px-3">Invoice Ref</th>
-                      <th className="py-2.5 px-3">Date</th>
-                      <th className="py-2.5 px-3">Item Count</th>
-                      <th className="py-2.5 px-3 text-right">Invoice Value</th>
-                      <th className="py-2.5 px-3 text-right">Allocated Paid</th>
-                      <th className="py-2.5 px-3 text-right">Balance Due</th>
-                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Purchase #</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Invoice Ref</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Item Count</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Invoice Value</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Allocated Paid</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Balance Due</th>
+                      <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -825,24 +825,24 @@ export default function VendorDetailPage({
                                 <ChevronRight className="h-4 w-4" />
                               )}
                             </td>
-                            <td className="py-3 px-3 font-mono font-semibold text-stone-900">
+                            <td className="py-3 px-3 font-mono font-semibold text-stone-900 whitespace-nowrap">
                               {p.purchase_number}
                             </td>
-                            <td className="py-3 px-3 font-mono text-stone-600">
+                            <td className="py-3 px-3 font-mono text-stone-600 whitespace-nowrap">
                               {p.invoice_number || '—'}
                             </td>
-                            <td className="py-3 px-3 text-stone-600">{p.purchase_date}</td>
-                            <td className="py-3 px-3 text-stone-600">{p.lines.length} items</td>
-                            <td className="py-3 px-3 text-right font-semibold text-stone-900">
+                            <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{p.purchase_date}</td>
+                            <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{p.lines.length} items</td>
+                            <td className="py-3 px-3 text-right font-semibold text-stone-900 whitespace-nowrap">
                               {formatINR(p.net_amount)}
                             </td>
-                            <td className="py-3 px-3 text-right font-medium text-emerald-700">
+                            <td className="py-3 px-3 text-right font-medium text-emerald-700 whitespace-nowrap">
                               {formatINR(p.allocated_amount)}
                             </td>
-                            <td className="py-3 px-3 text-right font-bold text-rose-600">
+                            <td className="py-3 px-3 text-right font-bold text-rose-600 whitespace-nowrap">
                               {formatINR(balanceDue)}
                             </td>
-                            <td className="py-3 px-3 text-center">
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
                               {balanceDue <= 0 ? (
                                 <Badge variant="success">Settled</Badge>
                               ) : p.allocated_amount > 0 ? (
@@ -856,37 +856,37 @@ export default function VendorDetailPage({
                           {/* Expandable Line Items Details */}
                           {isExpanded && (
                             <tr className="bg-stone-50/60">
-                              <td colSpan={9} className="p-3 pl-10">
-                                <div className="p-3 bg-white rounded-lg border border-stone-200 space-y-2">
+                              <td colSpan={9} className="p-2 sm:p-3 sm:pl-10">
+                                <div className="p-2.5 sm:p-3 bg-white rounded-lg border border-stone-200 space-y-2 overflow-x-auto">
                                   <div className="font-semibold text-stone-800 text-xs">
                                     Invoice Line Items
                                   </div>
                                   <table className="w-full text-left text-xs">
                                     <thead>
                                       <tr className="border-b border-stone-200 text-stone-500">
-                                        <th className="py-1 px-2">Item Code</th>
-                                        <th className="py-1 px-2">Item Description</th>
-                                        <th className="py-1 px-2 text-right">Quantity</th>
-                                        <th className="py-1 px-2 text-right">Rate</th>
-                                        <th className="py-1 px-2 text-right">Line Total</th>
+                                        <th className="py-1 px-2 whitespace-nowrap">Item Code</th>
+                                        <th className="py-1 px-2 min-w-[120px]">Item Description</th>
+                                        <th className="py-1 px-2 text-right whitespace-nowrap">Quantity</th>
+                                        <th className="py-1 px-2 text-right whitespace-nowrap">Rate</th>
+                                        <th className="py-1 px-2 text-right whitespace-nowrap">Line Total</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-100">
                                       {p.lines.map((l) => (
                                         <tr key={l.id}>
-                                          <td className="py-1.5 px-2 font-mono text-stone-500">
+                                          <td className="py-1.5 px-2 font-mono text-stone-500 whitespace-nowrap">
                                             {l.item_code}
                                           </td>
-                                          <td className="py-1.5 px-2 font-medium text-stone-800">
+                                          <td className="py-1.5 px-2 font-medium text-stone-800 break-words">
                                             {l.item_name}
                                           </td>
-                                          <td className="py-1.5 px-2 text-right text-stone-700">
+                                          <td className="py-1.5 px-2 text-right text-stone-700 whitespace-nowrap">
                                             {l.quantity}
                                           </td>
-                                          <td className="py-1.5 px-2 text-right text-stone-700">
+                                          <td className="py-1.5 px-2 text-right text-stone-700 whitespace-nowrap">
                                             {formatINR(l.rate)}
                                           </td>
-                                          <td className="py-1.5 px-2 text-right font-bold text-stone-900">
+                                          <td className="py-1.5 px-2 text-right font-bold text-stone-900 whitespace-nowrap">
                                             {formatINR(l.total_amount)}
                                           </td>
                                         </tr>
@@ -910,57 +910,57 @@ export default function VendorDetailPage({
 
       {/* Tab 3: Payments */}
       {activeTab === 'payments' && (
-        <Card>
-          <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <CardTitle className="text-sm">Disbursed Payments & Settlements</CardTitle>
               <CardDescription>
                 Direct disbursements, cheques, and bank transfers released to {vendor.name}
               </CardDescription>
             </div>
-            <Link href="/finance/purchases">
-              <Button variant="outline" size="sm" className="gap-1 text-xs">
+            <Link href="/finance/purchases" className="shrink-0">
+              <Button variant="outline" size="sm" className="gap-1 text-xs w-full sm:w-auto">
                 <CreditCard className="h-3.5 w-3.5" /> Record Payment
               </Button>
             </Link>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="p-0 sm:p-6 sm:pt-0 overflow-hidden">
             {payments.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">
+              <div className="py-12 px-4 text-center text-stone-400 text-xs">
                 No payments have been recorded yet for this vendor.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto w-full max-w-full">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Voucher #</th>
-                      <th className="py-2.5 px-3">Payment Date</th>
-                      <th className="py-2.5 px-3">Payment Mode</th>
-                      <th className="py-2.5 px-3">Reference / UTR</th>
-                      <th className="py-2.5 px-3">Notes</th>
-                      <th className="py-2.5 px-3 text-right">Amount Paid</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Voucher #</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Payment Date</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Payment Mode</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Reference / UTR</th>
+                      <th className="py-2.5 px-3 min-w-[120px]">Notes</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount Paid</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {payments.map((pay) => (
                       <tr key={pay.id} className="hover:bg-stone-50/80 transition-colors">
-                        <td className="py-3 px-3 font-mono font-semibold text-stone-900">
+                        <td className="py-3 px-3 font-mono font-semibold text-stone-900 whitespace-nowrap">
                           {pay.payment_number}
                         </td>
-                        <td className="py-3 px-3 text-stone-600">{pay.payment_date}</td>
-                        <td className="py-3 px-3">
+                        <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{pay.payment_date}</td>
+                        <td className="py-3 px-3 whitespace-nowrap">
                           <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-800 text-[11px] font-medium">
                             {pay.payment_method_name}
                           </span>
                         </td>
-                        <td className="py-3 px-3 font-mono text-stone-600">
+                        <td className="py-3 px-3 font-mono text-stone-600 whitespace-nowrap">
                           {pay.reference_number || '—'}
                         </td>
                         <td className="py-3 px-3 text-stone-500 italic max-w-xs truncate">
                           {pay.notes || '—'}
                         </td>
-                        <td className="py-3 px-3 text-right font-bold text-emerald-700 text-sm">
+                        <td className="py-3 px-3 text-right font-bold text-emerald-700 text-sm whitespace-nowrap">
                           {formatINR(pay.amount)}
                         </td>
                       </tr>
@@ -975,38 +975,38 @@ export default function VendorDetailPage({
 
       {/* Tab 4: Ledger */}
       {activeTab === 'ledger' && (
-        <Card>
-          <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <CardTitle className="text-sm">Vendor Account Statement & Running Ledger</CardTitle>
               <CardDescription>
                 Chronological statement of invoices (Credits) and payments (Debits) with running payable balance
               </CardDescription>
             </div>
-            <div className="text-right">
+            <div className="sm:text-right shrink-0">
               <span className="text-[11px] text-stone-500">Current Outstanding: </span>
               <span className="font-bold text-rose-600 text-sm">
                 {formatINR(summaryMetrics.outstandingBalance)}
               </span>
             </div>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="p-0 sm:p-6 sm:pt-0 overflow-hidden">
             {ledgerEntries.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">
+              <div className="py-12 px-4 text-center text-stone-400 text-xs">
                 No financial transactions have occurred with this vendor.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto w-full max-w-full">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Date</th>
-                      <th className="py-2.5 px-3">Transaction</th>
-                      <th className="py-2.5 px-3">Voucher / Ref #</th>
-                      <th className="py-2.5 px-3">Description</th>
-                      <th className="py-2.5 px-3 text-right text-emerald-700">Debit (Paid)</th>
-                      <th className="py-2.5 px-3 text-right text-stone-900">Credit (Invoiced)</th>
-                      <th className="py-2.5 px-3 text-right font-bold text-stone-800">
+                      <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Transaction</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Voucher / Ref #</th>
+                      <th className="py-2.5 px-3 min-w-[150px]">Description</th>
+                      <th className="py-2.5 px-3 text-right text-emerald-700 whitespace-nowrap">Debit (Paid)</th>
+                      <th className="py-2.5 px-3 text-right text-stone-900 whitespace-nowrap">Credit (Invoiced)</th>
+                      <th className="py-2.5 px-3 text-right font-bold text-stone-800 whitespace-nowrap">
                         Running Balance
                       </th>
                     </tr>
@@ -1014,8 +1014,8 @@ export default function VendorDetailPage({
                   <tbody className="divide-y divide-stone-100 font-mono">
                     {ledgerEntries.map((entry) => (
                       <tr key={entry.id} className="hover:bg-stone-50/80 transition-colors">
-                        <td className="py-3 px-3 text-stone-600 font-sans">{entry.date}</td>
-                        <td className="py-3 px-3 font-sans">
+                        <td className="py-3 px-3 text-stone-600 font-sans whitespace-nowrap">{entry.date}</td>
+                        <td className="py-3 px-3 font-sans whitespace-nowrap">
                           {entry.type === 'purchase' ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-stone-800 bg-stone-100 px-2 py-0.5 rounded">
                               <ShoppingBag className="h-3 w-3 text-amber-600" /> Purchase
@@ -1026,19 +1026,19 @@ export default function VendorDetailPage({
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-3 font-semibold text-stone-800">
+                        <td className="py-3 px-3 font-semibold text-stone-800 whitespace-nowrap">
                           {entry.reference_number}
                         </td>
-                        <td className="py-3 px-3 font-sans text-stone-600 max-w-sm">
+                        <td className="py-3 px-3 font-sans text-stone-600 max-w-sm break-words">
                           {entry.description}
                         </td>
-                        <td className="py-3 px-3 text-right font-medium text-emerald-700 font-mono">
+                        <td className="py-3 px-3 text-right font-medium text-emerald-700 font-mono whitespace-nowrap">
                           {entry.debit > 0 ? formatINR(entry.debit) : '—'}
                         </td>
-                        <td className="py-3 px-3 text-right font-medium text-stone-900 font-mono">
+                        <td className="py-3 px-3 text-right font-medium text-stone-900 font-mono whitespace-nowrap">
                           {entry.credit > 0 ? formatINR(entry.credit) : '—'}
                         </td>
-                        <td className="py-3 px-3 text-right font-bold font-mono text-sm">
+                        <td className="py-3 px-3 text-right font-bold font-mono text-sm whitespace-nowrap">
                           <span className={entry.running_balance > 0 ? 'text-rose-600' : 'text-emerald-700'}>
                             {formatINR(entry.running_balance)}
                           </span>
@@ -1055,8 +1055,8 @@ export default function VendorDetailPage({
 
       {/* Tab 5: Items Supplied */}
       {activeTab === 'items' && (
-        <Card>
-          <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <CardTitle className="text-sm">Supplied Inventory Catalog</CardTitle>
               <CardDescription>
@@ -1067,46 +1067,48 @@ export default function VendorDetailPage({
               variant="amber"
               size="sm"
               onClick={() => setShowLinkItemModal(true)}
-              className="gap-1 text-xs"
+              className="gap-1 text-xs w-full sm:w-auto shrink-0"
             >
               <Plus className="h-3.5 w-3.5" /> Link Item to Vendor
             </Button>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="p-0 sm:p-6 sm:pt-0 overflow-hidden">
             {vendorItems.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">
+              <div className="py-12 px-4 text-center text-stone-400 text-xs">
                 No inventory items currently linked to this vendor. Click &quot;Link Item to Vendor&quot; to associate SKUs.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto w-full max-w-full">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">SKU Code</th>
-                      <th className="py-2.5 px-3">Item Name</th>
-                      <th className="py-2.5 px-3">Category</th>
-                      <th className="py-2.5 px-3">Unit</th>
-                      <th className="py-2.5 px-3 text-right">Last Purchase Rate</th>
-                      <th className="py-2.5 px-3">Last Purchase Date</th>
-                      <th className="py-2.5 px-3 text-center">Preferred</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">SKU Code</th>
+                      <th className="py-2.5 px-3 min-w-[140px]">Item Name</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Category</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Unit</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Last Purchase Rate</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Last Purchase Date</th>
+                      <th className="py-2.5 px-3 text-center whitespace-nowrap">Preferred</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {vendorItems.map((vi) => (
                       <tr key={vi.id} className="hover:bg-stone-50/80 transition-colors">
-                        <td className="py-3 px-3 font-mono font-medium text-stone-600">
+                        <td className="py-3 px-3 font-mono font-medium text-stone-600 whitespace-nowrap">
                           {vi.item_code}
                         </td>
-                        <td className="py-3 px-3 font-semibold text-stone-900">{vi.item_name}</td>
-                        <td className="py-3 px-3 text-stone-600">{vi.category_name || '—'}</td>
-                        <td className="py-3 px-3 text-stone-600">{vi.unit_symbol || 'Units'}</td>
-                        <td className="py-3 px-3 text-right font-semibold text-stone-900">
+                        <td className="py-3 px-3 font-semibold text-stone-900 break-words max-w-[220px]">
+                          {vi.item_name}
+                        </td>
+                        <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{vi.category_name || '—'}</td>
+                        <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{vi.unit_symbol || 'Units'}</td>
+                        <td className="py-3 px-3 text-right font-semibold text-stone-900 whitespace-nowrap">
                           {formatINR(vi.last_purchase_rate)}
                         </td>
-                        <td className="py-3 px-3 text-stone-500">
+                        <td className="py-3 px-3 text-stone-500 whitespace-nowrap">
                           {vi.last_purchase_date || '—'}
                         </td>
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
                           {vi.is_preferred ? (
                             <Badge variant="success">Preferred</Badge>
                           ) : (

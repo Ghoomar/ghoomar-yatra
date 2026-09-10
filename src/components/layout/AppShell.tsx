@@ -48,8 +48,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       touchStartY.current = y;
       touchStartTime.current = Date.now();
 
-      // Narrow 25px activation zone from the left edge to open drawer
-      if (!sidebarOpen && x <= 25) {
+      // Modestly increased activation zone (first 44px from left edge) to avoid Android system back gesture collision
+      if (!sidebarOpen && x <= 44) {
         isEdgeSwipe.current = true;
         isCloseSwipe.current = false;
       } else if (sidebarOpen) {
@@ -69,14 +69,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const deltaX = touch.clientX - touchStartX.current;
       const deltaY = touch.clientY - touchStartY.current;
 
-      // Quick-trigger open if horizontal swipe > 70px and predominantly horizontal
-      if (isEdgeSwipe.current && deltaX >= 70 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      // Quick-trigger open if horizontal movement >= 65px and predominantly horizontal (avoids vertical scroll conflict)
+      if (isEdgeSwipe.current && deltaX >= 65 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
         setSidebarOpen(true);
         isEdgeSwipe.current = false;
       }
 
-      // Quick-trigger close if horizontal swipe < -60px while open
-      if (isCloseSwipe.current && deltaX <= -60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      // Quick-trigger close if horizontal swipe <= -50px while open
+      if (isCloseSwipe.current && deltaX <= -50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
         setSidebarOpen(false);
         isCloseSwipe.current = false;
       }
@@ -89,9 +89,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           const deltaX = touch.clientX - touchStartX.current;
           const deltaY = touch.clientY - touchStartY.current;
 
-          if (isEdgeSwipe.current && deltaX >= 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+          if (isEdgeSwipe.current && deltaX >= 65 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
             setSidebarOpen(true);
-          } else if (isCloseSwipe.current && deltaX <= -50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+          } else if (isCloseSwipe.current && deltaX <= -50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
             setSidebarOpen(false);
           }
         }
@@ -142,7 +142,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onRoleChange={handleRoleChange}
             onOpenSidebar={() => setSidebarOpen(true)}
           />
-          <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
+          <main className="flex-1 p-3 sm:p-4 md:p-6 max-w-7xl w-full mx-auto min-w-0">
             {children}
           </main>
         </div>
