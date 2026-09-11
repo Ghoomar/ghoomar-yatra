@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAppRole } from '@/components/layout/AppShell';
 import { saveDeviceEnrollment } from '@/lib/gate/offline-store';
@@ -10,8 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ShieldCheck, Lock, User, AlertCircle, RefreshCw, Car } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const { setRole } = useAppRole();
 
@@ -19,6 +20,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get('error') === 'deactivated') {
+      setError('This account has been deactivated. Please contact your system administrator.');
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +63,9 @@ export default function LoginPage() {
       });
 
       if (authErr) {
+        if (authErr.message?.toLowerCase().includes('banned') || authErr.message?.toLowerCase().includes('disabled')) {
+          throw new Error('This account has been deactivated. Please contact your system administrator.');
+        }
         throw new Error(authErr.message || 'Invalid credentials.');
       }
 
@@ -70,6 +80,17 @@ export default function LoginPage() {
         .select('*, role:roles!profiles_role_id_fkey(name)')
         .eq('id', user.id)
         .maybeSingle();
+
+      if (profErr || !profile) {
+        await supabase.auth.signOut();
+        throw new Error('User profile record not found. Please contact an administrator.');
+      }
+
+      // Enforce active account status
+      if (profile.is_active === false) {
+        await supabase.auth.signOut();
+        throw new Error('This account has been deactivated. Please contact your system administrator.');
+      }
 
       const userRole: RoleName = profile?.role?.name || 'Gate Staff';
 
@@ -146,7 +167,7 @@ export default function LoginPage() {
           {error && (
             <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
-              <span>{error}</span>
+              <span className="leading-relaxed">{error}</span>
             </div>
           )}
 
@@ -210,5 +231,19 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[80vh] flex items-center justify-center p-4">
+        <div className="p-4 bg-white border border-stone-200 rounded-2xl shadow-lg flex items-center gap-2 text-xs text-stone-600">
+          <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading authentication portal...
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -12,6 +12,7 @@ import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
 import { InventoryCategoryModal } from '@/components/inventory/InventoryCategoryModal';
 import { ActivityMasterModal } from '@/components/activities/ActivityMasterModal';
 import { UserManagementModal } from '@/components/admin/UserManagementModal';
+import { RolePermissionMatrix } from '@/components/admin/RolePermissionMatrix';
 import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { logAuditAction } from '@/lib/audit-logger';
 import {
@@ -636,18 +637,16 @@ export default function AdminSettingsPage() {
                                   onClick={async () => {
                                     const nextStatus = !isActive;
                                     try {
-                                      const { error } = await supabase
-                                        .from('profiles')
-                                        .update({ is_active: nextStatus, updated_at: new Date().toISOString() })
-                                        .eq('id', p.id);
-                                      if (error) throw error;
-                                      await logAuditAction({
-                                        action: 'STATUS_CHANGE',
-                                        entityType: 'profiles',
-                                        entityId: p.id,
-                                        oldValues: { is_active: p.is_active },
-                                        newValues: { is_active: nextStatus },
+                                      const res = await fetch('/api/admin/users', {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ userId: p.id, isActive: nextStatus }),
                                       });
+                                      const result = await res.json();
+                                      if (!res.ok) {
+                                        alert(result.error || 'Failed to update user status');
+                                        return;
+                                      }
                                       loadData();
                                     } catch (err: any) {
                                       alert('Failed to update status: ' + err.message);
@@ -669,36 +668,11 @@ export default function AdminSettingsPage() {
             </CardContent>
           </Card>
 
-          {/* RBAC Roles Summary Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Role-Based Access Control (RBAC)</CardTitle>
-              <CardDescription>System permission boundaries and capability assignments for 9 operational roles</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {loading ? (
-                <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading roles...
-                </div>
-              ) : (
-                <div className="divide-y divide-stone-100 text-xs">
-                  {roles.map((r) => (
-                    <div key={r.id} className="py-3 flex items-start justify-between gap-4">
-                      <div>
-                        <div className="font-bold text-stone-900 flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-amber-600" />
-                          <span>{r.name}</span>
-                          {r.is_system && <Badge variant="outline">System Core</Badge>}
-                        </div>
-                        <div className="text-stone-500 text-[11px] mt-0.5">{r.description}</div>
-                      </div>
-                      <Badge variant="success">Active</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Dynamic RBAC Role & Permission Management Matrix */}
+          <RolePermissionMatrix
+            roles={roles}
+            onPermissionsUpdated={loadData}
+          />
         </div>
       )}
 

@@ -9,16 +9,20 @@ import { createClient } from '@/lib/supabase/client';
 
 interface HeaderProps {
   currentRole: RoleName;
+  actualRole?: RoleName;
   onRoleChange: (role: RoleName) => void;
   onOpenSidebar: () => void;
+  onSignOut?: () => void;
   businessDate?: string;
   isDayClosed?: boolean;
 }
 
 export function Header({
   currentRole,
+  actualRole = 'Viewer',
   onRoleChange,
   onOpenSidebar,
+  onSignOut,
   businessDate = getTodayBusinessDate(),
   isDayClosed = false,
 }: HeaderProps) {
@@ -35,12 +39,19 @@ export function Header({
   ];
 
   const handleSignOut = async () => {
+    if (onSignOut) {
+      await onSignOut();
+      return;
+    }
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
     } catch {}
-    localStorage.removeItem('ghoomar_active_role');
-    window.location.href = '/login';
+    try {
+      localStorage.removeItem('ghoomar_active_role');
+      sessionStorage.clear();
+    } catch {}
+    window.location.replace('/login');
   };
 
   // Format YYYY-MM-DD -> DD-MM-YY for display while preserving businessDate internally
@@ -53,6 +64,8 @@ export function Header({
     }
     return businessDate;
   }, [businessDate]);
+
+  const isAdminUser = actualRole === 'Admin';
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between border-b border-stone-200 bg-white/95 px-2.5 sm:px-4 md:px-6 backdrop-blur-xs">
@@ -79,7 +92,7 @@ export function Header({
         </div>
       </div>
 
-      {/* Right section: Gate Counter, Role Selector & Sign Out */}
+      {/* Right section: Gate Counter, Role Display & Sign Out */}
       <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 shrink-0">
         <Link
           href="/operations/gate"
@@ -90,26 +103,27 @@ export function Header({
           <span className="hidden md:inline">Gate Counter</span>
         </Link>
 
-        <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 sm:px-2.5 py-1 text-xs min-h-[40px] max-w-[95px] sm:max-w-none">
+        {/* Role Display / Admin Preview Switcher */}
+        <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 sm:px-2.5 py-1 text-xs min-h-[40px] max-w-[120px] sm:max-w-none">
           <ShieldCheck className="h-4 w-4 text-stone-500 hidden sm:inline shrink-0" />
           <span className="text-stone-500 text-[11px] hidden sm:inline shrink-0">Role:</span>
-          {currentRole === 'Gate Staff' ? (
-            <span className="font-bold text-stone-800 text-xs py-1 px-1">
-              Gate Staff
-            </span>
-          ) : (
+          {isAdminUser ? (
             <select
               value={currentRole}
               onChange={(e) => onRoleChange(e.target.value as RoleName)}
-              className="bg-transparent font-semibold text-stone-800 focus:outline-none cursor-pointer text-xs py-1 max-w-[75px] sm:max-w-none truncate"
+              className="bg-transparent font-semibold text-stone-800 focus:outline-none cursor-pointer text-xs py-1 max-w-[85px] sm:max-w-none truncate"
               aria-label="Current Role Perspective"
             >
               {roles.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {r} {r !== 'Admin' ? '(preview)' : ''}
                 </option>
               ))}
             </select>
+          ) : (
+            <span className="font-bold text-stone-800 text-xs py-1 px-1 truncate">
+              {currentRole}
+            </span>
           )}
         </div>
 

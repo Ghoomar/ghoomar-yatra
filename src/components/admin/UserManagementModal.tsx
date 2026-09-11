@@ -2,9 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
-import { createClient } from '@/lib/supabase/client';
-import { logAuditAction } from '@/lib/audit-logger';
-import { X, UserPlus, Edit2, Shield, AlertCircle } from 'lucide-react';
+import { X, UserPlus, Edit2, Shield, AlertCircle, Eye, EyeOff, KeyRound, Sparkles } from 'lucide-react';
 
 interface Role {
   id: string;
@@ -37,7 +35,6 @@ export function UserManagementModal({
   roles,
   onSaved,
 }: UserManagementModalProps) {
-  const supabase = createClient();
   const isEdit = Boolean(user?.id);
 
   const [fullName, setFullName] = useState('');
@@ -45,27 +42,42 @@ export function UserManagementModal({
   const [phone, setPhone] = useState('');
   const [roleId, setRoleId] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setErrorMessage(null);
+      setShowPassword(false);
       if (user) {
         setFullName(user.full_name || '');
         setEmail(user.email || '');
         setPhone(user.phone || '');
         setRoleId(user.role_id || '');
         setIsActive(user.is_active !== false);
+        setPassword('');
       } else {
         setFullName('');
         setEmail('');
         setPhone('');
         setRoleId(roles[0]?.id || '');
         setIsActive(true);
+        setPassword('');
       }
     }
   }, [isOpen, user, roles]);
+
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*';
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(result);
+    setShowPassword(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +90,15 @@ export function UserManagementModal({
       return;
     }
     if (!roleId) {
-      setErrorMessage('Please assign a role to this user.');
+      setErrorMessage('Please assign an operational role to this user.');
+      return;
+    }
+    if (!isEdit && (!password || password.length < 6)) {
+      setErrorMessage('An initial password of at least 6 characters is required.');
+      return;
+    }
+    if (isEdit && password && password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters.');
       return;
     }
 
@@ -86,54 +106,48 @@ export function UserManagementModal({
     setErrorMessage(null);
 
     try {
-      const payload = {
-        full_name: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        phone: phone.trim() || null,
-        role_id: roleId,
-        is_active: isActive,
-        updated_at: new Date().toISOString(),
-      };
-
       if (isEdit && user) {
-        const { error } = await supabase
-          .from('profiles')
-          .update(payload)
-          .eq('id', user.id);
-        if (error) throw error;
-
-        await logAuditAction({
-          action: 'UPDATE',
-          entityType: 'profiles',
-          entityId: user.id,
-          oldValues: user,
-          newValues: payload,
+        const res = await fetch('/api/admin/users', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            fullName: fullName.trim(),
+            phone: phone.trim() || null,
+            roleId,
+            isActive,
+            newPassword: password.trim() || undefined,
+          }),
         });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to update user account.');
+        }
       } else {
-        const newId = crypto.randomUUID();
-        const { data, error } = await supabase
-          .from('profiles')
-          .insert({
-            id: newId,
-            ...payload,
-            created_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
-        if (error) throw error;
-
-        await logAuditAction({
-          action: 'CREATE',
-          entityType: 'profiles',
-          entityId: data?.id,
-          newValues: payload,
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: fullName.trim(),
+            email: email.trim().toLowerCase(),
+            phone: phone.trim() || null,
+            roleId,
+            isActive,
+            password: password.trim(),
+          }),
         });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to provision user account.');
+        }
       }
 
       if (onSaved) onSaved();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save user account.');
+      setErrorMessage(err.message || 'An error occurred while saving.');
     } finally {
       setSaving(false);
     }
@@ -152,10 +166,10 @@ export function UserManagementModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-stone-900">
-                {isEdit ? 'Edit System User' : 'Add New System User'}
+                {isEdit ? 'Edit System User' : 'Provision New System User'}
               </h2>
               <p className="text-[11px] text-stone-500">
-                Configure account identity, operational role, and system access
+                Configure account identity, operational role, and Supabase Auth credentials
               </p>
             </div>
           </div>
@@ -172,7 +186,7 @@ export function UserManagementModal({
           {errorMessage && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-start gap-2">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{errorMessage}</span>
+              <span className="leading-relaxed">{errorMessage}</span>
             </div>
           )}
 
@@ -184,7 +198,7 @@ export function UserManagementModal({
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Ramesh Kumar"
               required
-              className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+              className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
             />
           </div>
 
@@ -196,8 +210,14 @@ export function UserManagementModal({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="user@ghoomaryatra.com"
               required
-              className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+              disabled={isEdit}
+              className={`w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 ${
+                isEdit ? 'bg-stone-100 text-stone-500 cursor-not-allowed' : 'bg-white'
+              }`}
             />
+            {isEdit && (
+              <span className="text-[10px] text-stone-400 mt-0.5 block">Email address cannot be modified after creation.</span>
+            )}
           </div>
 
           <div>
@@ -207,12 +227,12 @@ export function UserManagementModal({
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="98XXXXXXXX"
-              className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+              className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
             />
           </div>
 
           <div>
-            <label className="block text-stone-700 font-medium mb-1">Assigned Role *</label>
+            <label className="block text-stone-700 font-medium mb-1">Assigned Operational Role *</label>
             <select
               value={roleId}
               onChange={(e) => setRoleId(e.target.value)}
@@ -226,6 +246,47 @@ export function UserManagementModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Password Field */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-stone-700 font-medium">
+                {isEdit ? 'Reset Password (Optional)' : 'Initial Password *'}
+              </label>
+              {!isEdit && (
+                <button
+                  type="button"
+                  onClick={generateRandomPassword}
+                  className="text-[11px] text-amber-600 hover:text-amber-700 font-semibold flex items-center gap-1"
+                >
+                  <Sparkles className="h-3 w-3" /> Generate Secure
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isEdit ? 'Leave blank to keep existing password' : '••••••••'}
+                required={!isEdit}
+                minLength={6}
+                className="w-full rounded-lg border border-stone-300 p-2 pr-9 text-stone-900 focus:outline-none focus:border-amber-500 bg-white font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <span className="text-[10px] text-stone-400 mt-0.5 block">
+              {isEdit
+                ? 'Only enter a password if you want to reset the user credentials.'
+                : 'Initial password provisioned directly into Supabase Auth.'}
+            </span>
           </div>
 
           <div className="pt-1">
@@ -245,7 +306,7 @@ export function UserManagementModal({
               Cancel
             </Button>
             <Button type="submit" variant="amber" disabled={saving}>
-              {saving ? 'Saving...' : isEdit ? 'Update User' : 'Create User'}
+              {saving ? 'Processing...' : isEdit ? 'Update Account' : 'Provision User'}
             </Button>
           </div>
         </form>
