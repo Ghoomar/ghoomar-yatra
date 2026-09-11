@@ -252,3 +252,289 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: err.message || 'Internal server error while updating user.' }, { status: 500 });
   }
 }
+
+/**
+ * Helper to audit all database tables for references to a user.
+ * Prevents accidental cascade-deletion of business, accounting, or audit history.
+ */
+async function checkUserDependencies(
+  adminClient: ReturnType<typeof createAdminClient>,
+  callerId: string,
+  targetUserId: string
+) {
+  // 1. Fetch target profile with role
+  const { data: targetProfile, error: profErr } = await adminClient
+    .from('profiles')
+    .select('*, role:roles(id, name)')
+    .eq('id', targetUserId)
+    .maybeSingle();
+
+  if (profErr || !targetProfile) {
+    return {
+      canDelete: false,
+      isSelf: false,
+      isLastAdmin: false,
+      dependencies: [],
+      totalRecords: 0,
+      targetUser: null,
+      error: 'Target user account not found.',
+    };
+  }
+
+  // 2. Safeguard: Prevent deleting own account
+  const isSelf = targetUserId === callerId;
+
+  // 3. Safeguard: Prevent deleting the final active Administrator
+  let isLastAdmin = false;
+  if (targetProfile.role?.name === 'Admin') {
+    const { count: activeAdminCount } = await adminClient
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role_id', targetProfile.role_id)
+      .eq('is_active', true);
+
+    if ((activeAdminCount || 0) <= 1) {
+      isLastAdmin = true;
+    }
+  }
+
+  // 4. Comprehensive audit of all 22 historical business tables in parallel
+  const [
+    expApproved,
+    expRecorded,
+    salApproved,
+    bdayClosed,
+    bdayReopened,
+    attMarked,
+    stockCreated,
+    consCreated,
+    invCreated,
+    invApproved,
+    purchCreated,
+    vpayCreated,
+    salesEntered,
+    visEntered,
+    vehEntered,
+    actEntered,
+    tipsRecorded,
+    eftRecorded,
+    unifIssued,
+    meterRecorded,
+    lpgRecorded,
+    dieselRecorded,
+    actualsReconciled,
+    auditLogs,
+    gateDevices,
+  ] = await Promise.all([
+    adminClient.from('expenses').select('id', { count: 'exact', head: true }).eq('approved_by_id', targetUserId),
+    adminClient.from('expenses').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
+    adminClient.from('employee_salary_payouts').select('id', { count: 'exact', head: true }).eq('approved_by_id', targetUserId),
+    adminClient.from('business_days').select('business_date', { count: 'exact', head: true }).eq('closed_by', targetUserId),
+    adminClient.from('business_days').select('business_date', { count: 'exact', head: true }).eq('reopened_by', targetUserId),
+    adminClient.from('attendance').select('id', { count: 'exact', head: true }).eq('marked_by', targetUserId),
+    adminClient.from('stock_movements').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+    adminClient.from('consumption_issues').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+    adminClient.from('inventory_counts').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+    adminClient.from('inventory_counts').select('id', { count: 'exact', head: true }).eq('approved_by', targetUserId),
+    adminClient.from('purchase_headers').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+    adminClient.from('vendor_payments').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
+    adminClient.from('sales_reports').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
+    adminClient.from('visitor_counter_events').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
+    adminClient.from('vehicle_counter_events').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
+    adminClient.from('activity_daily_records').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
+    adminClient.from('tips').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
+    adminClient.from('employee_financial_transactions').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
+    adminClient.from('employee_uniform_issues').select('id', { count: 'exact', head: true }).eq('issued_by', targetUserId),
+    adminClient.from('meter_readings').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
+    adminClient.from('lpg_transactions').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
+    adminClient.from('diesel_transactions').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
+    adminClient.from('financial_monthly_actuals').select('id', { count: 'exact', head: true }).eq('reconciled_by', targetUserId),
+    adminClient.from('audit_logs').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
+    adminClient.from('gate_device_authorizations').select('id', { count: 'exact', head: true }).eq('user_id', targetUserId),
+  ]);
+
+  const dependencies: { table: string; label: string; count: number }[] = [];
+
+  const expTotal = (expApproved.count || 0) + (expRecorded.count || 0);
+  if (expTotal > 0) dependencies.push({ table: 'expenses', label: 'Expenses (Approved / Recorded)', count: expTotal });
+
+  if ((salApproved.count || 0) > 0) dependencies.push({ table: 'employee_salary_payouts', label: 'Salary Payout Approvals', count: salApproved.count! });
+
+  const bdayTotal = (bdayClosed.count || 0) + (bdayReopened.count || 0);
+  if (bdayTotal > 0) dependencies.push({ table: 'business_days', label: 'Business Day Closing / Reopenings', count: bdayTotal });
+
+  if ((attMarked.count || 0) > 0) dependencies.push({ table: 'attendance', label: 'Staff Attendance Records', count: attMarked.count! });
+
+  if ((stockCreated.count || 0) > 0) dependencies.push({ table: 'stock_movements', label: 'Inventory Stock Movements', count: stockCreated.count! });
+
+  if ((consCreated.count || 0) > 0) dependencies.push({ table: 'consumption_issues', label: 'Kitchen Store Issues', count: consCreated.count! });
+
+  const invTotal = (invCreated.count || 0) + (invApproved.count || 0);
+  if (invTotal > 0) dependencies.push({ table: 'inventory_counts', label: 'Physical Inventory Counts', count: invTotal });
+
+  if ((purchCreated.count || 0) > 0) dependencies.push({ table: 'purchase_headers', label: 'Purchase Invoices', count: purchCreated.count! });
+
+  if ((vpayCreated.count || 0) > 0) dependencies.push({ table: 'vendor_payments', label: 'Vendor Payment Records', count: vpayCreated.count! });
+
+  if ((salesEntered.count || 0) > 0) dependencies.push({ table: 'sales_reports', label: 'Daily Sales Reports', count: salesEntered.count! });
+
+  if ((visEntered.count || 0) > 0) dependencies.push({ table: 'visitor_counter_events', label: 'Gate Visitor Counters', count: visEntered.count! });
+
+  if ((vehEntered.count || 0) > 0) dependencies.push({ table: 'vehicle_counter_events', label: 'Gate Vehicle Counters', count: vehEntered.count! });
+
+  if ((actEntered.count || 0) > 0) dependencies.push({ table: 'activity_daily_records', label: 'Village Activity Records', count: actEntered.count! });
+
+  if ((tipsRecorded.count || 0) > 0) dependencies.push({ table: 'tips', label: 'Staff Tip Collections', count: tipsRecorded.count! });
+
+  if ((eftRecorded.count || 0) > 0) dependencies.push({ table: 'employee_financial_transactions', label: 'Staff Ledger Transactions', count: eftRecorded.count! });
+
+  if ((unifIssued.count || 0) > 0) dependencies.push({ table: 'employee_uniform_issues', label: 'Staff Uniform Custody Records', count: unifIssued.count! });
+
+  if ((meterRecorded.count || 0) > 0) dependencies.push({ table: 'meter_readings', label: 'Electricity Meter Readings', count: meterRecorded.count! });
+
+  if ((lpgRecorded.count || 0) > 0) dependencies.push({ table: 'lpg_transactions', label: 'LPG Gas Cylinder Records', count: lpgRecorded.count! });
+
+  if ((dieselRecorded.count || 0) > 0) dependencies.push({ table: 'diesel_transactions', label: 'Generator Diesel Records', count: dieselRecorded.count! });
+
+  if ((actualsReconciled.count || 0) > 0) dependencies.push({ table: 'financial_monthly_actuals', label: 'Monthly Financial Reconciliations', count: actualsReconciled.count! });
+
+  if ((auditLogs.count || 0) > 0) dependencies.push({ table: 'audit_logs', label: 'Administrative Audit Trail Entries', count: auditLogs.count! });
+
+  if ((gateDevices.count || 0) > 0) dependencies.push({ table: 'gate_device_authorizations', label: 'Active Gate Device Authorizations', count: gateDevices.count! });
+
+  const totalRecords = dependencies.reduce((acc, d) => acc + d.count, 0);
+  const canDelete = !isSelf && !isLastAdmin && totalRecords === 0;
+
+  return {
+    canDelete,
+    isSelf,
+    isLastAdmin,
+    dependencies,
+    totalRecords,
+    targetUser: targetProfile,
+  };
+}
+
+export async function GET(request: Request) {
+  const auth = await verifyAdminCaller(request);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const checkUserId = searchParams.get('checkDependencies');
+
+  try {
+    const adminClient = createAdminClient();
+
+    if (checkUserId) {
+      const check = await checkUserDependencies(adminClient, auth.caller.id, checkUserId);
+      if (check.error) {
+        return NextResponse.json({ error: check.error }, { status: 404 });
+      }
+      return NextResponse.json(check);
+    }
+
+    const { data: users, error: usersErr } = await adminClient
+      .from('profiles')
+      .select('*, role:roles(id, name)')
+      .order('created_at', { ascending: true });
+
+    if (usersErr) throw usersErr;
+    return NextResponse.json({ users });
+  } catch (err: any) {
+    console.error('Error fetching admin users:', err);
+    return NextResponse.json({ error: err.message || 'Failed to fetch users.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const auth = await verifyAdminCaller(request);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  try {
+    const body = await request.json().catch(() => ({}));
+    const { searchParams } = new URL(request.url);
+    const targetUserId = body.userId || body.id || searchParams.get('userId');
+
+    if (!targetUserId) {
+      return NextResponse.json({ error: 'User ID is required for deletion.' }, { status: 400 });
+    }
+
+    const adminClient = createAdminClient();
+
+    // Perform thorough dependency & safeguard checks
+    const check = await checkUserDependencies(adminClient, auth.caller.id, targetUserId);
+
+    if (check.error || !check.targetUser) {
+      return NextResponse.json({ error: check.error || 'User account not found.' }, { status: 404 });
+    }
+
+    // 1. Self-delete safeguard
+    if (check.isSelf) {
+      return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 });
+    }
+
+    // 2. Final Administrator safeguard
+    if (check.isLastAdmin) {
+      return NextResponse.json(
+        { error: 'The final active Administrator cannot be deleted. Create or activate another Administrator first.' },
+        { status: 400 }
+      );
+    }
+
+    // 3. Protected historical business records safeguard
+    if (check.dependencies.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'This user cannot be permanently deleted because they have historical records associated with their account. Deactivate the user instead.',
+          dependencies: check.dependencies,
+          totalRecords: check.totalRecords,
+        },
+        { status: 400 }
+      );
+    }
+
+    const targetUser = check.targetUser;
+
+    // 4. Official server-side Auth user deletion via Supabase Admin API
+    const { error: deleteAuthErr } = await adminClient.auth.admin.deleteUser(targetUserId);
+    if (deleteAuthErr) {
+      console.error('Error deleting user from auth.users:', deleteAuthErr);
+      return NextResponse.json(
+        { error: `Failed to delete authentication user: ${deleteAuthErr.message}` },
+        { status: 500 }
+      );
+    }
+
+    // 5. Ensure profile is deleted (profiles_id_fkey has ON DELETE CASCADE, but ensure clean state)
+    await adminClient.from('profiles').delete().eq('id', targetUserId);
+
+    // 6. Record privileged action in audit logs
+    await adminClient.from('audit_logs').insert({
+      action: 'USER_DELETED',
+      entity_type: 'profiles',
+      entity_id: targetUserId,
+      user_id: auth.caller.id,
+      old_values: {
+        id: targetUser.id,
+        email: targetUser.email,
+        full_name: targetUser.full_name,
+        role: targetUser.role?.name,
+      },
+      new_values: null,
+      created_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `User ${targetUser.email} has been permanently deleted.`,
+    });
+  } catch (err: any) {
+    console.error('Error during user deletion:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error while deleting user.' }, { status: 500 });
+  }
+}
+

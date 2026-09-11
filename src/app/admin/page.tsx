@@ -12,6 +12,7 @@ import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
 import { InventoryCategoryModal } from '@/components/inventory/InventoryCategoryModal';
 import { ActivityMasterModal } from '@/components/activities/ActivityMasterModal';
 import { UserManagementModal } from '@/components/admin/UserManagementModal';
+import { DeleteUserModal } from '@/components/admin/DeleteUserModal';
 import { RolePermissionMatrix } from '@/components/admin/RolePermissionMatrix';
 import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { logAuditAction } from '@/lib/audit-logger';
@@ -32,7 +33,8 @@ import {
   UtensilsCrossed,
   UserCheck,
   Edit2,
-  Power
+  Power,
+  Trash2
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -61,6 +63,8 @@ export default function AdminSettingsPage() {
   const [activityModalOpen, setActivityModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<any | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -627,9 +631,10 @@ export default function AdminSettingsPage() {
                                     setUserModalOpen(true);
                                   }}
                                   className="h-7 px-2 text-stone-600 hover:text-stone-900"
-                                  title="Edit user"
+                                  title="Edit user details"
                                 >
-                                  <Edit2 className="h-3.5 w-3.5" />
+                                  <Edit2 className="h-3.5 w-3.5 mr-1" />
+                                  <span>Edit</span>
                                 </Button>
                                 <Button
                                   variant={isActive ? 'secondary' : 'amber'}
@@ -655,6 +660,19 @@ export default function AdminSettingsPage() {
                                   className="h-7 px-2 text-[11px]"
                                 >
                                   {isActive ? 'Deactivate' : 'Activate'}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setUserToDelete(p);
+                                    setDeleteModalOpen(true);
+                                  }}
+                                  className="h-7 px-2 text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-colors"
+                                  title="Delete user account"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                  <span>Delete</span>
                                 </Button>
                               </div>
                             </td>
@@ -712,6 +730,15 @@ export default function AdminSettingsPage() {
         user={editingUser}
         roles={roles}
         onSaved={loadData}
+      />
+      <DeleteUserModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setUserToDelete(null);
+        }}
+        user={userToDelete}
+        onDeleted={loadData}
       />
     </div>
   );
