@@ -1,0 +1,28 @@
+{
+  "name": "Yatra Gate | Footfall Counter",
+  "short_name": "Yatra Gate",
+  "description": "Offline-First Fast Touch Counter for Ghoomar Yatra Highway Gate",
+  "start_url": "/operations/gate",
+  "scope": "/operations/gate",
+  "display": "standalone",
+  "background_color": "#1c1917",
+  "theme_color": "#d97706",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -2,9 +2,10 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Menu, Calendar, ShieldCheck, Car } from 'lucide-react';
+import { Menu, Calendar, ShieldCheck, Car, LogOut } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
 import { getTodayBusinessDate } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 
 interface HeaderProps {
   currentRole: RoleName;
@@ -32,6 +33,15 @@ export function Header({
     'Gate Staff',
     'Viewer'
   ];
+
+  const handleSignOut = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {}
+    localStorage.removeItem('ghoomar_active_role');
+    window.location.href = '/login';
+  };
 
   // Format YYYY-MM-DD -> DD-MM-YY for display while preserving businessDate internally
   const formattedDate = React.useMemo(() => {
@@ -69,7 +79,7 @@ export function Header({
         </div>
       </div>
 
-      {/* Right section: Gate Counter & Role Selector */}
+      {/* Right section: Gate Counter, Role Selector & Sign Out */}
       <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 shrink-0">
         <Link
           href="/operations/gate"
@@ -80,22 +90,37 @@ export function Header({
           <span className="hidden md:inline">Gate Counter</span>
         </Link>
 
-        <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 sm:px-2.5 py-1 text-xs min-h-[40px] max-w-[90px] sm:max-w-none">
+        <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2 sm:px-2.5 py-1 text-xs min-h-[40px] max-w-[95px] sm:max-w-none">
           <ShieldCheck className="h-4 w-4 text-stone-500 hidden sm:inline shrink-0" />
           <span className="text-stone-500 text-[11px] hidden sm:inline shrink-0">Role:</span>
-          <select
-            value={currentRole}
-            onChange={(e) => onRoleChange(e.target.value as RoleName)}
-            className="bg-transparent font-semibold text-stone-800 focus:outline-none cursor-pointer text-xs py-1 max-w-[75px] sm:max-w-none truncate"
-            aria-label="Current Role Perspective"
-          >
-            {roles.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+          {currentRole === 'Gate Staff' ? (
+            <span className="font-bold text-stone-800 text-xs py-1 px-1">
+              Gate Staff
+            </span>
+          ) : (
+            <select
+              value={currentRole}
+              onChange={(e) => onRoleChange(e.target.value as RoleName)}
+              className="bg-transparent font-semibold text-stone-800 focus:outline-none cursor-pointer text-xs py-1 max-w-[75px] sm:max-w-none truncate"
+              aria-label="Current Role Perspective"
+            >
+              {roles.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
+
+        <button
+          onClick={handleSignOut}
+          title="Sign Out"
+          className="flex items-center justify-center rounded-lg border border-stone-200 bg-stone-50 p-2 text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition-colors min-h-[40px] min-w-[40px]"
+          aria-label="Sign out"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
     </header>
   );

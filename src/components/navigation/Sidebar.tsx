@@ -24,9 +24,11 @@ import {
   Settings,
   Lock,
   Building2,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
+import { createClient } from '@/lib/supabase/client';
 
 interface SidebarProps {
   currentRole: RoleName;
@@ -114,7 +116,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
 
       <aside className={`fixed top-0 bottom-0 left-0 z-50 w-64 border-r border-stone-200 bg-stone-900 text-stone-200 flex flex-col transition-transform duration-200 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-4 border-b border-stone-800 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2.5">
+          <Link href={currentRole === 'Gate Staff' ? '/operations/gate' : '/dashboard'} className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center text-stone-950 font-black tracking-wider text-base shadow-md shadow-amber-500/20">
               GY
             </div>
@@ -172,6 +174,20 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
               {currentRole}
             </span>
+            <button
+              onClick={async () => {
+                try {
+                  const supabase = createClient();
+                  await supabase.auth.signOut();
+                } catch {}
+                localStorage.removeItem('ghoomar_active_role');
+                window.location.href = '/login';
+              }}
+              title="Sign Out"
+              className="p-1 rounded text-stone-400 hover:text-rose-400 hover:bg-stone-700/60 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </aside>

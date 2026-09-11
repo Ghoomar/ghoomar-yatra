@@ -23,5 +23,14 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Gate Counter",
+      "short_name": "Gate",
+      "description": "High-Speed Gate & Footfall Touch Counter",
+      "url": "/operations/gate",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

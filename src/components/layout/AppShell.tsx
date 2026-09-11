@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, createContext, useContext, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/navigation/Sidebar';
 import { Header } from '@/components/navigation/Header';
 import { RoleName } from '@/lib/types/database';
+import { ServiceWorkerRegister } from '@/components/pwa/ServiceWorkerRegister';
+import { getDeviceEnrollment } from '@/lib/gate/offline-store';
 
 interface RoleContextType {
   role: RoleName;
@@ -20,6 +23,8 @@ export const useAppRole = () => useContext(RoleContext);
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<RoleName>('Admin');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
 
   // Gesture state refs
   const touchStartX = React.useRef<number | null>(null);
@@ -32,8 +37,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem('ghoomar_active_role') as RoleName;
     if (saved) {
       setRole(saved);
+    } else {
+      getDeviceEnrollment()
+        .then((enrollment) => {
+          if (enrollment && enrollment.status === 'active') {
+            setRole('Gate Staff');
+            localStorage.setItem('ghoomar_active_role', 'Gate Staff');
+          }
+        })
+        .catch(() => {});
     }
   }, []);
+
+  // Strict Route Protection for Gate Staff: Access restricted solely to /operations/gate
+  useEffect(() => {
+    if (role === 'Gate Staff') {
+      if (pathname !== '/operations/gate' && pathname !== '/login') {
+        router.replace('/operations/gate');
+      }
+    }
+  }, [role, pathname, router]);
 
   // Global Edge Swipe Navigation Handler
   useEffect(() => {
@@ -123,12 +146,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [sidebarOpen]);
 
   const handleRoleChange = (newRole: RoleName) => {
+    // Gate Staff cannot elevate perspective without re-authenticating
+    if (role === 'Gate Staff' && newRole !== 'Gate Staff') {
+      return;
+    }
     setRole(newRole);
     localStorage.setItem('ghoomar_active_role', newRole);
   };
 
+  // If on login route, render standalone clean layout without sidebar & header
+  if (pathname === '/login') {
+    return (
+      <RoleContext.Provider value={{ role, setRole: handleRoleChange }}>
+        <ServiceWorkerRegister />
+        <main className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col justify-center">
+          {children}
+        </main>
+      </RoleContext.Provider>
+    );
+  }
+
   return (
     <RoleContext.Provider value={{ role, setRole: handleRoleChange }}>
+      <ServiceWorkerRegister />
       <div className="min-h-screen bg-stone-100/70 text-stone-900">
         <Sidebar
           currentRole={role}
