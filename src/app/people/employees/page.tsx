@@ -7,7 +7,8 @@ import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
 import { EmployeeModal } from '@/components/people/EmployeeModal';
 import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
-import { Users, Plus, RefreshCw, Network, Edit2, AlertCircle, CheckCircle } from 'lucide-react';
+import { StaffLedgerDrawer } from '@/components/people/StaffLedgerDrawer';
+import { Users, Plus, RefreshCw, Network, Edit2, AlertCircle, CheckCircle, BookOpen } from 'lucide-react';
 import { EmploymentStatus } from '@/lib/types/database';
 
 interface Employee {
@@ -45,6 +46,7 @@ export default function EmployeesPage() {
   const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
   const [orgHierarchyModalOpen, setOrgHierarchyModalOpen] = useState(false);
+  const [drawerEmpId, setDrawerEmpId] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -322,7 +324,13 @@ export default function EmployeesPage() {
                         <td className="py-3 px-3 font-mono text-stone-500 font-medium">
                           {e.employee_code || 'EMP'}
                         </td>
-                        <td className="py-3 px-3 font-medium text-stone-900">{e.name}</td>
+                        <td
+                          className="py-3 px-3 font-medium text-stone-900 cursor-pointer hover:text-amber-700 hover:underline"
+                          onClick={() => setDrawerEmpId(e.id)}
+                          title="Click to view staff ledger"
+                        >
+                          {e.name}
+                        </td>
                         <td className="py-3 px-3 text-stone-700">
                           {e.department_name || 'General'} {e.team_name && <span className="text-stone-400">• {e.team_name}</span>}
                         </td>
@@ -353,7 +361,16 @@ export default function EmployeesPage() {
                           </select>
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDrawerEmpId(e.id)}
+                              className="h-7 px-2 text-stone-700 hover:text-amber-700 gap-1 text-xs"
+                              title="View Financial & Uniform Ledger"
+                            >
+                              <BookOpen className="h-3.5 w-3.5" /> Ledger
+                            </Button>
                             <Button
                               variant="outline"
                               size="sm"
@@ -361,10 +378,10 @@ export default function EmployeesPage() {
                                 setEditingEmployee(e);
                                 setEmployeeModalOpen(true);
                               }}
-                              className="h-7 px-2 text-stone-600 hover:text-stone-900"
+                              className="h-7 px-2 text-stone-600 hover:text-stone-900 gap-1 text-xs"
                               title="Edit Employee"
                             >
-                              <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                              <Edit2 className="h-3.5 w-3.5" /> Edit
                             </Button>
                           </div>
                         </td>
@@ -397,6 +414,14 @@ export default function EmployeesPage() {
       <OrgHierarchyModal
         isOpen={orgHierarchyModalOpen}
         onClose={() => setOrgHierarchyModalOpen(false)}
+        onUpdated={loadData}
+      />
+
+      {/* Staff Ledger Drawer */}
+      <StaffLedgerDrawer
+        isOpen={Boolean(drawerEmpId)}
+        employeeId={drawerEmpId}
+        onClose={() => setDrawerEmpId(null)}
         onUpdated={loadData}
       />
     </div>

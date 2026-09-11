@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
 import { ItemModal } from '@/components/inventory/ItemModal';
 import { UnitModal } from '@/components/admin/UnitModal';
+import { ItemMovementDrawer } from '@/components/inventory/ItemMovementDrawer';
 import {
   Package,
   ArrowRightLeft,
@@ -22,6 +23,7 @@ import {
   Power,
   ShoppingBag,
   Search,
+  History,
 } from 'lucide-react';
 
 function getMovementBadge(type: string) {
@@ -91,6 +93,7 @@ function InventoryContent() {
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
+  const [selectedMovementItem, setSelectedMovementItem] = useState<any | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -429,9 +432,25 @@ function InventoryContent() {
                               !isActive ? 'opacity-60 bg-stone-50/30' : ''
                             }`}
                           >
-                            <td className="py-3 px-3 font-mono text-stone-500 font-medium">{i.item_code}</td>
+                            <td className="py-3 px-3 font-mono font-bold text-amber-700">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMovementItem(i)}
+                                className="hover:underline hover:text-amber-800 cursor-pointer font-mono text-left"
+                                title="Click to view movement ledger"
+                              >
+                                {i.item_code}
+                              </button>
+                            </td>
                             <td className="py-3 px-3">
-                              <div className="font-semibold text-stone-900">{i.name}</div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMovementItem(i)}
+                                className="font-semibold text-stone-900 hover:text-amber-700 hover:underline cursor-pointer text-left block"
+                                title="Click to view movement ledger"
+                              >
+                                {i.name}
+                              </button>
                               {i.storage_area && (
                                 <div className="text-[10px] text-stone-400">Area: {i.storage_area}</div>
                               )}
@@ -470,6 +489,15 @@ function InventoryContent() {
                             </td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedMovementItem(i)}
+                                  className="h-7 px-2 text-stone-600 hover:text-amber-700"
+                                  title="View movement ledger"
+                                >
+                                  <History className="h-3.5 w-3.5 mr-1 text-amber-600" /> Ledger
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -739,6 +767,12 @@ function InventoryContent() {
           loadData();
           loadMovements();
         }}
+      />
+
+      <ItemMovementDrawer
+        isOpen={Boolean(selectedMovementItem)}
+        onClose={() => setSelectedMovementItem(null)}
+        item={selectedMovementItem}
       />
     </div>
   );

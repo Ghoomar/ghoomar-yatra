@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { Department, Team, EmployeeRole } from '@/lib/types/database';
-import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, Network, ChevronRight } from 'lucide-react';
+import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, Network, ChevronRight, Trash2 } from 'lucide-react';
 
 interface OrgHierarchyModalProps {
   isOpen: boolean;
@@ -139,6 +139,18 @@ export function OrgHierarchyModal({
     }
   };
 
+  const handleDeleteDept = async (d: Department) => {
+    if (!confirm(`Are you sure you want to delete department "${d.name}"?`)) return;
+    try {
+      const { error } = await supabase.from('departments').delete().eq('id', d.id);
+      if (error) throw error;
+      loadData();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Cannot delete department. Please deactivate it instead if it has linked teams or employees.');
+    }
+  };
+
   // Team Handlers
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,6 +197,18 @@ export function OrgHierarchyModal({
       if (onUpdated) onUpdated();
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to update team status.');
+    }
+  };
+
+  const handleDeleteTeam = async (t: Team) => {
+    if (!confirm(`Are you sure you want to delete kitchen section/team "${t.name}"?`)) return;
+    try {
+      const { error } = await supabase.from('teams').delete().eq('id', t.id);
+      if (error) throw error;
+      loadData();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Cannot delete team. Please deactivate it instead if it has linked employees or store issues.');
     }
   };
 
@@ -403,8 +427,17 @@ export function OrgHierarchyModal({
                         className={`p-1.5 rounded ${
                           d.is_active ? 'text-stone-400 hover:text-rose-600' : 'text-stone-400 hover:text-emerald-600'
                         }`}
+                        title={d.is_active ? 'Deactivate department' : 'Activate department'}
                       >
                         <Power className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDept(d)}
+                        className="p-1.5 rounded text-stone-400 hover:text-rose-600 hover:bg-stone-100"
+                        title="Delete department"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
@@ -523,8 +556,17 @@ export function OrgHierarchyModal({
                         className={`p-1.5 rounded ${
                           t.is_active ? 'text-stone-400 hover:text-rose-600' : 'text-stone-400 hover:text-emerald-600'
                         }`}
+                        title={t.is_active ? 'Deactivate section' : 'Activate section'}
                       >
                         <Power className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTeam(t)}
+                        className="p-1.5 rounded text-stone-400 hover:text-rose-600 hover:bg-stone-100"
+                        title="Delete section"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>

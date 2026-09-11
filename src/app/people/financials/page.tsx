@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
-import { Wallet, Plus, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { StaffLedgerDrawer } from '@/components/people/StaffLedgerDrawer';
+import { SalaryPayoutModal } from '@/components/people/SalaryPayoutModal';
+import { Wallet, Plus, RefreshCw, CheckCircle, AlertCircle, Banknote, BookOpen } from 'lucide-react';
 
 export default function StaffFinancialsPage() {
   const supabase = createClient();
@@ -14,6 +16,9 @@ export default function StaffFinancialsPage() {
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [payoutEmp, setPayoutEmp] = useState<any | null>(null);
+  const [drawerEmpId, setDrawerEmpId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -89,15 +94,29 @@ export default function StaffFinancialsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Wallet className="h-6 w-6 text-amber-600" />
-            Staff Financial Ledger
+            Staff Financial Ledger &amp; Payroll
           </h1>
           <p className="text-sm text-stone-500">
-            Track employee advances, loans, recoveries, and penalties with authoritative derived ledger balances.
+            Track employee advances, loans, recoveries, uniform custody, and formal salary payout disbursements.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="amber" size="sm" onClick={() => setShowModal(true)} className="gap-1.5">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              const firstActive = balances.find((b) => b.employment_status === 'Active');
+              if (firstActive) {
+                setPayoutEmp({ id: firstActive.employee_id, name: firstActive.employee_name, monthly_salary: firstActive.monthly_salary });
+                setShowPayoutModal(true);
+              }
+            }}
+            className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white"
+          >
+            <Banknote className="h-4 w-4" /> Record Salary Payout
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowModal(true)} className="gap-1.5">
             <Plus className="h-4 w-4" /> Log Advance / Deduction
           </Button>
           <Button variant="outline" size="sm" onClick={loadData}>
@@ -148,20 +167,25 @@ export default function StaffFinancialsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-stone-200 text-stone-500 font-semibold">
+                <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                   <th className="py-2.5 px-3">Staff Member</th>
                   <th className="py-2.5 px-3">Dept / Role</th>
                   <th className="py-2.5 px-3 text-right">Monthly Salary</th>
                   <th className="py-2.5 px-3 text-right">Outstanding Advance Balance</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {balances.map((b) => {
                   const bal = Number(b.outstanding_advance_balance) || 0;
                   return (
-                    <tr key={b.employee_id} className="hover:bg-stone-50/80 transition-colors">
-                      <td className="py-3 px-3 font-semibold text-stone-900">
+                    <tr
+                      key={b.employee_id}
+                      onClick={() => setDrawerEmpId(b.employee_id)}
+                      className="hover:bg-amber-50/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="py-3 px-3 font-semibold text-stone-900 group-hover:text-amber-800">
                         {b.employee_name}
                         {b.employment_status !== 'Active' && (
                           <span className="ml-2 inline-block text-[9px] font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
@@ -185,6 +209,35 @@ export default function StaffFinancialsPage() {
                           <Badge variant="success">Nil Balance</Badge>
                         )}
                       </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDrawerEmpId(b.employee_id)}
+                            className="h-7 text-[11px] gap-1 px-2 text-stone-700 hover:text-amber-700"
+                          >
+                            <BookOpen className="h-3 w-3" /> Ledger
+                          </Button>
+                          {b.employment_status === 'Active' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setPayoutEmp({
+                                  id: b.employee_id,
+                                  name: b.employee_name,
+                                  monthly_salary: b.monthly_salary,
+                                });
+                                setShowPayoutModal(true);
+                              }}
+                              className="h-7 text-[11px] gap-1 px-2 text-emerald-800 border-emerald-300 hover:bg-emerald-50"
+                            >
+                              <Banknote className="h-3 w-3" /> Payout
+                            </Button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -194,7 +247,7 @@ export default function StaffFinancialsPage() {
         </CardContent>
       </Card>
 
-      {/* Modal */}
+      {/* Modal: Transaction */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
@@ -265,8 +318,8 @@ export default function StaffFinancialsPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-                <Button type="submit" variant="amber" disabled={saving}>
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+                <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
                   {saving ? 'Recording...' : 'Record Transaction'}
                 </Button>
               </div>
@@ -274,6 +327,30 @@ export default function StaffFinancialsPage() {
           </div>
         </div>
       )}
+
+      {/* Salary Payout Modal */}
+      {showPayoutModal && payoutEmp && (
+        <SalaryPayoutModal
+          isOpen={showPayoutModal}
+          onClose={() => setShowPayoutModal(false)}
+          employee={payoutEmp}
+          outstandingAdvance={Number(
+            balances.find((b) => b.employee_id === payoutEmp.id)?.outstanding_advance_balance || 0
+          )}
+          onSuccess={() => {
+            setMessage({ type: 'success', text: `Salary payout recorded for ${payoutEmp.name}!` });
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Staff Ledger Drawer */}
+      <StaffLedgerDrawer
+        isOpen={Boolean(drawerEmpId)}
+        employeeId={drawerEmpId}
+        onClose={() => setDrawerEmpId(null)}
+        onUpdated={loadData}
+      />
     </div>
   );
 }

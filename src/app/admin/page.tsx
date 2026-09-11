@@ -9,6 +9,11 @@ import { formatINR } from '@/lib/utils';
 import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
 import { UnitModal } from '@/components/admin/UnitModal';
 import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
+import { InventoryCategoryModal } from '@/components/inventory/InventoryCategoryModal';
+import { ActivityMasterModal } from '@/components/activities/ActivityMasterModal';
+import { UserManagementModal } from '@/components/admin/UserManagementModal';
+import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
+import { logAuditAction } from '@/lib/audit-logger';
 import {
   Settings,
   Shield,
@@ -19,22 +24,31 @@ import {
   Tag,
   CreditCard,
   Building2,
-  Users2
+  Users2,
+  Layers,
+  Sparkles,
+  History,
+  UtensilsCrossed,
+  UserCheck,
+  Edit2,
+  Power
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
   const supabase = createClient();
-  const [activeTab, setActiveTab] = useState<'masters' | 'cost_rules' | 'targets' | 'users'>('masters');
+  const [activeTab, setActiveTab] = useState<'masters' | 'cost_rules' | 'targets' | 'users' | 'audit'>('masters');
 
   const [departments, setDepartments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [employeeRoles, setEmployeeRoles] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
   const [vendorCategories, setVendorCategories] = useState<any[]>([]);
+  const [inventoryCategories, setInventoryCategories] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [costRules, setCostRules] = useState<any[]>([]);
   const [targets, setTargets] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modals
@@ -42,6 +56,10 @@ export default function AdminSettingsPage() {
   const [orgModalTab, setOrgModalTab] = useState<'departments' | 'teams' | 'roles'>('departments');
   const [unitModalOpen, setUnitModalOpen] = useState(false);
   const [vendorCategoryModalOpen, setVendorCategoryModalOpen] = useState(false);
+  const [inventoryCategoryModalOpen, setInventoryCategoryModalOpen] = useState(false);
+  const [activityModalOpen, setActivityModalOpen] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -56,6 +74,8 @@ export default function AdminSettingsPage() {
         { data: crData },
         { data: tgData },
         { data: rData },
+        { data: icData },
+        { data: pData },
       ] = await Promise.all([
         supabase.from('departments').select('*').order('name'),
         supabase.from('teams').select('*').order('name'),
@@ -66,6 +86,8 @@ export default function AdminSettingsPage() {
         supabase.from('financial_cost_rules').select('*').order('cost_name'),
         supabase.from('financial_targets').select('*').order('weekday'),
         supabase.from('roles').select('*').order('name'),
+        supabase.from('inventory_categories').select('*').order('name'),
+        supabase.from('profiles').select('*, role:roles(id, name)').order('full_name'),
       ]);
 
       setDepartments(dData || []);
@@ -77,6 +99,8 @@ export default function AdminSettingsPage() {
       setCostRules(crData || []);
       setTargets(tgData || []);
       setRoles(rData || []);
+      setInventoryCategories(icData || []);
+      setProfiles(pData || []);
     } catch (err: any) {
       console.error('Error loading admin masters:', err);
     } finally {
@@ -111,10 +135,10 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-stone-200 gap-6 text-sm font-semibold">
+      <div className="flex border-b border-stone-200 gap-6 text-sm font-semibold overflow-x-auto">
         <button
           onClick={() => setActiveTab('masters')}
-          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
             activeTab === 'masters'
               ? 'border-amber-600 text-amber-600'
               : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -124,7 +148,7 @@ export default function AdminSettingsPage() {
         </button>
         <button
           onClick={() => setActiveTab('cost_rules')}
-          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
             activeTab === 'cost_rules'
               ? 'border-amber-600 text-amber-600'
               : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -134,7 +158,7 @@ export default function AdminSettingsPage() {
         </button>
         <button
           onClick={() => setActiveTab('targets')}
-          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
             activeTab === 'targets'
               ? 'border-amber-600 text-amber-600'
               : 'border-transparent text-stone-500 hover:text-stone-700'
@@ -144,13 +168,23 @@ export default function AdminSettingsPage() {
         </button>
         <button
           onClick={() => setActiveTab('users')}
-          className={`pb-3 border-b-2 transition-colors cursor-pointer ${
+          className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
             activeTab === 'users'
               ? 'border-amber-600 text-amber-600'
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          RBAC Roles &amp; Permissions
+          User Accounts &amp; RBAC ({profiles.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
+            activeTab === 'audit'
+              ? 'border-amber-600 text-amber-600'
+              : 'border-transparent text-stone-500 hover:text-stone-700'
+          }`}
+        >
+          System Audit Trail
         </button>
       </div>
 
@@ -164,12 +198,39 @@ export default function AdminSettingsPage() {
               variant="primary"
               size="sm"
               onClick={() => {
+                setOrgModalTab('teams');
+                setOrgModalOpen(true);
+              }}
+              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+            >
+              <UtensilsCrossed className="h-4 w-4" /> Kitchen Sections &amp; Teams ({teams.length})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
                 setOrgModalTab('departments');
                 setOrgModalOpen(true);
               }}
-              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Network className="h-4 w-4" /> Org Hierarchy (Dept / Team / Role)
+              <Network className="h-4 w-4 text-stone-500" /> Depts &amp; Roles
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInventoryCategoryModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <Layers className="h-4 w-4 text-stone-500" /> Inventory Categories ({inventoryCategories.length})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActivityModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <Sparkles className="h-4 w-4 text-stone-500" /> Activity Master
             </Button>
             <Button
               variant="outline"
@@ -177,7 +238,7 @@ export default function AdminSettingsPage() {
               onClick={() => setUnitModalOpen(true)}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Scale className="h-4 w-4 text-stone-500" /> Units of Measurement ({units.length})
+              <Scale className="h-4 w-4 text-stone-500" /> Units ({units.length})
             </Button>
             <Button
               variant="outline"
@@ -479,38 +540,205 @@ export default function AdminSettingsPage() {
         </Card>
       )}
 
-      {/* TAB 4: RBAC ROLES */}
+      {/* TAB 4: USERS & RBAC ROLES */}
       {activeTab === 'users' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Role-Based Access Control (RBAC)</CardTitle>
-            <CardDescription>Granular permission boundaries for 9 operational roles</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {loading ? (
-              <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading roles...
+        <div className="space-y-6">
+          {/* User Accounts Card */}
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <UserCheck className="h-5 w-5 text-amber-600" />
+                  System User Accounts ({profiles.length})
+                </CardTitle>
+                <CardDescription>
+                  Operational staff and administrative accounts permitted to authenticate and perform actions
+                </CardDescription>
               </div>
-            ) : (
-              <div className="divide-y divide-stone-100 text-xs">
-                {roles.map((r) => (
-                  <div key={r.id} className="py-3 flex items-start justify-between gap-4">
-                    <div>
-                      <div className="font-bold text-stone-900 flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-amber-600" />
-                        <span>{r.name}</span>
-                        {r.is_system && <Badge variant="outline">System Core</Badge>}
+              <Button
+                variant="amber"
+                size="sm"
+                onClick={() => {
+                  setEditingUser(null);
+                  setUserModalOpen(true);
+                }}
+                className="gap-1.5"
+              >
+                <Plus className="h-4 w-4" /> Add System User
+              </Button>
+            </CardHeader>
+
+            <CardContent className="pt-0">
+              {loading ? (
+                <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading user accounts...
+                </div>
+              ) : profiles.length === 0 ? (
+                <div className="py-8 text-center text-stone-400 text-xs">No user accounts found.</div>
+              ) : (
+                <div className="overflow-x-auto text-xs">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                        <th className="py-2.5 px-3">User</th>
+                        <th className="py-2.5 px-3">Contact</th>
+                        <th className="py-2.5 px-3">Assigned Role</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {profiles.map((p) => {
+                        const isActive = p.is_active !== false;
+                        return (
+                          <tr
+                            key={p.id}
+                            className={`hover:bg-stone-50/80 transition-colors ${
+                              !isActive ? 'opacity-60 bg-stone-50/40' : ''
+                            }`}
+                          >
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-stone-900">{p.full_name}</div>
+                              <div className="text-[11px] text-stone-500 font-mono">{p.email}</div>
+                            </td>
+                            <td className="py-3 px-3 text-stone-600 font-mono">
+                              {p.phone || '—'}
+                            </td>
+                            <td className="py-3 px-3">
+                              <Badge variant="outline" className="font-semibold text-stone-800">
+                                {p.role?.name || 'Unassigned'}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              {isActive ? (
+                                <Badge variant="success">Active</Badge>
+                              ) : (
+                                <Badge variant="outline">Inactive</Badge>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingUser(p);
+                                    setUserModalOpen(true);
+                                  }}
+                                  className="h-7 px-2 text-stone-600 hover:text-stone-900"
+                                  title="Edit user"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant={isActive ? 'secondary' : 'amber'}
+                                  size="sm"
+                                  onClick={async () => {
+                                    const nextStatus = !isActive;
+                                    try {
+                                      const { error } = await supabase
+                                        .from('profiles')
+                                        .update({ is_active: nextStatus, updated_at: new Date().toISOString() })
+                                        .eq('id', p.id);
+                                      if (error) throw error;
+                                      await logAuditAction({
+                                        action: 'STATUS_CHANGE',
+                                        entityType: 'profiles',
+                                        entityId: p.id,
+                                        oldValues: { is_active: p.is_active },
+                                        newValues: { is_active: nextStatus },
+                                      });
+                                      loadData();
+                                    } catch (err: any) {
+                                      alert('Failed to update status: ' + err.message);
+                                    }
+                                  }}
+                                  className="h-7 px-2 text-[11px]"
+                                >
+                                  {isActive ? 'Deactivate' : 'Activate'}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* RBAC Roles Summary Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Role-Based Access Control (RBAC)</CardTitle>
+              <CardDescription>System permission boundaries and capability assignments for 9 operational roles</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {loading ? (
+                <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading roles...
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-100 text-xs">
+                  {roles.map((r) => (
+                    <div key={r.id} className="py-3 flex items-start justify-between gap-4">
+                      <div>
+                        <div className="font-bold text-stone-900 flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-amber-600" />
+                          <span>{r.name}</span>
+                          {r.is_system && <Badge variant="outline">System Core</Badge>}
+                        </div>
+                        <div className="text-stone-500 text-[11px] mt-0.5">{r.description}</div>
                       </div>
-                      <div className="text-stone-500 text-[11px] mt-0.5">{r.description}</div>
+                      <Badge variant="success">Active</Badge>
                     </div>
-                    <Badge variant="success">Active</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
+
+      {/* TAB 5: CENTRAL AUDIT TRAIL */}
+      {activeTab === 'audit' && <AuditLogsViewer />}
+
+      {/* MODALS */}
+      <OrgHierarchyModal
+        isOpen={orgModalOpen}
+        onClose={() => setOrgModalOpen(false)}
+        defaultTab={orgModalTab}
+        onUpdated={loadData}
+      />
+      <UnitModal
+        isOpen={unitModalOpen}
+        onClose={() => setUnitModalOpen(false)}
+        onUpdated={loadData}
+      />
+      <VendorCategoryModal
+        isOpen={vendorCategoryModalOpen}
+        onClose={() => setVendorCategoryModalOpen(false)}
+        onUpdated={loadData}
+      />
+      <InventoryCategoryModal
+        isOpen={inventoryCategoryModalOpen}
+        onClose={() => setInventoryCategoryModalOpen(false)}
+        onUpdated={loadData}
+      />
+      <ActivityMasterModal
+        isOpen={activityModalOpen}
+        onClose={() => setActivityModalOpen(false)}
+        onUpdated={loadData}
+      />
+      <UserManagementModal
+        isOpen={userModalOpen}
+        onClose={() => setUserModalOpen(false)}
+        user={editingUser}
+        roles={roles}
+        onSaved={loadData}
+      />
     </div>
   );
 }

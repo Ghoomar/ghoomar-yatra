@@ -21,6 +21,9 @@ export default function ProfitabilityPage() {
     customerFood: 0,
     staffFood: 0,
     wastage: 0,
+    complimentaryFood: 0,
+    sampling: 0,
+    other: 0,
   });
   const [variableExpenses, setVariableExpenses] = useState(0);
   const [totalSalaries, setTotalSalaries] = useState(68000);
@@ -51,13 +54,26 @@ export default function ProfitabilityPage() {
       let cust = 0;
       let staff = 0;
       let waste = 0;
+      let comp = 0;
+      let sample = 0;
+      let other = 0;
       (movs || []).forEach((m) => {
-        const val = Number(m.total_value) || 0;
+        const val = Math.abs(Number(m.total_value)) || 0;
         if (m.purpose === 'Customer Food') cust += val;
         else if (m.purpose === 'Staff Food' || m.movement_type === 'staff_food') staff += val;
-        else if (m.purpose === 'Wastage' || m.movement_type === 'wastage' || m.movement_type === 'spoilage') waste += val;
+        else if (m.purpose === 'Wastage' || m.purpose === 'Spoilage' || m.movement_type === 'wastage' || m.movement_type === 'spoilage') waste += val;
+        else if (m.purpose === 'Complimentary Food') comp += val;
+        else if (m.purpose === 'Sampling') sample += val;
+        else other += val;
       });
-      setMaterialConsumption({ customerFood: cust, staffFood: staff, wastage: waste });
+      setMaterialConsumption({
+        customerFood: cust,
+        staffFood: staff,
+        wastage: waste,
+        complimentaryFood: comp,
+        sampling: sample,
+        other: other,
+      });
 
       // 3. Fetch direct expenses
       const { data: exps } = await supabase
@@ -124,6 +140,9 @@ export default function ProfitabilityPage() {
     customerFoodConsumption: materialConsumption.customerFood,
     staffFoodConsumption: materialConsumption.staffFood,
     wastageCost: materialConsumption.wastage,
+    complimentaryFoodConsumption: materialConsumption.complimentaryFood,
+    samplingConsumption: materialConsumption.sampling,
+    otherConsumption: materialConsumption.other,
     variableExpenses: variableExpenses,
     revenueLinkedRates: {
       rentPercent: rentRate,
@@ -139,12 +158,12 @@ export default function ProfitabilityPage() {
   const mtdNetSales = mtdSummary ? mtdSummary.mtd_net_sales : (salesReport?.is_reported ? pnl.revenue : 0);
   const mtdContribution = mtdSummary && mtdSummary.mtd_gross_operating_surplus > 0
     ? mtdSummary.mtd_gross_operating_surplus
-    : mtdNetSales * 0.45;
+    : (salesReport?.is_reported ? pnl.revenue - pnl.totalDirectConsumption - pnl.totalVariableExpenses : 0);
 
   const breakEven = calculateBreakEvenPacing({
     mtdRevenue: mtdNetSales,
-    daysElapsed: mtdSummary?.days_elapsed || daysElapsed,
-    daysInMonth: mtdSummary?.days_in_month || daysInMonth,
+    daysElapsed: daysElapsed,
+    daysInMonth: daysInMonth,
     planningBreakEven: planningBreakEven,
     totalMonthlyFixedCosts: totalSalaries + monthlyOtherFixed,
     mtdContributionMargin: mtdContribution,
@@ -199,7 +218,7 @@ export default function ProfitabilityPage() {
             {pnl.foodCostPercent}%
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            Customer food consumption ÷ Net Revenue
+            Food production (Cust + Comp + Sample) ÷ Net Sales
           </div>
         </Card>
 
@@ -243,16 +262,30 @@ export default function ProfitabilityPage() {
               <div className="pl-4 space-y-1 text-xs text-stone-500">
                 <div className="flex items-center justify-between">
                   <span>• Customer Food Production</span>
-                  <span>{formatINR(pnl.customerFoodConsumption)}</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.customerFoodConsumption)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Complimentary Food (Guest Relations)</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.complimentaryFoodConsumption)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Sampling / Recipe Testing</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.samplingConsumption)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>• Staff Food (Duty Meals)</span>
-                  <span>{formatINR(pnl.staffFoodConsumption)}</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.staffFoodConsumption)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>• Kitchen Wastage &amp; Spoilage</span>
-                  <span>{formatINR(pnl.wastageCost)}</span>
+                  <span>• Kitchen Wastage &amp; Storage Spoilage</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.wastageCost)}</span>
                 </div>
+                {pnl.otherConsumption > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span>• Other Operational Consumption</span>
+                    <span className="font-mono text-stone-700">{formatINR(pnl.otherConsumption)}</span>
+                  </div>
+                )}
               </div>
             </div>
 

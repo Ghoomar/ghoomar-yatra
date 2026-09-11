@@ -27,10 +27,15 @@ export default function PhysicalAssetsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: aData, error: aError } = await supabase.from('physical_assets').select('*').order('item_name');
+      const { data: aData, error: aError } = await supabase
+        .from('inventory_items')
+        .select('*, unit:units!inventory_items_unit_id_fkey(symbol), category:inventory_categories(name)')
+        .eq('inventory_class', 'Physical Asset')
+        .order('name');
+
       const { data: mData, error: mError } = await supabase
-        .from('asset_movements')
-        .select('*, asset:physical_assets(item_name)')
+        .from('stock_movements')
+        .select('*, item:inventory_items!stock_movements_item_id_fkey(name, item_code)')
         .order('created_at', { ascending: false });
 
       if (aError) throw aError;
@@ -49,13 +54,8 @@ export default function PhysicalAssetsPage() {
     loadData();
   }, []);
 
-  const calculateAssetStock = (assetId: string) => {
-    const assetMovs = movements.filter((m) => m.asset_id === assetId);
-    return assetMovs.reduce((sum, m) => {
-      if (m.movement_type === 'opening' || m.movement_type === 'purchase') return sum + Number(m.quantity || 0);
-      if (m.movement_type === 'broken' || m.movement_type === 'lost' || m.movement_type === 'disposed') return sum - Number(m.quantity || 0);
-      return sum + Number(m.quantity || 0); // adjustment
-    }, 0);
+  const calculateAssetStock = (asset: any) => {
+    return Number(asset.current_stock || 0);
   };
 
   const handleRecordMovement = async (e: React.FormEvent) => {
@@ -65,15 +65,47 @@ export default function PhysicalAssetsPage() {
     setMessage(null);
 
     try {
-      const { error } = await supabase.from('asset_movements').insert({
-        asset_id: selectedAssetId,
+      const isDeduction = movementType === 'broken' || movementType === 'lost' || movementType === 'disposed';
+      const qty = isDeduction ? -Math.abs(quantity) : Math.abs(quantity);
+      const currentAsset = assets.find((a) => a.id === selectedAssetId);
+      const wac = Number(currentAsset?.current_weighted_average_cost || 0);
+
+      // 1. Record authoritative stock movement
+      const { error: smErr } = await supabase.from('stock_movements').insert({
+        item_id: selectedAssetId,
         business_date: businessDate,
-        movement_type: movementType,
-        quantity,
+        movement_type: movementType === 'purchase' ? 'purchase' : isDeduction ? 'wastage' : 'adjustment',
+        purpose: movementType === 'broken' ? 'Breakage' : movementType === 'lost' ? 'Lost' : movementType === 'disposed' ? 'Disposed' : movementType === 'purchase' ? 'Purchase' : 'Asset Adjustment',
+        quantity: qty,
+        unit_cost: wac,
+        total_value: qty * wac,
         notes,
       });
 
-      if (error) throw error;
+      if (smErr) throw smErr;
+
+      // 2. Update authoritative inventory_items current_stock
+      const nextStock = Math.max(0, Number(currentAsset?.current_stock || 0) + qty);
+      await supabase
+        .from('inventory_items')
+        .update({
+          current_stock: nextStock,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedAssetId);
+
+      // 3. Optional legacy mirror
+      try {
+        await supabase.from('asset_movements').insert({
+          asset_id: selectedAssetId,
+          business_date: businessDate,
+          movement_type: movementType,
+          quantity,
+          notes,
+        });
+      } catch {
+        // ignore legacy mirror error if FK differs
+      }
 
       setMessage({ type: 'success', text: `Asset movement (${movementType}: ${quantity} pcs) recorded successfully.` });
       setShowModal(false);
@@ -147,18 +179,20 @@ export default function PhysicalAssetsPage() {
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {assets.map((a) => {
-                    const qty = calculateAssetStock(a.id);
+                    const qty = calculateAssetStock(a);
                     return (
                       <tr key={a.id} className="hover:bg-stone-50/80">
-                        <td className="py-3 px-3 font-mono text-stone-500">{a.item_code || 'AST'}</td>
-                        <td className="py-3 px-3 font-semibold text-stone-900">{a.item_name}</td>
-                        <td className="py-3 px-3 text-stone-600">{a.category}</td>
-                        <td className="py-3 px-3 text-stone-600">{a.location || 'Main Ground'}</td>
+                        <td className="py-3 px-3 font-mono text-amber-700 font-bold">{a.item_code || 'AST'}</td>
+                        <td className="py-3 px-3 font-semibold text-stone-900">{a.name || a.item_name}</td>
+                        <td className="py-3 px-3 text-stone-600">{a.category?.name || a.category || 'Cutlery & Equipment'}</td>
+                        <td className="py-3 px-3 text-stone-600">{a.location || 'Main Ground / Kitchen'}</td>
                         <td className="py-3 px-3 text-right font-bold text-sm text-stone-900">
-                          {qty > 0 ? qty : '0'} pcs
+                          {qty > 0 ? qty : '0'} {a.unit?.symbol || 'pcs'}
                         </td>
                         <td className="py-3 px-3 text-center">
-                          <Badge variant={a.condition === 'Good' ? 'success' : 'warning'}>{a.condition}</Badge>
+                          <Badge variant={a.is_active !== false ? 'success' : 'outline'}>
+                            {a.is_active !== false ? 'In Service' : 'Retired'}
+                          </Badge>
                         </td>
                       </tr>
                     );
@@ -190,7 +224,9 @@ export default function PhysicalAssetsPage() {
                 >
                   <option value="">Select Asset...</option>
                   {assets.map((a) => (
-                    <option key={a.id} value={a.id}>{a.item_name} ({a.category})</option>
+                    <option key={a.id} value={a.id}>
+                      {a.item_code ? `[${a.item_code}] ` : ''}{a.name || a.item_name} ({a.category?.name || a.category || 'Asset'})
+                    </option>
                   ))}
                 </select>
               </div>

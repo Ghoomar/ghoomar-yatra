@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Department, Team, EmployeeRole, EmploymentStatus } from '@/lib/types/database';
 import { X, User, Plus, AlertCircle, Phone, Calendar, IndianRupee } from 'lucide-react';
 import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
+import { getTodayBusinessDate } from '@/lib/utils';
 
 interface EmployeeModalProps {
   isOpen: boolean;
@@ -23,7 +24,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
   const [employeeCode, setEmployeeCode] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [joiningDate, setJoiningDate] = useState(new Date().toISOString().split('T')[0]);
+  const [joiningDate, setJoiningDate] = useState(getTodayBusinessDate());
   const [departmentId, setDepartmentId] = useState('');
   const [teamId, setTeamId] = useState('');
   const [roleId, setRoleId] = useState('');
@@ -72,7 +73,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
       setEmployeeCode(employee.employee_code || '');
       setName(employee.name || '');
       setPhone(employee.phone || '');
-      setJoiningDate(employee.joining_date || new Date().toISOString().split('T')[0]);
+      setJoiningDate(employee.joining_date || getTodayBusinessDate());
       setDepartmentId(employee.department_id || '');
       setTeamId(employee.team_id || '');
       setRoleId(employee.role_id || '');
@@ -86,7 +87,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
     } else {
       setName('');
       setPhone('');
-      setJoiningDate(new Date().toISOString().split('T')[0]);
+      setJoiningDate(getTodayBusinessDate());
       setDepartmentId('');
       setTeamId('');
       setRoleId('');

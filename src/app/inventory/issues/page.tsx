@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
-import { ArrowRightLeft, Plus, Trash2, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { logAuditAction } from '@/lib/audit-logger';
+import { ArrowRightLeft, Plus, Trash2, RefreshCw, CheckCircle, AlertCircle, Utensils } from 'lucide-react';
 
 interface IssueLine {
   item_id: string;
@@ -18,12 +19,14 @@ export default function StoreIssuesPage() {
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [items, setItems] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [chefs, setChefs] = useState<any[]>([]);
   const [rolesMapState, setRolesMapState] = useState<Record<string, any>>({});
   const [recentIssues, setRecentIssues] = useState<any[]>([]);
 
   // Form State
   const [departmentId, setDepartmentId] = useState('');
+  const [teamId, setTeamId] = useState('');
   const [chefId, setChefId] = useState('');
   const [purpose, setPurpose] = useState<'Customer Food' | 'Staff Food' | 'Complimentary Food' | 'Sampling' | 'Wastage' | 'Spoilage' | 'Other'>('Customer Food');
   const [notes, setNotes] = useState('');
@@ -36,10 +39,11 @@ export default function StoreIssuesPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [{ data: iData }, { data: dData }, { data: eData }, { data: rData }] = await Promise.all([
+      const [{ data: iData }, { data: dData }, { data: tData }, { data: eData }, { data: rData }] = await Promise.all([
         supabase.from('inventory_current_position').select('*').order('name'),
         supabase.from('departments').select('*').order('name'),
-        supabase.from('employees').select('id, name, employment_status, department_id, role_id').order('name'),
+        supabase.from('teams').select('*, department:departments(id, name)').order('name'),
+        supabase.from('employees').select('id, name, employment_status, department_id, team_id, role_id').order('name'),
         supabase.from('employee_roles').select('*').order('name'),
       ]);
 
@@ -54,20 +58,29 @@ export default function StoreIssuesPage() {
         const role = rMap[e.role_id];
         return role?.can_receive_store_issues === true;
       });
-      // Use eligible authorized roles, falling back to active staff only if no role has flag
+      // Fallback to active kitchen staff if no role explicitly flagged
       const chefsList = eligibleChefs.length > 0 ? eligibleChefs : activeEmployees;
 
       const activeDepts = (dData || []).filter((d: any) => d.is_active !== false);
+      const activeTeams = (tData || []).filter((t: any) => t.is_active !== false);
 
       setItems(iData || []);
       setDepartments(activeDepts);
+      setTeams(activeTeams);
       setChefs(chefsList);
+
+      // Default to Kitchen & Production department if available
+      const kitchenDept = activeDepts.find((d: any) => d.name.toLowerCase().includes('kitchen') || d.name.toLowerCase().includes('food'));
+      if (kitchenDept && !departmentId) {
+        setDepartmentId(kitchenDept.id);
+      }
 
       const { data: issData, error: issError } = await supabase
         .from('consumption_issues')
         .select(`
           id, business_date, purpose, notes, created_at,
           department:departments(name),
+          team:teams(name, code),
           chef:employees(name),
           items:consumption_issue_items(
             quantity, unit_cost, total_value,
@@ -95,6 +108,40 @@ export default function StoreIssuesPage() {
     (i) => i.is_active !== false && (i.inventory_class === 'Food Raw Material' || i.inventory_class === 'Non-Food Consumable')
   );
 
+  // Filter kitchen sections based on selected department, or show all kitchen teams
+  const availableTeams = teams.filter((t) => {
+    if (!departmentId) return true;
+    return t.department_id === departmentId;
+  });
+
+  // Filter chefs based on selected team, or department, falling back to all eligible chefs
+  const filteredChefs = chefs.filter((c) => {
+    if (teamId) {
+      // If team selected, check if any chefs assigned to this team
+      const teamChefs = chefs.filter((ch) => ch.team_id === teamId);
+      if (teamChefs.length > 0) {
+        return c.team_id === teamId;
+      }
+    }
+    if (departmentId) {
+      const deptChefs = chefs.filter((ch) => ch.department_id === departmentId);
+      if (deptChefs.length > 0) {
+        return c.department_id === departmentId;
+      }
+    }
+    return true;
+  });
+
+  const handleTeamChange = (tId: string) => {
+    setTeamId(tId);
+    if (tId) {
+      const selectedT = teams.find((t) => t.id === tId);
+      if (selectedT && selectedT.department_id) {
+        setDepartmentId(selectedT.department_id);
+      }
+    }
+  };
+
   const handleAddLine = () => {
     setLines([...lines, { item_id: '', quantity: 1 }]);
   };
@@ -115,20 +162,39 @@ export default function StoreIssuesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (lines.some((l) => !l.item_id || l.quantity <= 0)) {
-      alert('Please fill out all line items with valid quantities.');
+
+    // 1. Mandatory validations
+    if (!departmentId) {
+      setMessage({ type: 'error', text: 'Receiving Department is required.' });
+      return;
+    }
+    if (!teamId) {
+      setMessage({ type: 'error', text: 'Kitchen Section / Team is required.' });
+      return;
+    }
+    if (!chefId) {
+      setMessage({ type: 'error', text: 'Responsible Chef / Kitchen Staff is required.' });
       return;
     }
 
-    if (chefId && !chefs.some((c) => c.id === chefId)) {
-      alert('Selected chef / employee is inactive or not authorized to receive store issues.');
+    if (lines.length === 0 || lines.some((l) => !l.item_id || l.quantity <= 0)) {
+      setMessage({ type: 'error', text: 'Please specify all item SKUs and valid quantities greater than 0.' });
       return;
     }
 
+    // 2. Strict Negative Stock Prevention
     for (const line of lines) {
       const it = selectableItems.find((i) => i.item_id === line.item_id);
       if (!it) {
-        alert('One or more selected items are inactive or not raw materials/consumables.');
+        setMessage({ type: 'error', text: 'One or more selected items are inactive or invalid.' });
+        return;
+      }
+      const available = Number(it.current_quantity || 0);
+      if (line.quantity > available) {
+        setMessage({
+          type: 'error',
+          text: `Insufficient stock for "${it.name}" [${it.item_code}]. Requested: ${line.quantity} ${it.unit_symbol || 'units'}, Available in Store: ${available.toFixed(1)} ${it.unit_symbol || 'units'}.`,
+        });
         return;
       }
     }
@@ -137,13 +203,14 @@ export default function StoreIssuesPage() {
     setMessage(null);
 
     try {
-      // 1. Create consumption issue header
+      // 1. Create consumption issue header with section/team and chef
       const { data: issueHeader, error: hErr } = await supabase
         .from('consumption_issues')
         .insert({
           business_date: businessDate,
-          department_id: departmentId || null,
-          responsible_chef_id: chefId || null,
+          department_id: departmentId,
+          team_id: teamId,
+          responsible_chef_id: chefId,
           purpose,
           notes,
         })
@@ -173,7 +240,7 @@ export default function StoreIssuesPage() {
           total_value: totalVal,
         });
 
-        // Stock movement ledger entry
+        // Stock movement ledger entry (positive quantity, movement_type='issue' will be deducted by position view)
         await supabase.from('stock_movements').insert({
           business_date: businessDate,
           item_id: line.item_id,
@@ -181,25 +248,42 @@ export default function StoreIssuesPage() {
           quantity: line.quantity,
           unit_cost: unitCost,
           total_value: totalVal,
-          department_id: departmentId || null,
-          responsible_person_id: chefId || null,
+          department_id: departmentId,
+          responsible_person_id: chefId,
           purpose: purpose,
           reference_id: issueHeader.id,
           reference_type: 'consumption_issues',
-          notes,
+          notes: notes || `Issue to ${teams.find((t) => t.id === teamId)?.name || 'Kitchen'}`,
         });
 
-        // Update cached item stock
+        // Update cached item stock in inventory_items
         if (it) {
+          const updatedStock = Math.max(0, Number(it.current_quantity) - line.quantity);
           await supabase
             .from('inventory_items')
             .update({
-              current_stock: Math.max(0, Number(it.current_quantity) - line.quantity),
+              current_stock: updatedStock,
               updated_at: new Date().toISOString(),
             })
             .eq('id', line.item_id);
         }
       }
+
+      // Central Audit Logging
+      await logAuditAction({
+        action: 'CREATE',
+        entity: 'Store Issue',
+        entityId: issueHeader.id,
+        details: {
+          business_date: businessDate,
+          department_id: departmentId,
+          team_id: teamId,
+          chef_id: chefId,
+          purpose,
+          lines_count: lines.length,
+          total_valuation: calculateIssueTotal(),
+        },
+      });
 
       setMessage({ type: 'success', text: `Store issue of ${lines.length} items logged successfully.` });
       setLines([{ item_id: '', quantity: 1 }]);
@@ -219,10 +303,10 @@ export default function StoreIssuesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ArrowRightLeft className="h-6 w-6 text-amber-600" />
-            Kitchen Store Issues & Consumption
+            Kitchen Store Issues &amp; Consumption
           </h1>
           <p className="text-sm text-stone-500">
-            Raw material issues to production sections. Single action generates multiple atomic ledger movements.
+            Raw material issues to configurable kitchen sections with strict stock checks and chef custody.
           </p>
         </div>
 
@@ -237,7 +321,7 @@ export default function StoreIssuesPage() {
             />
           </div>
           <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
@@ -263,13 +347,35 @@ export default function StoreIssuesPage() {
           <CardContent className="pt-0">
             <form onSubmit={handleSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Receiving Department / Kitchen</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  Kitchen Section / Team <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={teamId}
+                  onChange={(e) => handleTeamChange(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none font-semibold"
+                >
+                  <option value="">Select Kitchen Section...</option>
+                  {availableTeams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} {t.code ? `(${t.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-medium text-stone-700 mb-1">
+                  Receiving Department <span className="text-rose-500">*</span>
+                </label>
                 <select
                   value={departmentId}
                   onChange={(e) => setDepartmentId(e.target.value)}
+                  required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Kitchen Section...</option>
+                  <option value="">Select Department...</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
@@ -277,14 +383,17 @@ export default function StoreIssuesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Responsible Chef / Staff</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  Responsible Chef / Staff <span className="text-rose-500">*</span>
+                </label>
                 <select
                   value={chefId}
                   onChange={(e) => setChefId(e.target.value)}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
+                  required
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none font-semibold"
                 >
                   <option value="">Select Chef / Kitchen Staff...</option>
-                  {chefs.map((c) => {
+                  {filteredChefs.map((c) => {
                     const r = rolesMapState[c.role_id];
                     return (
                       <option key={c.id} value={c.id}>
@@ -327,6 +436,7 @@ export default function StoreIssuesPage() {
 
                 {lines.map((line, idx) => {
                   const it = items.find((i) => i.item_id === line.item_id);
+                  const maxQty = it ? Number(it.current_quantity || 0) : 0;
                   return (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-stone-50 rounded-lg border border-stone-200">
                       <select
@@ -350,6 +460,8 @@ export default function StoreIssuesPage() {
                       <input
                         type="number"
                         step="0.1"
+                        min="0.1"
+                        max={maxQty > 0 ? maxQty : undefined}
                         value={line.quantity || ''}
                         onChange={(e) => {
                           const next = [...lines];
@@ -424,8 +536,9 @@ export default function StoreIssuesPage() {
                         <Badge variant={iss.purpose === 'Customer Food' ? 'success' : iss.purpose === 'Staff Food' ? 'info' : 'warning'}>
                           {iss.purpose}
                         </Badge>
-                        <span className="font-bold text-stone-900">
-                          {iss.department?.name || 'General Kitchen'}
+                        <span className="font-bold text-stone-900 flex items-center gap-1">
+                          <Utensils className="h-3 w-3 text-amber-600" />
+                          {iss.team?.name || iss.department?.name || 'General Kitchen'}
                         </span>
                         {iss.chef?.name && <span className="text-stone-500">• Chef {iss.chef.name}</span>}
                       </div>

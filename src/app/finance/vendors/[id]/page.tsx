@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { formatINR } from '@/lib/utils';
+import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { Vendor, VendorLedgerEntry } from '@/lib/types/database';
 import { VendorModal } from '@/components/vendors/VendorModal';
 import {
@@ -398,7 +398,7 @@ export default function VendorDetailPage({
           .from('vendor_items')
           .update({
             last_purchase_rate: customRate,
-            last_purchase_date: new Date().toISOString().split('T')[0],
+            last_purchase_date: getTodayBusinessDate(),
             is_preferred: true,
           })
           .eq('id', existing.id);
@@ -410,7 +410,7 @@ export default function VendorDetailPage({
           vendor_id: vendorId,
           inventory_item_id: selectedItemId,
           last_purchase_rate: customRate,
-          last_purchase_date: new Date().toISOString().split('T')[0],
+          last_purchase_date: getTodayBusinessDate(),
           is_preferred: true,
         });
 

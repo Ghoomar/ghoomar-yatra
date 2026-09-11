@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
-import { Sparkles, Save, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Sparkles, Save, RefreshCw, CheckCircle, AlertCircle, Settings2 } from 'lucide-react';
+import { ActivityMasterModal } from '@/components/activities/ActivityMasterModal';
+import { logAuditAction } from '@/lib/audit-logger';
 
 interface ActivityRecord {
   activity_id: string;
@@ -24,6 +26,7 @@ export default function ActivitiesPage() {
   const [records, setRecords] = useState<ActivityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showMasterModal, setShowMasterModal] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const loadData = async () => {
@@ -85,6 +88,17 @@ export default function ActivitiesPage() {
         );
       }
 
+      await logAuditAction({
+        action: 'UPDATE',
+        entityType: 'activity_daily_records',
+        entityId: businessDate,
+        newValues: {
+          business_date: businessDate,
+          total_revenue: records.reduce((s, r) => s + (r.revenue || 0), 0),
+          units_sold: records.reduce((s, r) => s + (r.units_sold || 0), 0),
+        },
+      });
+
       setMessage({ type: 'success', text: 'Activity performance recorded successfully.' });
       loadData();
     } catch (err: any) {
@@ -122,7 +136,16 @@ export default function ActivitiesPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadData}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowMasterModal(true)}
+            className="gap-1.5 text-stone-700 hover:text-stone-900"
+          >
+            <Settings2 className="h-4 w-4 text-amber-600" />
+            <span>Manage Activities</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadData} title="Refresh">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -261,6 +284,12 @@ export default function ActivitiesPage() {
           </form>
         </CardContent>
       </Card>
+
+      <ActivityMasterModal
+        isOpen={showMasterModal}
+        onClose={() => setShowMasterModal(false)}
+        onUpdated={loadData}
+      />
     </div>
   );
 }

@@ -8,6 +8,9 @@ export interface DailyFinanceInput {
   customerFoodConsumption: number;
   staffFoodConsumption: number;
   wastageCost: number;
+  complimentaryFoodConsumption?: number;
+  samplingConsumption?: number;
+  otherConsumption?: number;
   variableExpenses: number;
   revenueLinkedRates: {
     rentPercent: number; // e.g. 0.10 for 10%
@@ -27,6 +30,9 @@ export interface DailyFinanceOutput {
   customerFoodConsumption: number;
   staffFoodConsumption: number;
   wastageCost: number;
+  complimentaryFoodConsumption: number;
+  samplingConsumption: number;
+  otherConsumption: number;
   foodCostPercent: number;
   revenueLinkedExpenses: number;
   totalVariableExpenses: number;
@@ -44,6 +50,9 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
       customerFoodConsumption: 0,
       staffFoodConsumption: 0,
       wastageCost: 0,
+      complimentaryFoodConsumption: 0,
+      samplingConsumption: 0,
+      otherConsumption: 0,
       foodCostPercent: 0,
       revenueLinkedExpenses: 0,
       totalVariableExpenses: 0,
@@ -54,11 +63,17 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
   }
 
   const revenue = input.netSales;
-  const totalDirectConsumption = 
-    input.customerFoodConsumption + input.staffFoodConsumption + input.wastageCost;
+  const comp = input.complimentaryFoodConsumption || 0;
+  const sample = input.samplingConsumption || 0;
+  const other = input.otherConsumption || 0;
 
+  const totalDirectConsumption = 
+    input.customerFoodConsumption + input.staffFoodConsumption + input.wastageCost + comp + sample + other;
+
+  // Food cost percent based on total food produced (customer + complimentary + sampling)
+  const totalFoodProduction = input.customerFoodConsumption + comp + sample;
   const foodCostPercent = revenue > 0 
-    ? Number(((input.customerFoodConsumption / revenue) * 100).toFixed(1))
+    ? Number(((totalFoodProduction / revenue) * 100).toFixed(1))
     : 0;
 
   const rentExpense = revenue * (input.revenueLinkedRates.rentPercent || 0);
@@ -88,6 +103,9 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
     customerFoodConsumption: input.customerFoodConsumption,
     staffFoodConsumption: input.staffFoodConsumption,
     wastageCost: input.wastageCost,
+    complimentaryFoodConsumption: comp,
+    samplingConsumption: sample,
+    otherConsumption: other,
     foodCostPercent,
     revenueLinkedExpenses,
     totalVariableExpenses,

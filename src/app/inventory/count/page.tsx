@@ -8,12 +8,14 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { calculatePhysicalCountVariance } from '@/lib/inventory-engine';
-import { ClipboardCheck, Save, RefreshCw, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { logAuditAction } from '@/lib/audit-logger';
+import { ClipboardCheck, Save, RefreshCw, CheckCircle, AlertCircle, AlertTriangle, Layers } from 'lucide-react';
 
 interface CountItemRow {
   item_id: string;
   name: string;
   item_code: string;
+  inventory_class: string;
   unit_symbol: string;
   expected_qty: number;
   physical_qty: number;
@@ -25,6 +27,7 @@ export default function StockCountPage() {
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [rows, setRows] = useState<CountItemRow[]>([]);
+  const [selectedClass, setSelectedClass] = useState<string>('All');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -45,6 +48,7 @@ export default function StockCountPage() {
           item_id: p.item_id,
           name: p.name,
           item_code: p.item_code,
+          inventory_class: p.inventory_class || 'Food Raw Material',
           unit_symbol: p.unit_symbol || 'units',
           expected_qty: Number(p.current_quantity) || 0,
           physical_qty: Number(p.current_quantity) || 0, // defaults to expected
@@ -77,7 +81,7 @@ export default function StockCountPage() {
           business_date: businessDate,
           count_type: 'Monthly Physical Verification',
           status: 'approved',
-          notes: 'Physical count verified against store ledger',
+          notes: `Physical count verified against store ledger (${selectedClass} filter)`,
         })
         .select()
         .single();
@@ -86,6 +90,7 @@ export default function StockCountPage() {
 
       // 2. Loop rows, insert count items and create adjustment movements for variances
       let adjustmentsCreated = 0;
+      let totalVarianceVal = 0;
       for (const row of rows) {
         const { varianceQuantity, varianceValue } = calculatePhysicalCountVariance(
           row.expected_qty,
@@ -106,6 +111,7 @@ export default function StockCountPage() {
         // If variance exists, log an atomic count_adjustment movement
         if (varianceQuantity !== 0) {
           adjustmentsCreated++;
+          totalVarianceVal += varianceValue;
           await supabase.from('stock_movements').insert({
             business_date: businessDate,
             item_id: row.item_id,
@@ -130,6 +136,17 @@ export default function StockCountPage() {
         }
       }
 
+      await logAuditAction({
+        action: 'CREATE',
+        entity: 'Monthly Physical Count',
+        entityId: header.id,
+        details: {
+          business_date: businessDate,
+          adjustments_count: adjustmentsCreated,
+          net_variance_value: totalVarianceVal,
+        },
+      });
+
       setMessage({
         type: 'success',
         text: `Physical verification saved. ${adjustmentsCreated} variance adjustments posted to movement ledger!`,
@@ -143,12 +160,29 @@ export default function StockCountPage() {
     }
   };
 
+  const handleQtyChange = (itemId: string, val: number) => {
+    setRows((prev) =>
+      prev.map((r) => (r.item_id === itemId ? { ...r, physical_qty: val } : r))
+    );
+  };
+
+  const handleReasonChange = (itemId: string, val: string) => {
+    setRows((prev) =>
+      prev.map((r) => (r.item_id === itemId ? { ...r, reason: val } : r))
+    );
+  };
+
+  const inventoryClasses = ['All', 'Food Raw Material', 'Non-Food Consumable', 'Physical Asset', 'Uniform'];
+
+  const displayedRows = selectedClass === 'All'
+    ? rows
+    : rows.filter((r) => r.inventory_class === selectedClass);
+
+  const totalVarianceItems = rows.filter((r) => r.expected_qty !== r.physical_qty).length;
   const totalVarianceValue = rows.reduce((sum, r) => {
     const { varianceValue } = calculatePhysicalCountVariance(r.expected_qty, r.physical_qty, r.wac_cost);
     return sum + varianceValue;
   }, 0);
-
-  const totalVarianceItems = rows.filter((r) => r.physical_qty !== r.expected_qty).length;
 
   return (
     <div className="space-y-6">
@@ -156,16 +190,16 @@ export default function StockCountPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ClipboardCheck className="h-6 w-6 text-amber-600" />
-            Monthly Physical Stock Verification
+            Monthly Physical Stock Count
           </h1>
           <p className="text-sm text-stone-500">
-            Compare theoretical ledger stock against physical store counts and post auditable variance adjustments.
+            Compare expected ledger inventory against physical floor count and post verified variances.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
+            <span className="text-stone-500">Count Date:</span>
             <input
               type="date"
               value={businessDate}
@@ -209,6 +243,31 @@ export default function StockCountPage() {
         </div>
       )}
 
+      {/* Class Filtering Tabs */}
+      <div className="flex border-b border-stone-200 gap-2 overflow-x-auto text-xs font-semibold pb-1">
+        {inventoryClasses.map((cls) => {
+          const count = cls === 'All' ? rows.length : rows.filter((r) => r.inventory_class === cls).length;
+          return (
+            <button
+              key={cls}
+              type="button"
+              onClick={() => setSelectedClass(cls)}
+              className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                selectedClass === cls
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>{cls}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedClass === cls ? 'bg-amber-700 text-amber-100' : 'bg-stone-200 text-stone-700'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
@@ -241,7 +300,7 @@ export default function StockCountPage() {
             <div className="text-base font-semibold text-stone-800 mt-1">Permanent Adjustment Ledger</div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Every variance records reason, expected ledger count & physical count
+            Every variance records reason, expected ledger count &amp; physical count
           </CardContent>
         </Card>
       </div>
@@ -273,7 +332,7 @@ export default function StockCountPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {rows.map((r, idx) => {
+                    {displayedRows.map((r) => {
                       const { varianceQuantity, varianceValue } = calculatePhysicalCountVariance(
                         r.expected_qty,
                         r.physical_qty,
@@ -282,7 +341,10 @@ export default function StockCountPage() {
                       return (
                         <tr key={r.item_id} className="hover:bg-stone-50/80">
                           <td className="py-3 px-3 font-mono text-stone-500">{r.item_code}</td>
-                          <td className="py-3 px-3 font-semibold text-stone-900">{r.name}</td>
+                          <td className="py-3 px-3 font-semibold text-stone-900">
+                            <div>{r.name}</div>
+                            <span className="text-[10px] text-stone-400">{r.inventory_class}</span>
+                          </td>
                           <td className="py-3 px-3 text-right font-medium text-stone-700">
                             {r.expected_qty.toFixed(2)} {r.unit_symbol}
                           </td>
@@ -293,9 +355,7 @@ export default function StockCountPage() {
                               value={r.physical_qty}
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value) || 0;
-                                const next = [...rows];
-                                next[idx].physical_qty = val;
-                                setRows(next);
+                                handleQtyChange(r.item_id, val);
                               }}
                               className="w-24 rounded border border-stone-300 p-1.5 text-center font-bold text-stone-900 text-xs focus:outline-none focus:border-amber-500"
                             />
@@ -313,9 +373,7 @@ export default function StockCountPage() {
                               type="text"
                               value={r.reason}
                               onChange={(e) => {
-                                const next = [...rows];
-                                next[idx].reason = e.target.value;
-                                setRows(next);
+                                handleReasonChange(r.item_id, e.target.value);
                               }}
                               placeholder={varianceQuantity !== 0 ? 'Required reason (e.g. Spoilage, Damage, Loss)' : 'Optional'}
                               className="w-full rounded border border-stone-300 p-1 text-xs focus:outline-none focus:border-amber-500"
@@ -324,6 +382,13 @@ export default function StockCountPage() {
                         </tr>
                       );
                     })}
+                    {displayedRows.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-stone-400">
+                          No items found for class &quot;{selectedClass}&quot;.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

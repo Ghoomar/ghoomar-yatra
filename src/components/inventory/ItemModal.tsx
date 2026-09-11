@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { InventoryCategory, Unit } from '@/lib/types/database';
 import { X, Package, Check, AlertCircle } from 'lucide-react';
 
+import { logAuditAction } from '@/lib/audit-logger';
+
 interface ItemModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -45,6 +47,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const [categoryId, setCategoryId] = useState('');
   const [inventoryClass, setInventoryClass] = useState('Food Raw Material');
   const [unitId, setUnitId] = useState('');
+  const [secondaryUnitId, setSecondaryUnitId] = useState('');
+  const [conversionFactor, setConversionFactor] = useState<number>(1);
   const [storageType, setStorageType] = useState('Ambient');
   const [minimumStock, setMinimumStock] = useState<number>(0);
   const [preferredStock, setPreferredStock] = useState<number>(0);
@@ -53,10 +57,59 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
 
-  const [categories, setCategories] = useState<InventoryCategory[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const generateNextItemCode = async (
+    targetClass?: string,
+    targetCategoryId?: string,
+    loadedCategories?: any[]
+  ) => {
+    try {
+      const cls = targetClass || inventoryClass;
+      const catId = targetCategoryId || categoryId;
+      const catsList = loadedCategories || categories;
+
+      const selectedCat = catsList.find((c) => c.id === catId);
+      let prefix = 'RAW';
+      if (selectedCat && selectedCat.code) {
+        prefix = selectedCat.code.toUpperCase();
+      } else if (cls === 'Food Raw Material') {
+        prefix = 'RAW';
+      } else if (cls === 'Non-Food Consumable') {
+        prefix = 'CON';
+      } else if (cls === 'Physical Asset') {
+        prefix = 'AST';
+      } else if (cls === 'Uniform') {
+        prefix = 'UNI';
+      } else {
+        prefix = 'SKU';
+      }
+
+      const { data } = await supabase
+        .from('inventory_items')
+        .select('item_code')
+        .like('item_code', `${prefix}-%`);
+
+      let maxNum = 0;
+      const regex = new RegExp(`^${prefix}-(\\d+)`);
+      if (data) {
+        for (const row of data) {
+          if (!row.item_code) continue;
+          const match = row.item_code.match(regex);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        }
+      }
+      setItemCode(`${prefix}-${String(maxNum + 1).padStart(3, '0')}`);
+    } catch {
+      setItemCode('SKU-001');
+    }
+  };
 
   useEffect(() => {
     async function fetchMasters() {
@@ -64,8 +117,13 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         supabase.from('inventory_categories').select('*').order('name'),
         supabase.from('units').select('*').order('name'),
       ]);
-      setCategories(cData || []);
+      const cats = cData || [];
+      setCategories(cats);
       setUnits(uData || []);
+
+      if (!item) {
+        generateNextItemCode(inventoryClass, categoryId, cats);
+      }
     }
     if (isOpen) {
       fetchMasters();
@@ -82,6 +140,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setCategoryId(item.category_id || '');
       setInventoryClass(item.inventory_class || 'Food Raw Material');
       setUnitId(item.unit_id || '');
+      setSecondaryUnitId(item.secondary_unit_id || '');
+      setConversionFactor(Number(item.conversion_factor) || 1);
       setStorageType(item.storage_type || 'Ambient');
       setMinimumStock(Number(item.minimum_stock) || 0);
       setPreferredStock(Number(item.preferred_stock) || 0);
@@ -94,6 +154,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setCategoryId('');
       setInventoryClass('Food Raw Material');
       setUnitId('');
+      setSecondaryUnitId('');
+      setConversionFactor(1);
       setStorageType('Ambient');
       setMinimumStock(0);
       setPreferredStock(0);
@@ -102,28 +164,22 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setNotes('');
       setIsActive(true);
 
-      generateNextItemCode();
+      generateNextItemCode('Food Raw Material', '');
     }
   }, [isOpen, item]);
 
-  const generateNextItemCode = async () => {
-    try {
-      const prefix = inventoryClass === 'Food Raw Material' ? 'RAW' : inventoryClass === 'Non-Food Consumable' ? 'CON' : 'SKU';
-      const { data } = await supabase.from('inventory_items').select('item_code');
-      let maxNum = 0;
-      if (data) {
-        for (const row of data) {
-          if (!row.item_code) continue;
-          const match = row.item_code.match(/(\d+)/);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (num > maxNum) maxNum = num;
-          }
-        }
-      }
-      setItemCode(`${prefix}-${String(maxNum + 1).padStart(3, '0')}`);
-    } catch {
-      setItemCode('SKU-001');
+  const handleClassChange = (newClass: string) => {
+    setInventoryClass(newClass);
+    setCategoryId('');
+    if (!isEdit) {
+      generateNextItemCode(newClass, '');
+    }
+  };
+
+  const handleCategoryChange = (newCatId: string) => {
+    setCategoryId(newCatId);
+    if (!isEdit) {
+      generateNextItemCode(inventoryClass, newCatId);
     }
   };
 
@@ -133,22 +189,29 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setErrorMessage('Item / SKU Name is required.');
       return;
     }
+    if (!unitId) {
+      setErrorMessage('Base Unit is required.');
+      return;
+    }
 
     setSaving(true);
     setErrorMessage(null);
 
     try {
+      const isFood = inventoryClass === 'Food Raw Material';
       const payload = {
         item_code: itemCode.trim() || null,
         name: name.trim(),
         category_id: categoryId || null,
         inventory_class: inventoryClass,
         unit_id: unitId || null,
-        storage_type: storageType,
+        secondary_unit_id: secondaryUnitId || null,
+        conversion_factor: Number(conversionFactor) || 1,
+        storage_type: isFood ? storageType : 'Ambient',
         minimum_stock: minimumStock,
         preferred_stock: preferredStock,
         replenishment_frequency: replenishmentFrequency,
-        shelf_life_days: shelfLifeDays === '' ? null : Number(shelfLifeDays),
+        shelf_life_days: isFood && shelfLifeDays !== '' ? Number(shelfLifeDays) : null,
         notes: notes.trim() || null,
         is_active: isActive,
         updated_at: new Date().toISOString(),
@@ -164,6 +227,14 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           .single();
         if (error) throw error;
         savedResult = data;
+
+        await logAuditAction({
+          action: 'UPDATE',
+          entityType: 'inventory_items',
+          entityId: itemId,
+          oldValues: item,
+          newValues: payload,
+        });
       } else {
         const { data, error } = await supabase
           .from('inventory_items')
@@ -177,6 +248,13 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           .single();
         if (error) throw error;
         savedResult = data;
+
+        await logAuditAction({
+          action: 'CREATE',
+          entityType: 'inventory_items',
+          entityId: data?.id,
+          newValues: payload,
+        });
       }
 
       if (onSaved) onSaved(savedResult);
@@ -259,12 +337,12 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">Inventory Class</label>
                 <select
                   value={inventoryClass}
-                  onChange={(e) => setInventoryClass(e.target.value)}
+                  onChange={(e) => handleClassChange(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
                   {INVENTORY_CLASSES.map((c) => (
@@ -279,21 +357,27 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 <label className="block font-medium text-stone-700 mb-1">Category</label>
                 <select
                   value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
                   <option value="">Select Category...</option>
                   {filteredCategories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {c.name} {c.code ? `(${c.code})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
+            </div>
+          </div>
 
+          {/* Unit & Conversions */}
+          <div className="space-y-3 pt-2 border-t border-stone-100">
+            <h3 className="font-semibold text-stone-800">Units &amp; Packaging Conversion</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Base Unit <span className="text-rose-500">*</span>
+                  Base Stock Unit <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -311,27 +395,70 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                     ))}
                 </select>
               </div>
-            </div>
-          </div>
 
-          {/* Storage & Replenishment */}
-          <div className="space-y-3 pt-2 border-t border-stone-100">
-            <h3 className="font-semibold text-stone-800">Storage & Stock Thresholds</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Storage Condition</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  Purchase Unit (Optional)
+                </label>
                 <select
-                  value={storageType}
-                  onChange={(e) => setStorageType(e.target.value)}
+                  value={secondaryUnitId}
+                  onChange={(e) => setSecondaryUnitId(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  {STORAGE_TYPES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  <option value="">Same as Base Unit</option>
+                  {units.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.symbol})
                     </option>
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="block font-medium text-stone-700 mb-1">
+                  Conversion Factor
+                </label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.01"
+                  value={conversionFactor}
+                  onChange={(e) => setConversionFactor(parseFloat(e.target.value) || 1)}
+                  placeholder="1.0"
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            {secondaryUnitId && secondaryUnitId !== unitId && (
+              <div className="p-2.5 bg-amber-50/80 rounded-lg border border-amber-200/70 text-[11px] text-amber-800">
+                <strong>Conversion Formula:</strong> 1 {units.find((u) => u.id === secondaryUnitId)?.name || 'Purchase Unit'} = {conversionFactor} {units.find((u) => u.id === unitId)?.symbol || 'Base Units'}.
+              </div>
+            )}
+          </div>
+
+          {/* Storage & Replenishment */}
+          <div className="space-y-3 pt-2 border-t border-stone-100">
+            <h3 className="font-semibold text-stone-800">
+              Stock Thresholds {inventoryClass === 'Food Raw Material' ? '& Food Storage' : ''}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              {inventoryClass === 'Food Raw Material' && (
+                <div>
+                  <label className="block font-medium text-stone-700 mb-1">Storage Condition</label>
+                  <select
+                    value={storageType}
+                    onChange={(e) => setStorageType(e.target.value)}
+                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                  >
+                    {STORAGE_TYPES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">Minimum Stock</label>
@@ -357,16 +484,18 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 />
               </div>
 
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Shelf Life (Days)</label>
-                <input
-                  type="number"
-                  value={shelfLifeDays}
-                  onChange={(e) => setShelfLifeDays(e.target.value ? parseInt(e.target.value) : '')}
-                  placeholder="e.g. 7"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+              {inventoryClass === 'Food Raw Material' && (
+                <div>
+                  <label className="block font-medium text-stone-700 mb-1">Shelf Life (Days)</label>
+                  <input
+                    type="number"
+                    value={shelfLifeDays}
+                    onChange={(e) => setShelfLifeDays(e.target.value ? parseInt(e.target.value) : '')}
+                    placeholder="e.g. 7"
+                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
             </div>
 
             <div>

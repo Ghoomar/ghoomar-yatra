@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Car, 
-  CalendarClock, 
   Receipt, 
   ShoppingBag, 
   IndianRupee, 
@@ -52,7 +51,6 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       items: [
         { href: '/operations/gate', label: 'Gate Counter', icon: Car, roles: ['Admin', 'Owner', 'General Manager', 'Gate Staff'] },
         { href: '/operations/activities', label: 'Activities', icon: Sparkles, roles: ['Admin', 'Owner', 'General Manager', 'Cashier'] },
-        { href: '/operations/stage', label: 'Stage Schedule', icon: CalendarClock, roles: ['Admin', 'Owner', 'General Manager', 'Viewer'] },
         { href: '/operations/closing', label: 'Daily Closing', icon: Lock, roles: ['Admin', 'Owner', 'General Manager', 'Accountant', 'Cashier'] },
       ]
     },

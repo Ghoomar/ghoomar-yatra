@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
+import { logAuditAction } from '@/lib/audit-logger';
 import { IndianRupee, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ExpenseItem {
@@ -19,6 +20,8 @@ interface ExpenseItem {
   payment_method_name?: string;
   paid_to?: string;
   approved_by?: string;
+  approved_by_id?: string | null;
+  approver?: { full_name: string; role?: { name: string } } | null;
   notes?: string;
   created_at: string;
 }
@@ -29,6 +32,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [approvers, setApprovers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -38,27 +42,39 @@ export default function ExpensesPage() {
   const [amount, setAmount] = useState<number>(0);
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [paidTo, setPaidTo] = useState('');
-  const [approvedBy, setApprovedBy] = useState('');
+  const [approvedById, setApprovedById] = useState('');
   const [notes, setNotes] = useState('');
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: catData } = await supabase.from('expense_categories').select('*').order('display_order');
-      const { data: pmData } = await supabase.from('payment_methods').select('*').order('name');
+      const [{ data: catData }, { data: pmData }, { data: profData }] = await Promise.all([
+        supabase.from('expense_categories').select('*').order('display_order'),
+        supabase.from('payment_methods').select('*').order('name'),
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, role:roles(name)')
+          .eq('is_active', true)
+          .order('full_name'),
+      ]);
 
       const { data: expData } = await supabase
         .from('expenses')
         .select(`
           *,
           category:expense_categories(name),
-          payment_method:payment_methods(name)
+          payment_method:payment_methods(name),
+          approver:profiles!expenses_approved_by_id_fkey(full_name, role:roles(name))
         `)
         .eq('business_date', businessDate)
         .order('created_at', { ascending: false });
 
       setCategories(catData || []);
       setPaymentMethods(pmData || []);
+      setApprovers(profData || []);
+      if (profData && profData.length > 0 && !approvedById) {
+        setApprovedById(profData[0].id);
+      }
       setExpenses(
         (expData || []).map((e: any) => ({
           ...e,
@@ -88,25 +104,45 @@ export default function ExpensesPage() {
     setMessage(null);
 
     try {
-      const { error } = await supabase.from('expenses').insert({
-        business_date: businessDate,
-        expense_date: businessDate,
-        category_id: categoryId,
-        description,
-        amount,
-        payment_method_id: paymentMethodId || null,
-        paid_to: paidTo,
-        approved_by: approvedBy,
-        notes,
-      });
+      const selectedApprover = approvers.find((a) => a.id === approvedById);
+      const approverName = selectedApprover?.full_name || 'Management';
+
+      const { data: expRecord, error } = await supabase
+        .from('expenses')
+        .insert({
+          business_date: businessDate,
+          expense_date: businessDate,
+          category_id: categoryId,
+          description,
+          amount,
+          payment_method_id: paymentMethodId || null,
+          paid_to: paidTo,
+          approved_by_id: approvedById || null,
+          approved_by: approverName,
+          notes,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      await logAuditAction({
+        action: 'CREATE',
+        entityType: 'expenses',
+        entityId: expRecord?.id,
+        newValues: {
+          business_date: businessDate,
+          amount,
+          description,
+          approved_by: approverName,
+          approved_by_id: approvedById,
+        },
+      });
 
       setMessage({ type: 'success', text: `Expense of ${formatINR(amount)} logged successfully.` });
       setDescription('');
       setAmount(0);
       setPaidTo('');
-      setApprovedBy('');
       setNotes('');
       loadData();
     } catch (err: any) {
@@ -254,14 +290,20 @@ export default function ExpensesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Approved By</label>
-                <input
-                  type="text"
-                  value={approvedBy}
-                  onChange={(e) => setApprovedBy(e.target.value)}
-                  placeholder="e.g. GM / Owner"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                />
+                <label className="block font-medium text-stone-700 mb-1">Approved By (Profile) *</label>
+                <select
+                  value={approvedById}
+                  onChange={(e) => setApprovedById(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">Select Authorizing Profile...</option>
+                  {approvers.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.full_name} ({a.role?.name || 'Staff'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <Button type="submit" variant="amber" disabled={saving} className="w-full mt-2">
@@ -289,7 +331,7 @@ export default function ExpensesPage() {
                       <th className="py-2 px-2">Category</th>
                       <th className="py-2 px-2">Description</th>
                       <th className="py-2 px-2">Paid To</th>
-                      <th className="py-2 px-2">Approved</th>
+                      <th className="py-2 px-2">Approved By</th>
                       <th className="py-2 px-2 text-right">Amount</th>
                     </tr>
                   </thead>
@@ -301,7 +343,14 @@ export default function ExpensesPage() {
                         </td>
                         <td className="py-2.5 px-2 text-stone-900 font-medium">{e.description}</td>
                         <td className="py-2.5 px-2 text-stone-600">{e.paid_to || '—'}</td>
-                        <td className="py-2.5 px-2 text-stone-600">{e.approved_by || '—'}</td>
+                        <td className="py-2.5 px-2 text-stone-600">
+                          <div className="font-medium text-stone-900">
+                            {e.approver?.full_name || e.approved_by || '—'}
+                          </div>
+                          {e.approver?.role?.name && (
+                            <div className="text-[10px] text-stone-400">{e.approver.role.name}</div>
+                          )}
+                        </td>
                         <td className="py-2.5 px-2 text-right font-bold text-rose-600">
                           {formatINR(Number(e.amount))}
                         </td>

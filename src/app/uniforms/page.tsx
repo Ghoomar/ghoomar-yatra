@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate } from '@/lib/utils';
-import { Shirt, Plus, RefreshCw, CheckCircle, AlertCircle, ArrowDownLeft, ArrowUpRight, ShieldCheck } from 'lucide-react';
+import { logAuditAction } from '@/lib/audit-logger';
+import { Shirt, Plus, RefreshCw, CheckCircle, AlertCircle, ShieldCheck, RotateCcw } from 'lucide-react';
 
 export default function UniformsPage() {
   const supabase = createClient();
-  const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
+  const [businessDate] = useState(getTodayBusinessDate());
   const [uniforms, setUniforms] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [issues, setIssues] = useState<any[]>([]);
@@ -28,20 +29,30 @@ export default function UniformsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: uData, error: uError } = await supabase.from('uniform_items').select('*').order('name');
+      // 1. Authoritative Uniform Items from inventory_items
+      const { data: uData, error: uError } = await supabase
+        .from('inventory_items')
+        .select('*, unit:units!inventory_items_unit_id_fkey(symbol), category:inventory_categories(name)')
+        .eq('inventory_class', 'Uniform')
+        .order('name');
+
+      // 2. Active Employees
       const { data: empData, error: eError } = await supabase
         .from('employees')
-        .select('id, name, employee_code')
+        .select('id, name, employee_code, designation')
         .eq('employment_status', 'Active')
         .order('name');
+
+      // 3. Uniform Issues
       const { data: issData, error: issError } = await supabase
         .from('employee_uniform_issues')
         .select(`
           id, business_date, created_at, notes,
-          employee:employees(name, employee_code),
+          employee:employees(name, employee_code, designation),
           items:employee_uniform_issue_items(
-            id, quantity, status,
-            uniform:uniform_items(name, size)
+            id, quantity, status, item_id, uniform_item_id, returned_at,
+            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, item_code),
+            legacy_uniform:uniform_items(name, size)
           )
         `)
         .order('created_at', { ascending: false });
@@ -50,11 +61,30 @@ export default function UniformsPage() {
       if (eError) throw eError;
       if (issError) throw issError;
 
-      setUniforms(uData || []);
+      // Calculate issued quantities per inventory item
+      const issuedCounts: Record<string, number> = {};
+      (issData || []).forEach((issue: any) => {
+        (issue.items || []).forEach((item: any) => {
+          if (item.status === 'Issued') {
+            const targetId = item.item_id || item.uniform_item_id;
+            if (targetId) {
+              issuedCounts[targetId] = (issuedCounts[targetId] || 0) + Number(item.quantity || 0);
+            }
+          }
+        });
+      });
+
+      const processedUniforms = (uData || []).map((u) => ({
+        ...u,
+        issued_count: issuedCounts[u.id] || 0,
+      }));
+
+      setUniforms(processedUniforms);
       setEmployees(empData || []);
       setIssues(issData || []);
     } catch (err: any) {
       console.error(err);
+      setMessage({ type: 'error', text: err.message || 'Error loading uniform records.' });
     } finally {
       setLoading(false);
     }
@@ -67,6 +97,13 @@ export default function UniformsPage() {
   const handleIssueUniform = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmpId || !selectedUniformId || issueQty <= 0) return;
+
+    const targetUni = uniforms.find((u) => u.id === selectedUniformId);
+    if (!targetUni || Number(targetUni.current_stock) < issueQty) {
+      setMessage({ type: 'error', text: `Insufficient stock! Only ${targetUni?.current_stock || 0} available in store.` });
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
 
@@ -77,33 +114,58 @@ export default function UniformsPage() {
         .insert({
           employee_id: selectedEmpId,
           business_date: businessDate,
-          notes: issueNotes,
+          notes: issueNotes || 'Uniform kit issue',
         })
         .select()
         .single();
 
       if (hErr) throw hErr;
 
-      // 2. Create issue item
-      await supabase.from('employee_uniform_issue_items').insert({
+      // 2. Create issue item linked to authoritative inventory_items
+      const { error: itemErr } = await supabase.from('employee_uniform_issue_items').insert({
         issue_id: header.id,
-        uniform_item_id: selectedUniformId,
+        item_id: selectedUniformId,
         quantity: issueQty,
         status: 'Issued',
       });
+      if (itemErr) throw itemErr;
 
-      // 3. Update uniform item counts
-      const targetUni = uniforms.find((u) => u.id === selectedUniformId);
-      if (targetUni) {
-        await supabase
-          .from('uniform_items')
-          .update({
-            available_quantity: Math.max(0, targetUni.available_quantity - issueQty),
-            issued_quantity: targetUni.issued_quantity + issueQty,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', selectedUniformId);
-      }
+      // 3. Record authoritative stock movement
+      const unitCost = Number(targetUni.current_weighted_average_cost || 0);
+      const { error: smErr } = await supabase.from('stock_movements').insert({
+        item_id: selectedUniformId,
+        business_date: businessDate,
+        movement_type: 'issue',
+        purpose: 'Uniform Issue to Staff',
+        quantity: -issueQty,
+        unit_cost: unitCost,
+        total_value: -issueQty * unitCost,
+        notes: `Issued to staff member: ${selectedEmpId}`,
+      });
+      if (smErr) throw smErr;
+
+      // 4. Update authoritative inventory_items current_stock
+      const nextStock = Math.max(0, Number(targetUni.current_stock || 0) - issueQty);
+      await supabase
+        .from('inventory_items')
+        .update({
+          current_stock: nextStock,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedUniformId);
+
+      // 5. Central Audit Log
+      await logAuditAction({
+        action: 'CREATE',
+        entity: 'Uniform Issue',
+        entityId: header.id,
+        details: {
+          employee_id: selectedEmpId,
+          item_id: selectedUniformId,
+          quantity: issueQty,
+          remaining_stock: nextStock,
+        },
+      });
 
       setMessage({ type: 'success', text: `Uniform issued successfully (${issueQty} pcs).` });
       setShowIssueModal(false);
@@ -117,8 +179,63 @@ export default function UniformsPage() {
     }
   };
 
-  const totalAvailable = uniforms.reduce((s, u) => s + (u.available_quantity || 0), 0);
-  const totalIssued = uniforms.reduce((s, u) => s + (u.issued_quantity || 0), 0);
+  const handleReturnUniform = async (issueItemId: string, uniformItemId: string, qty: number) => {
+    if (!confirm(`Confirm return of ${qty} uniform pcs back to central inventory?`)) return;
+    setSaving(true);
+    try {
+      // 1. Update issue item status
+      const { error: updErr } = await supabase
+        .from('employee_uniform_issue_items')
+        .update({
+          status: 'Returned',
+          returned_at: new Date().toISOString(),
+        })
+        .eq('id', issueItemId);
+      if (updErr) throw updErr;
+
+      // 2. Add back stock movement
+      const targetUni = uniforms.find((u) => u.id === uniformItemId);
+      const unitCost = Number(targetUni?.current_weighted_average_cost || 0);
+      await supabase.from('stock_movements').insert({
+        item_id: uniformItemId,
+        business_date: businessDate,
+        movement_type: 'return',
+        purpose: 'Uniform Return by Staff',
+        quantity: qty,
+        unit_cost: unitCost,
+        total_value: qty * unitCost,
+        notes: `Returned item from issue item ${issueItemId}`,
+      });
+
+      // 3. Update inventory_items stock
+      if (targetUni) {
+        await supabase
+          .from('inventory_items')
+          .update({
+            current_stock: Number(targetUni.current_stock || 0) + qty,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', uniformItemId);
+      }
+
+      await logAuditAction({
+        action: 'UPDATE',
+        entity: 'Uniform Return',
+        entityId: issueItemId,
+        details: { uniform_item_id: uniformItemId, returned_qty: qty },
+      });
+
+      setMessage({ type: 'success', text: `Uniform return recorded (${qty} pcs back to store).` });
+      loadData();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Error returning uniform.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const totalAvailable = uniforms.reduce((s, u) => s + (Number(u.current_stock) || 0), 0);
+  const totalIssued = uniforms.reduce((s, u) => s + (Number(u.issued_count) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -129,7 +246,7 @@ export default function UniformsPage() {
             Uniform Inventory & Staff Issues
           </h1>
           <p className="text-sm text-stone-500">
-            Dedicated issueable inventory ledger with employee tracking and exit clearance verification.
+            Authoritative SKU-linked uniform inventory with employee custody tracking and return clearances.
           </p>
         </div>
 
@@ -138,7 +255,7 @@ export default function UniformsPage() {
             <Plus className="h-4 w-4" /> Issue Uniform to Staff
           </Button>
           <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
@@ -162,7 +279,7 @@ export default function UniformsPage() {
             <div className="text-2xl font-bold text-stone-900 mt-1">{totalAvailable} Pieces</div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Shirts, Chef Coats, Aprons, Caps ready for issue
+            Authoritative inventory items ready for issue
           </CardContent>
         </Card>
 
@@ -172,7 +289,7 @@ export default function UniformsPage() {
             <div className="text-2xl font-bold text-amber-600 mt-1">{totalIssued} Pieces</div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Active staff uniforms under individual custody
+            Active staff uniforms currently under individual custody
           </CardContent>
         </Card>
 
@@ -192,8 +309,8 @@ export default function UniformsPage() {
       {/* Uniform Stock Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Uniform Stock by Size</CardTitle>
-          <CardDescription>Stock breakdown across store and issued active sets</CardDescription>
+          <CardTitle>Uniform Stock Master</CardTitle>
+          <CardDescription>Live authoritative inventory stock by SKU and item size</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
@@ -205,36 +322,28 @@ export default function UniformsPage() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                    <th className="py-2.5 px-3">SKU</th>
                     <th className="py-2.5 px-3">Uniform Item</th>
-                    <th className="py-2.5 px-3 text-center">Size</th>
-                    <th className="py-2.5 px-3 text-right">Purchased</th>
-                    <th className="py-2.5 px-3 text-right">Available (Store)</th>
-                    <th className="py-2.5 px-3 text-right">Issued (Staff)</th>
-                    <th className="py-2.5 px-3 text-right">Lost / Damaged</th>
-                    <th className="py-2.5 px-3 text-center">Stock Health</th>
+                    <th className="py-2.5 px-3">Category</th>
+                    <th className="py-2.5 px-3 text-right">Available in Store</th>
+                    <th className="py-2.5 px-3 text-right">Active with Staff</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {uniforms.map((u) => (
                     <tr key={u.id} className="hover:bg-stone-50/80">
+                      <td className="py-3 px-3 font-mono font-bold text-amber-700">{u.item_code}</td>
                       <td className="py-3 px-3 font-semibold text-stone-900">{u.name}</td>
-                      <td className="py-3 px-3 text-center">
-                        <span className="px-2 py-0.5 rounded bg-stone-100 border border-stone-200 font-mono font-bold text-stone-700">
-                          {u.size}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right text-stone-600">{u.total_purchased}</td>
+                      <td className="py-3 px-3 text-stone-500">{u.category?.name || 'Uniform'}</td>
                       <td className="py-3 px-3 text-right font-bold text-emerald-700 text-sm">
-                        {u.available_quantity}
+                        {Number(u.current_stock || 0)} {u.unit?.symbol || 'pcs'}
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-amber-700 text-sm">
-                        {u.issued_quantity}
-                      </td>
-                      <td className="py-3 px-3 text-right text-rose-600 font-medium">
-                        {(u.lost_quantity || 0) + (u.damaged_quantity || 0)}
+                        {u.issued_count} pcs
                       </td>
                       <td className="py-3 px-3 text-center">
-                        {u.available_quantity <= 5 ? (
+                        {Number(u.current_stock || 0) <= 5 ? (
                           <Badge variant="warning">Low Store</Badge>
                         ) : (
                           <Badge variant="success">Adequate</Badge>
@@ -242,10 +351,94 @@ export default function UniformsPage() {
                       </td>
                     </tr>
                   ))}
+                  {uniforms.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-stone-400">
+                        No uniform items found in inventory.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Uniform Issues History */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Staff Uniform Issues & Custody Ledger</CardTitle>
+          <CardDescription>Track items issued to staff with return and clearance capability</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                  <th className="py-2.5 px-3">Date</th>
+                  <th className="py-2.5 px-3">Employee</th>
+                  <th className="py-2.5 px-3">Items Issued</th>
+                  <th className="py-2.5 px-3">Notes</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {issues.map((iss) => (
+                  <tr key={iss.id} className="hover:bg-stone-50/80">
+                    <td className="py-3 px-3 font-mono text-stone-600 whitespace-nowrap">{iss.business_date}</td>
+                    <td className="py-3 px-3">
+                      <div className="font-semibold text-stone-900">{iss.employee?.name || 'Unknown Staff'}</div>
+                      <div className="text-[11px] text-stone-400 font-mono">
+                        {iss.employee?.employee_code} • {iss.employee?.designation || 'Staff'}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="space-y-1">
+                        {(iss.items || []).map((item: any) => {
+                          const itemName = item.item?.name || item.legacy_uniform?.name || 'Uniform Item';
+                          const itemCode = item.item?.item_code || '';
+                          const isIssued = item.status === 'Issued';
+                          const targetUniformId = item.item_id || item.uniform_item_id;
+
+                          return (
+                            <div key={item.id} className="flex items-center gap-2">
+                              <span className="font-medium text-stone-800">
+                                {item.quantity}× {itemName} {itemCode && `(${itemCode})`}
+                              </span>
+                              <Badge variant={isIssued ? 'warning' : 'outline'} className="text-[10px] py-0">
+                                {item.status}
+                              </Badge>
+                              {isIssued && targetUniformId && (
+                                <button
+                                  onClick={() => handleReturnUniform(item.id, targetUniformId, item.quantity)}
+                                  disabled={saving}
+                                  className="text-[10px] text-amber-700 hover:text-amber-900 flex items-center gap-0.5 underline ml-1"
+                                >
+                                  <RotateCcw className="h-3 w-3" /> Mark Returned
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-stone-500 max-w-xs truncate">{iss.notes || '—'}</td>
+                    <td className="py-3 px-3 text-right text-stone-400 font-mono text-[11px]">
+                      {new Date(iss.created_at).toLocaleDateString('en-GB')}
+                    </td>
+                  </tr>
+                ))}
+                {issues.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-stone-400">
+                      No uniform issue records logged yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -260,7 +453,7 @@ export default function UniformsPage() {
 
             <form onSubmit={handleIssueUniform} className="space-y-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Employee</label>
+                <label className="block font-medium text-stone-700 mb-1">Employee <span className="text-red-500">*</span></label>
                 <select
                   value={selectedEmpId}
                   onChange={(e) => setSelectedEmpId(e.target.value)}
@@ -269,34 +462,36 @@ export default function UniformsPage() {
                 >
                   <option value="">Select Staff...</option>
                   {employees.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.employee_code})</option>
+                    <option key={e.id} value={e.id}>{e.name} ({e.employee_code}) - {e.designation || 'Staff'}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Uniform Item & Size</label>
+                <label className="block font-medium text-stone-700 mb-1">Uniform Item & Size <span className="text-red-500">*</span></label>
                 <select
                   value={selectedUniformId}
                   onChange={(e) => setSelectedUniformId(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Item...</option>
+                  <option value="">Select Uniform SKU...</option>
                   {uniforms
-                    .filter((u) => u.is_active !== false && Number(u.available_quantity) > 0)
+                    .filter((u) => u.is_active !== false && Number(u.current_stock) > 0)
                     .map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} (Size: {u.size}) — {u.available_quantity} Available
+                        [{u.item_code}] {u.name} — {u.current_stock} {u.unit?.symbol || 'pcs'} available
                       </option>
                     ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Quantity (Pieces)</label>
+                <label className="block font-medium text-stone-700 mb-1">Quantity (Pieces) <span className="text-red-500">*</span></label>
                 <input
                   type="number"
+                  min="1"
+                  max={uniforms.find((u) => u.id === selectedUniformId)?.current_stock || 100}
                   value={issueQty || ''}
                   onChange={(e) => setIssueQty(parseInt(e.target.value) || 0)}
                   placeholder="1"
@@ -306,12 +501,12 @@ export default function UniformsPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Notes / Remarks</label>
+                <label className="block font-medium text-stone-700 mb-1">Notes / Purpose</label>
                 <input
                   type="text"
                   value={issueNotes}
                   onChange={(e) => setIssueNotes(e.target.value)}
-                  placeholder="e.g. Joining kit issue, security deposit logged"
+                  placeholder="e.g. Joining kit issue, replacement shirt"
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 />
               </div>
