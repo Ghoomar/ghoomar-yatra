@@ -24,14 +24,21 @@ import {
   ShoppingBag,
   Search,
   History,
+  MapPin,
+  Calendar,
+  AlertCircle,
+  Truck,
+  Flame,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 function getMovementBadge(type: string) {
   switch (type) {
     case 'count_adjustment':
+    case 'physical_count_adjustment':
       return (
         <Badge variant="warning" className="gap-1 font-mono text-[10px]">
-          <Scale className="h-3 w-3" /> Count Adjustment
+          <Scale className="h-3 w-3" /> Count Audit
         </Badge>
       );
     case 'purchase':
@@ -40,10 +47,47 @@ function getMovementBadge(type: string) {
           <ShoppingBag className="h-3 w-3" /> Purchase Inward
         </Badge>
       );
+    case 'transfer':
+      return (
+        <Badge variant="default" className="gap-1 font-mono text-[10px] bg-blue-100 text-blue-800 border-blue-200">
+          <Truck className="h-3 w-3" /> Transfer
+        </Badge>
+      );
     case 'consumption_issue':
+    case 'issue':
       return (
         <Badge variant="danger" className="gap-1 font-mono text-[10px]">
-          <ArrowRightLeft className="h-3 w-3" /> Kitchen Issue
+          <ArrowRightLeft className="h-3 w-3" /> Store Issue
+        </Badge>
+      );
+    case 'sale':
+      return (
+        <Badge variant="success" className="gap-1 font-mono text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200">
+          <ShoppingBag className="h-3 w-3" /> Direct Sale
+        </Badge>
+      );
+    case 'consumption':
+      return (
+        <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-purple-50 text-purple-700 border-purple-200">
+          <Flame className="h-3 w-3" /> Consumed
+        </Badge>
+      );
+    case 'staff_food':
+      return (
+        <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200">
+          <UtensilsCrossed className="h-3 w-3" /> Staff Food
+        </Badge>
+      );
+    case 'breakage':
+      return (
+        <Badge variant="danger" className="gap-1 font-mono text-[10px] bg-rose-100 text-rose-800 border-rose-200">
+          <AlertTriangle className="h-3 w-3" /> Broken / Damaged
+        </Badge>
+      );
+    case 'loss':
+      return (
+        <Badge variant="danger" className="gap-1 font-mono text-[10px] bg-amber-100 text-amber-800 border-amber-200">
+          <AlertCircle className="h-3 w-3" /> Lost / Missing
         </Badge>
       );
     case 'opening':
@@ -75,9 +119,14 @@ function InventoryContent() {
 
   // Catalog State
   const [items, setItems] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [locationStocks, setLocationStocks] = useState<any[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('ALL');
   const [loading, setLoading] = useState(true);
   const [filterClass, setFilterClass] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [expiryFilter, setExpiryFilter] = useState<'ALL' | 'EXPIRING_SOON'>('ALL');
+  const [hideZeroStock, setHideZeroStock] = useState(false);
   const [search, setSearch] = useState('');
 
   // Movements State
@@ -87,6 +136,7 @@ function InventoryContent() {
     tabParam === 'movements' ? 'count_adjustment' : 'ALL'
   );
   const [movementItemFilter, setMovementItemFilter] = useState<string>('ALL');
+  const [movementLocationFilter, setMovementLocationFilter] = useState<string>('ALL');
   const [movementSearch, setMovementSearch] = useState('');
 
   // Modals
@@ -98,13 +148,16 @@ function InventoryContent() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('inventory_current_position')
-        .select('*')
-        .order('name');
+      const [posRes, locRes, stockRes] = await Promise.all([
+        supabase.from('inventory_current_position').select('*').order('name'),
+        supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
+        supabase.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, code)'),
+      ]);
 
-      if (error) throw error;
-      setItems(data || []);
+      if (posRes.error) throw posRes.error;
+      setItems(posRes.data || []);
+      setLocations(locRes.data || []);
+      setLocationStocks(stockRes.data || []);
     } catch (err: any) {
       console.error('Error loading inventory:', err);
     } finally {
@@ -117,7 +170,7 @@ function InventoryContent() {
     try {
       const { data, error } = await supabase
         .from('stock_movements')
-        .select('*, item:inventory_items(id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, name))')
+        .select(`*, item:inventory_items(id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, name)), source_location:inventory_locations!stock_movements_source_location_id_fkey(id, name, code), destination_location:inventory_locations!stock_movements_destination_location_id_fkey(id, name, code)`)
         .order('business_date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -134,6 +187,58 @@ function InventoryContent() {
     loadData();
     loadMovements();
   }, []);
+
+  // Map of item_id -> array of { location_id, location_name, location_code, quantity }
+  const itemLocationStockMap = useMemo(() => {
+    const map: Record<string, { location_id: string; location_name: string; location_code: string; quantity: number }[]> = {};
+    locationStocks.forEach((s) => {
+      if (!map[s.item_id]) map[s.item_id] = [];
+      map[s.item_id].push({
+        location_id: s.location_id,
+        location_name: s.location?.name || 'Location',
+        location_code: s.location?.code || '',
+        quantity: Number(s.quantity) || 0,
+      });
+    });
+    return map;
+  }, [locationStocks]);
+
+  // Lookup map: item_id -> { [location_id]: quantity }
+  const itemLocQtyLookup = useMemo(() => {
+    const lookup: Record<string, Record<string, number>> = {};
+    locationStocks.forEach((s) => {
+      if (!lookup[s.item_id]) lookup[s.item_id] = {};
+      lookup[s.item_id][s.location_id] = Number(s.quantity) || 0;
+    });
+    return lookup;
+  }, [locationStocks]);
+
+  // Movement expiry lookup (earliest active expiry per item)
+  const itemExpiryMap = useMemo(() => {
+    const expMap: Record<string, { batch_number?: string; expiry_date: string; daysLeft: number }> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    movements.forEach((m) => {
+      if (m.expiry_date) {
+        const exp = new Date(m.expiry_date);
+        const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        if (!expMap[m.item_id] || exp < new Date(expMap[m.item_id].expiry_date)) {
+          expMap[m.item_id] = {
+            batch_number: m.batch_number,
+            expiry_date: m.expiry_date,
+            daysLeft: diffDays,
+          };
+        }
+      }
+    });
+    return expMap;
+  }, [movements]);
+
+  // Expiring items count (<= 30 days)
+  const expiringItemsCount = useMemo(() => {
+    return Object.values(itemExpiryMap).filter((e) => e.daysLeft <= 30).length;
+  }, [itemExpiryMap]);
 
   const handleToggleStatus = async (item: any) => {
     const current = item.is_active !== false;
@@ -161,9 +266,22 @@ function InventoryContent() {
         !search ||
         item.name?.toLowerCase().includes(search.toLowerCase()) ||
         item.item_code?.toLowerCase().includes(search.toLowerCase());
+
+      // Expiry filter
+      if (expiryFilter === 'EXPIRING_SOON') {
+        const exp = itemExpiryMap[item.item_id];
+        if (!exp || exp.daysLeft > 30) return false;
+      }
+
+      // Location filter
+      if (selectedLocationId !== 'ALL') {
+        const locQty = itemLocQtyLookup[item.item_id]?.[selectedLocationId] || 0;
+        if (hideZeroStock && locQty <= 0) return false;
+      }
+
       return matchesClass && matchesStatus && matchesSearch;
     });
-  }, [items, filterClass, statusFilter, search]);
+  }, [items, filterClass, statusFilter, search, expiryFilter, selectedLocationId, hideZeroStock, itemLocQtyLookup, itemExpiryMap]);
 
   const filteredMovements = useMemo(() => {
     return movements.filter((m) => {
@@ -173,19 +291,25 @@ function InventoryContent() {
       if (movementItemFilter !== 'ALL' && m.item_id !== movementItemFilter) {
         return false;
       }
+      if (movementLocationFilter !== 'ALL') {
+        if (m.source_location_id !== movementLocationFilter && m.destination_location_id !== movementLocationFilter) {
+          return false;
+        }
+      }
       if (movementSearch.trim()) {
         const q = movementSearch.toLowerCase();
         const itemName = m.item?.name?.toLowerCase() || '';
         const itemCode = m.item?.item_code?.toLowerCase() || '';
         const purpose = m.purpose?.toLowerCase() || '';
         const notes = m.notes?.toLowerCase() || '';
-        if (!itemName.includes(q) && !itemCode.includes(q) && !purpose.includes(q) && !notes.includes(q)) {
+        const batch = m.batch_number?.toLowerCase() || '';
+        if (!itemName.includes(q) && !itemCode.includes(q) && !purpose.includes(q) && !notes.includes(q) && !batch.includes(q)) {
           return false;
         }
       }
       return true;
     });
-  }, [movements, movementTypeFilter, movementItemFilter, movementSearch]);
+  }, [movements, movementTypeFilter, movementItemFilter, movementLocationFilter, movementSearch]);
 
   const totalStockValue = items.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
   const lowStockCount = items.filter(
@@ -194,15 +318,18 @@ function InventoryContent() {
   const activeCount = items.filter((i) => i.is_active !== false).length;
   const inactiveCount = items.filter((i) => i.is_active === false).length;
 
-  const totalAdjustments = movements.filter((m) => m.movement_type === 'count_adjustment');
+  const totalAdjustments = movements.filter((m) => m.movement_type === 'count_adjustment' || m.movement_type === 'physical_count_adjustment');
   const netAdjustmentValue = totalAdjustments.reduce(
     (sum, m) => sum + (Number(m.quantity) < 0 ? -Number(m.total_value) : Number(m.total_value)),
     0
   );
   const totalPurchasesLogged = movements.filter((m) => m.movement_type === 'purchase');
   const totalPurchasesValue = totalPurchasesLogged.reduce((sum, m) => sum + Number(m.total_value || 0), 0);
-  const totalIssuesLogged = movements.filter((m) => m.movement_type === 'consumption_issue');
+  const totalIssuesLogged = movements.filter((m) => m.movement_type === 'consumption_issue' || m.movement_type === 'issue');
   const totalIssuesValue = totalIssuesLogged.reduce((sum, m) => sum + Number(m.total_value || 0), 0);
+  const totalTransfersLogged = movements.filter((m) => m.movement_type === 'transfer');
+
+  const selectedLocationObj = locations.find((l) => l.id === selectedLocationId);
 
   return (
     <div className="space-y-6 max-w-full overflow-hidden">
@@ -211,10 +338,10 @@ function InventoryContent() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Package className="h-6 w-6 text-amber-600" />
-            Inventory Stock &amp; Movement Ledger
+            Store Inventory &amp; Movement Ledger
           </h1>
           <p className="text-sm text-stone-500">
-            Central store SKU master catalog, authoritative stock movements, and real-time WAC valuation.
+            Location-aware SKU catalog, inter-location transfers, authoritative ledger, and real-time WAC valuation.
           </p>
         </div>
 
@@ -242,7 +369,7 @@ function InventoryContent() {
 
           <Link href="/inventory/issues">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> Issue to Kitchen
+              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> Issues &amp; Transfers
             </Button>
           </Link>
 
@@ -265,6 +392,27 @@ function InventoryContent() {
           </Button>
         </div>
       </div>
+
+      {/* Expiry Alert Banner */}
+      {expiringItemsCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-900">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold">{expiringItemsCount} item(s)</span> have batches expiring within the next 30 days or already expired!
+              <span className="text-amber-700 ml-1">Practice First-Expiry-First-Out (FEFO) store management.</span>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExpiryFilter(expiryFilter === 'EXPIRING_SOON' ? 'ALL' : 'EXPIRING_SOON')}
+            className="text-xs h-7 border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
+          >
+            {expiryFilter === 'EXPIRING_SOON' ? 'Show All SKUs' : 'View Expiring Items'}
+          </Button>
+        </div>
+      )}
 
       {/* Primary Tab Navigation */}
       <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
@@ -304,14 +452,27 @@ function InventoryContent() {
       {activeTab === 'catalog' ? (
         <>
           {/* Catalog KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-1">
-                <CardDescription>Total Central Store Valuation</CardDescription>
+                <CardDescription>Total Stock Valuation</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalStockValue)}</div>
               </CardHeader>
               <CardContent className="pt-0 text-[11px] text-stone-500">
-                Weighted Average Cost (WAC) × Derived Ledger Quantity
+                Weighted Average Cost (WAC) × Total System Stock
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-1">
+                <CardDescription>Active Locations</CardDescription>
+                <div className="text-2xl font-bold text-stone-900 mt-1 flex items-center gap-1.5">
+                  <MapPin className="h-5 w-5 text-amber-600" />
+                  {locations.length} Locations
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0 text-[11px] text-stone-500">
+                Store, fridges, beverage counters &amp; halls
               </CardContent>
             </Card>
 
@@ -319,7 +480,7 @@ function InventoryContent() {
               <CardHeader className="pb-1">
                 <CardDescription>Low Stock Alerts</CardDescription>
                 <div className={`text-2xl font-bold mt-1 ${lowStockCount > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                  {lowStockCount} Active Items Below Minimum
+                  {lowStockCount} Below Minimum
                 </div>
               </CardHeader>
               <CardContent className="pt-0 text-[11px] text-stone-500">
@@ -338,68 +499,129 @@ function InventoryContent() {
                 </div>
               </CardHeader>
               <CardContent className="pt-0 text-[11px] text-stone-500">
-                Authoritative Movement Ledger (Opening + Purchases − Issues)
+                Authoritative Movement Ledger (Open + Inward − Issues)
               </CardContent>
             </Card>
           </div>
 
-          {/* Catalog Filter and Search Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-stone-200 rounded-xl text-xs shadow-xs">
-            <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-              {['ALL', 'Food Raw Material', 'Non-Food Consumable', 'Physical Asset', 'Uniform'].map((cls) => (
-                <button
-                  key={cls}
-                  onClick={() => setFilterClass(cls)}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 ${
-                    filterClass === cls
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-                  }`}
+          {/* Catalog Location Filter & Toolbar */}
+          <div className="bg-white p-3.5 border border-stone-200 rounded-xl space-y-3 text-xs shadow-xs">
+            {/* Top Row: Location Selector & Quick Filter Pills */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Location Selector */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-stone-700 flex items-center gap-1.5 shrink-0">
+                  <MapPin className="h-4 w-4 text-amber-600" /> Physical Location:
+                </span>
+                <select
+                  value={selectedLocationId}
+                  onChange={(e) => setSelectedLocationId(e.target.value)}
+                  className="font-semibold text-xs rounded-lg border border-stone-300 py-1.5 px-3 bg-stone-50 text-stone-900 focus:outline-none focus:border-amber-500 focus:bg-white"
                 >
-                  {cls}
-                </button>
-              ))}
+                  <option value="ALL">🏢 All Locations (Total System Stock)</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      📍 {loc.name} ({loc.code})
+                    </option>
+                  ))}
+                </select>
+
+                {selectedLocationId !== 'ALL' && (
+                  <label className="flex items-center gap-1.5 text-stone-600 text-[11px] ml-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hideZeroStock}
+                      onChange={(e) => setHideZeroStock(e.target.checked)}
+                      className="rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    Hide items with 0 stock here
+                  </label>
+                )}
+              </div>
+
+              {/* Status Filter Toggle */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0">
+                  {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setStatusFilter(st)}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                        statusFilter === st
+                          ? 'bg-white text-stone-900 shadow-xs'
+                          : 'text-stone-500 hover:text-stone-800'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+
+                {expiryFilter === 'EXPIRING_SOON' && (
+                  <Badge variant="warning" className="gap-1 text-[10px]">
+                    <Calendar className="h-3 w-3" /> Expiring Soon Active
+                  </Badge>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-              {/* Status Filter */}
-              <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0">
-                {(['ALL', 'ACTIVE', 'INACTIVE'] as const).map((st) => (
+            {/* Bottom Row: Category Class Pills & Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-stone-100">
+              <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                {['ALL', 'Food Raw Material', 'Non-Food Consumable', 'Physical Asset', 'Uniform'].map((cls) => (
                   <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
-                      statusFilter === st
-                        ? 'bg-white text-stone-900 shadow-xs'
-                        : 'text-stone-500 hover:text-stone-800'
+                    key={cls}
+                    onClick={() => setFilterClass(cls)}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer shrink-0 ${
+                      filterClass === cls
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                     }`}
                   >
-                    {st}
+                    {cls}
                   </button>
                 ))}
               </div>
 
-              <input
-                type="text"
-                placeholder="Search SKU name or code..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full sm:w-64 rounded-lg border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
-              />
+              <div className="relative flex-1 w-full sm:max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                <input
+                  type="text"
+                  placeholder="Search SKU name or code..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
             </div>
           </div>
 
           {/* Stock Catalog Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Catalog Items ({filteredItems.length})</CardTitle>
-              <CardDescription>Authoritative derived quantities, units, and real-time weighted average cost</CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle>
+                    Catalog Items ({filteredItems.length})
+                    {selectedLocationObj && (
+                      <span className="ml-2 text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        Location: {selectedLocationObj.name}
+                      </span>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {selectedLocationId === 'ALL'
+                      ? 'Total system quantities, location allocations, and weighted average cost'
+                      : `Quantities and status physically located at ${selectedLocationObj?.name}`}
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="pt-0">
               {loading ? (
                 <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading central inventory...
+                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading inventory data...
                 </div>
               ) : filteredItems.length === 0 ? (
                 <div className="py-12 text-center text-stone-400 text-xs">No inventory items found matching criteria.</div>
@@ -411,19 +633,29 @@ function InventoryContent() {
                         <th className="py-2.5 px-3">SKU Code</th>
                         <th className="py-2.5 px-3">Item Name</th>
                         <th className="py-2.5 px-3">Category / Class</th>
-                        <th className="py-2.5 px-3 text-right">Current Quantity</th>
+                        <th className="py-2.5 px-3 text-right">
+                          {selectedLocationId === 'ALL' ? 'Total Quantity' : `Stock at ${selectedLocationObj?.code || 'Loc'}`}
+                        </th>
+                        {selectedLocationId === 'ALL' && (
+                          <th className="py-2.5 px-3">Location Breakdown</th>
+                        )}
                         <th className="py-2.5 px-3 text-right">Min Stock</th>
                         <th className="py-2.5 px-3 text-right">WAC Rate (₹)</th>
                         <th className="py-2.5 px-3 text-right">Total Value</th>
-                        <th className="py-2.5 px-3 text-center">Stock Status</th>
-                        <th className="py-2.5 px-3 text-center">Lifecycle</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
                         <th className="py-2.5 px-3 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
                       {filteredItems.map((i) => {
-                        const isLow = Number(i.current_quantity) <= Number(i.minimum_stock) && Number(i.minimum_stock) > 0;
+                        const totalQty = Number(i.current_quantity || 0);
+                        const locQty = selectedLocationId !== 'ALL'
+                          ? (itemLocQtyLookup[i.item_id]?.[selectedLocationId] || 0)
+                          : totalQty;
+                        const isLow = totalQty <= Number(i.minimum_stock) && Number(i.minimum_stock) > 0;
                         const isActive = i.is_active !== false;
+                        const locList = (itemLocationStockMap[i.item_id] || []).filter((l) => l.quantity > 0);
+                        const expInfo = itemExpiryMap[i.item_id];
 
                         return (
                           <tr
@@ -451,17 +683,39 @@ function InventoryContent() {
                               >
                                 {i.name}
                               </button>
-                              {i.storage_area && (
-                                <div className="text-[10px] text-stone-400">Area: {i.storage_area}</div>
+                              {expInfo && (
+                                <div className={`text-[10px] mt-0.5 flex items-center gap-1 ${expInfo.daysLeft <= 0 ? 'text-rose-600 font-bold' : expInfo.daysLeft <= 30 ? 'text-amber-600 font-medium' : 'text-stone-400'}`}>
+                                  <Calendar className="h-2.5 w-2.5" />
+                                  Exp: {expInfo.expiry_date} ({expInfo.daysLeft <= 0 ? 'EXPIRED' : `${expInfo.daysLeft}d left`})
+                                </div>
                               )}
                             </td>
                             <td className="py-3 px-3 text-stone-600">
                               {i.category_name || 'General'} <span className="text-stone-400">({i.inventory_class})</span>
                             </td>
-                            <td className="py-3 px-3 text-right font-bold text-sm text-stone-900">
-                              {Number(i.current_quantity || 0).toFixed(2)}{' '}
+                            <td className="py-3 px-3 text-right font-bold text-sm text-stone-900 whitespace-nowrap">
+                              {locQty.toFixed(2)}{' '}
                               <span className="text-xs font-normal text-stone-500">{i.unit_symbol || 'units'}</span>
                             </td>
+                            {selectedLocationId === 'ALL' && (
+                              <td className="py-3 px-3">
+                                {locList.length === 0 ? (
+                                  <span className="text-stone-400 text-[11px]">—</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1 max-w-[240px]">
+                                    {locList.map((loc) => (
+                                      <span
+                                        key={loc.location_id}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-stone-100 border border-stone-200 text-[10px] font-mono text-stone-700"
+                                        title={`${loc.location_name}: ${loc.quantity} ${i.unit_symbol}`}
+                                      >
+                                        <span className="font-bold text-amber-800">{loc.location_code}</span>: {loc.quantity}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            )}
                             <td className="py-3 px-3 text-right text-stone-500 font-mono">
                               {Number(i.minimum_stock || 0).toFixed(1)}
                             </td>
@@ -478,13 +732,6 @@ function InventoryContent() {
                                 </Badge>
                               ) : (
                                 <Badge variant="success">Sufficient</Badge>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center">
-                              {isActive ? (
-                                <Badge variant="success">Active</Badge>
-                              ) : (
-                                <Badge variant="outline">Inactive</Badge>
                               )}
                             </td>
                             <td className="py-3 px-3 text-right">
@@ -551,7 +798,7 @@ function InventoryContent() {
 
             <Card>
               <CardHeader className="pb-1">
-                <CardDescription>Physical Count Adjustments</CardDescription>
+                <CardDescription>Physical Count Audits</CardDescription>
                 <div className="text-2xl font-bold text-amber-700 mt-1">
                   {totalAdjustments.length} <span className="text-xs font-normal text-stone-500">postings</span>
                 </div>
@@ -573,11 +820,13 @@ function InventoryContent() {
 
             <Card>
               <CardHeader className="pb-1">
-                <CardDescription>Departmental Issues</CardDescription>
-                <div className="text-2xl font-bold text-rose-700 mt-1">{formatINR(totalIssuesValue)}</div>
+                <CardDescription>Location Transfers &amp; Issues</CardDescription>
+                <div className="text-2xl font-bold text-blue-700 mt-1">
+                  {totalTransfersLogged.length} <span className="text-xs font-normal text-stone-500">transfers</span> / {totalIssuesLogged.length} <span className="text-xs font-normal text-stone-500">issues</span>
+                </div>
               </CardHeader>
               <CardContent className="pt-0 text-[11px] text-stone-500">
-                {totalIssuesLogged.length} issues to kitchen &amp; stage
+                Total Issues Value: {formatINR(totalIssuesValue)}
               </CardContent>
             </Card>
           </div>
@@ -586,14 +835,17 @@ function InventoryContent() {
           <div className="space-y-3 bg-white p-3.5 border border-stone-200 rounded-xl text-xs shadow-xs">
             {/* Quick Movement Type Buttons */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-              <span className="text-xs font-semibold text-stone-500 shrink-0 mr-1">Movement Type:</span>
+              <span className="text-xs font-semibold text-stone-500 shrink-0 mr-1">Type:</span>
               {[
                 { id: 'ALL', label: 'All Movements' },
-                { id: 'count_adjustment', label: 'Physical Count Adjustments' },
+                { id: 'count_adjustment', label: 'Count Audits' },
                 { id: 'purchase', label: 'Purchases' },
+                { id: 'transfer', label: 'Transfers' },
                 { id: 'consumption_issue', label: 'Store Issues' },
-                { id: 'opening', label: 'Opening Balances' },
-                { id: 'wastage', label: 'Wastage / Scrap' },
+                { id: 'sale', label: 'Direct Sales' },
+                { id: 'breakage', label: 'Breakage/Loss' },
+                { id: 'opening', label: 'Opening' },
+                { id: 'wastage', label: 'Wastage' },
               ].map((mType) => (
                 <button
                   key={mType.id}
@@ -609,15 +861,32 @@ function InventoryContent() {
               ))}
             </div>
 
-            {/* Filter Bar Row: Item & Search */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-stone-100">
+            {/* Filter Bar Row: Item, Location & Search */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-stone-100">
+              {/* Location Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-stone-500 font-medium shrink-0">Location:</span>
+                <select
+                  value={movementLocationFilter}
+                  onChange={(e) => setMovementLocationFilter(e.target.value)}
+                  className="w-full rounded-lg border border-stone-200 py-1.5 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
+                >
+                  <option value="ALL">All Locations</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} ({l.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Item Filter Dropdown */}
-              <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <span className="text-stone-500 font-medium">Filter by SKU:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-stone-500 font-medium shrink-0">SKU:</span>
                 <select
                   value={movementItemFilter}
                   onChange={(e) => setMovementItemFilter(e.target.value)}
-                  className="rounded-lg border border-stone-200 py-1.5 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white max-w-[220px] truncate"
+                  className="w-full rounded-lg border border-stone-200 py-1.5 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white truncate"
                 >
                   <option value="ALL">All Items</option>
                   {items.map((i) => (
@@ -629,31 +898,16 @@ function InventoryContent() {
               </div>
 
               {/* Search Bar */}
-              <div className="relative flex-1 w-full">
+              <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Search by SKU code, name, purpose, or audit reason..."
+                  placeholder="Search SKU, reason, batch..."
                   value={movementSearch}
                   onChange={(e) => setMovementSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"
                 />
               </div>
-
-              {(movementTypeFilter !== 'ALL' || movementItemFilter !== 'ALL' || movementSearch.trim()) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setMovementTypeFilter('ALL');
-                    setMovementItemFilter('ALL');
-                    setMovementSearch('');
-                  }}
-                  className="text-xs text-stone-500 hover:text-stone-800"
-                >
-                  Reset
-                </Button>
-              )}
             </div>
           </div>
 
@@ -663,12 +917,12 @@ function InventoryContent() {
               <div>
                 <CardTitle>Stock Movement Ledger ({filteredMovements.length})</CardTitle>
                 <CardDescription>
-                  Chronological transaction log of receipts, consumption issues, and physical count audit adjustments
+                  Chronological transaction log with location route, batches, issues, and physical count audit adjustments
                 </CardDescription>
               </div>
               <Link href="/inventory/count">
                 <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-                  <ClipboardList className="h-3.5 w-3.5 text-amber-600" /> New Physical Count Audit
+                  <ClipboardList className="h-3.5 w-3.5 text-amber-600" /> New Stock Audit
                 </Button>
               </Link>
             </CardHeader>
@@ -688,11 +942,12 @@ function InventoryContent() {
                       <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                         <th className="py-2.5 px-3">Date</th>
                         <th className="py-2.5 px-3">SKU &amp; Item Name</th>
-                        <th className="py-2.5 px-3 text-center">Movement Type</th>
+                        <th className="py-2.5 px-3 text-center">Type</th>
+                        <th className="py-2.5 px-3">Location Route</th>
                         <th className="py-2.5 px-3 text-right">Quantity</th>
-                        <th className="py-2.5 px-3 text-right">Unit Rate (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Rate (₹)</th>
                         <th className="py-2.5 px-3 text-right">Total Value</th>
-                        <th className="py-2.5 px-3">Purpose &amp; Reason</th>
+                        <th className="py-2.5 px-3">Purpose &amp; Batch</th>
                         <th className="py-2.5 px-3">Notes / Ref</th>
                       </tr>
                     </thead>
@@ -713,6 +968,25 @@ function InventoryContent() {
                             <td className="py-3 px-3 text-center whitespace-nowrap">
                               {getMovementBadge(m.movement_type)}
                             </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              {m.source_location && m.destination_location ? (
+                                <div className="flex items-center gap-1 font-mono text-[11px] text-stone-700">
+                                  <span className="font-bold text-amber-800">{m.source_location.code}</span>
+                                  <ArrowRightLeft className="h-3 w-3 text-stone-400" />
+                                  <span className="font-bold text-emerald-800">{m.destination_location.code}</span>
+                                </div>
+                              ) : m.destination_location ? (
+                                <div className="font-mono text-[11px] text-emerald-700">
+                                  ➔ <span className="font-bold">{m.destination_location.code}</span> ({m.destination_location.name})
+                                </div>
+                              ) : m.source_location ? (
+                                <div className="font-mono text-[11px] text-amber-800">
+                                  <span className="font-bold">{m.source_location.code}</span> ➔
+                                </div>
+                              ) : (
+                                <span className="text-stone-400 font-mono text-[10px]">—</span>
+                              )}
+                            </td>
                             <td className="py-3 px-3 text-right font-mono font-bold whitespace-nowrap">
                               <span className={qty > 0 ? 'text-emerald-700' : qty < 0 ? 'text-rose-600' : 'text-stone-700'}>
                                 {qty > 0 ? `+${qty.toFixed(2)}` : qty.toFixed(2)} {unitSymbol}
@@ -726,6 +1000,11 @@ function InventoryContent() {
                             </td>
                             <td className="py-3 px-3 text-stone-700 max-w-[200px]">
                               <div className="font-medium truncate">{m.purpose || '—'}</div>
+                              {m.batch_number && (
+                                <div className="text-[10px] text-stone-500 font-mono flex items-center gap-1">
+                                  Batch: {m.batch_number} {m.expiry_date && `| Exp: ${m.expiry_date}`}
+                                </div>
+                              )}
                             </td>
                             <td className="py-3 px-3 text-stone-500 max-w-[220px]">
                               <div className="text-[11px] truncate" title={m.notes || ''}>
@@ -748,15 +1027,15 @@ function InventoryContent() {
       <ItemModal
         isOpen={itemModalOpen}
         onClose={() => {
-          setItemModalOpen(false);
-          setEditingItem(null);
+          setItemModalOpen(false)
+          setEditingItem(null)
         }}
         item={editingItem}
         onSaved={() => {
-          setItemModalOpen(false);
-          setEditingItem(null);
-          loadData();
-          loadMovements();
+          setItemModalOpen(false)
+          setEditingItem(null)
+          loadData()
+          loadMovements()
         }}
       />
 
@@ -764,8 +1043,8 @@ function InventoryContent() {
         isOpen={unitModalOpen}
         onClose={() => setUnitModalOpen(false)}
         onUpdated={() => {
-          loadData();
-          loadMovements();
+          loadData()
+          loadMovements()
         }}
       />
 
@@ -792,4 +1071,3 @@ export default function InventoryPage() {
     </Suspense>
   );
 }
-

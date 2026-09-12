@@ -27,6 +27,12 @@ interface PurchaseLineForm {
   item_id: string;
   quantity: number;
   rate: number;
+  use_pack?: boolean;
+  pack_quantity?: number;
+  pack_rate?: number;
+  destination_location_id?: string;
+  batch_number?: string;
+  expiry_date?: string;
   previous_rate?: number;
   previous_date?: string;
 }
@@ -36,6 +42,7 @@ export default function PurchasesPage() {
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [items, setItems] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -95,8 +102,18 @@ export default function PurchasesPage() {
 
       const { data: iData } = await supabase
         .from('inventory_items')
-        .select('id, item_code, name, unit_id, is_active, current_stock, current_weighted_average_cost, unit:units!inventory_items_unit_id_fkey(symbol, name)')
+        .select(`
+          id, item_code, name, unit_id, secondary_unit_id, conversion_factor, shelf_life_days, is_active, current_stock, current_weighted_average_cost,
+          unit:units!inventory_items_unit_id_fkey(symbol, name),
+          sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, name)
+        `)
         .order('name');
+
+      const { data: locData } = await supabase
+        .from('inventory_locations')
+        .select('*')
+        .eq('is_active', true)
+        .order('code');
 
       const { data: pmData } = await supabase
         .from('payment_methods')
@@ -105,6 +122,7 @@ export default function PurchasesPage() {
 
       setVendors(vData || []);
       setItems(iData || []);
+      setLocations(locData || []);
       setPaymentMethods(pmData || []);
     } catch (err: any) {
       console.error(err);
@@ -134,7 +152,12 @@ export default function PurchasesPage() {
   };
 
   const calculatePurchaseTotal = () => {
-    return lines.reduce((acc, l) => acc + (l.quantity * l.rate || 0), 0);
+    return lines.reduce((acc, l) => {
+      if (l.use_pack) {
+        return acc + ((l.pack_quantity || 0) * (l.pack_rate || 0));
+      }
+      return acc + (l.quantity * l.rate || 0);
+    }, 0);
   };
 
   const handleCreatePurchase = async (e: React.FormEvent) => {
@@ -156,6 +179,7 @@ export default function PurchasesPage() {
     try {
       const netTotal = calculatePurchaseTotal();
       const purchaseNumber = `PO-${Date.now().toString().slice(-6)}`;
+      const defaultStoreLoc = locations.find((l) => l.code === 'STORE')?.id || 'a89335e9-01b4-4edd-bee5-a894053d798d';
 
       const { data: header, error: headerErr } = await supabase
         .from('purchase_headers')
@@ -174,47 +198,52 @@ export default function PurchasesPage() {
       if (headerErr) throw headerErr;
 
       for (const line of lines) {
-        if (!line.item_id || line.quantity <= 0) continue;
-        const lineTotal = line.quantity * line.rate;
+        const currentItem = items.find((i) => i.id === line.item_id);
+        const conv = Number(currentItem?.conversion_factor) || 1;
 
-        await supabase.from('purchase_lines').insert({
+        let baseQty: number;
+        let baseRate: number;
+
+        if (line.use_pack && conv > 0) {
+          baseQty = (line.pack_quantity || 0) * conv;
+          baseRate = (line.pack_rate || 0) / conv;
+        } else {
+          baseQty = line.quantity;
+          baseRate = line.rate;
+        }
+
+        if (!line.item_id || baseQty <= 0) continue;
+        const lineTotal = baseQty * baseRate;
+
+        // Insert purchase line in base units
+        const { error: lineErr } = await supabase.from('purchase_lines').insert({
           purchase_id: header.id,
           item_id: line.item_id,
-          quantity: line.quantity,
-          rate: line.rate,
+          quantity: baseQty,
+          rate: baseRate,
           total_amount: lineTotal,
         });
+        if (lineErr) throw lineErr;
 
-        await supabase.from('stock_movements').insert({
-          business_date: businessDate,
-          item_id: line.item_id,
-          movement_type: 'purchase',
-          quantity: line.quantity,
-          unit_cost: line.rate,
-          total_value: lineTotal,
-          reference_id: header.id,
-          reference_type: 'purchase_header',
-          purpose: 'Vendor Inward Receipt',
+        // Inward stock into target location (Central Store) using atomic procedure
+        const targetDestLoc = line.destination_location_id || defaultStoreLoc;
+
+        const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
+          p_item_id: line.item_id,
+          p_business_date: businessDate,
+          p_movement_type: 'purchase',
+          p_quantity: baseQty,
+          p_unit_cost: baseRate,
+          p_destination_location_id: targetDestLoc,
+          p_purpose: 'Vendor Inward Receipt',
+          p_reference_id: header.id,
+          p_reference_type: 'purchase_header',
+          p_notes: `PO ${purchaseNumber} - ${vSelected?.vendor_name || 'Vendor'}${line.batch_number ? ` (Batch: ${line.batch_number})` : ''}`,
+          p_batch_number: line.batch_number || null,
+          p_expiry_date: line.expiry_date || null,
         });
 
-        const currentItem = items.find((i) => i.id === line.item_id);
-        if (currentItem) {
-          const newWac = calculateNewWAC({
-            currentStock: Number(currentItem.current_stock) || 0,
-            currentWAC: Number(currentItem.current_weighted_average_cost) || line.rate,
-            receivedQuantity: line.quantity,
-            purchaseRate: line.rate,
-          });
-
-          await supabase
-            .from('inventory_items')
-            .update({
-              current_weighted_average_cost: newWac,
-              current_stock: (Number(currentItem.current_stock) || 0) + line.quantity,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', line.item_id);
-        }
+        if (txErr) throw txErr;
 
         // Upsert vendor-item price memory
         try {
@@ -229,7 +258,7 @@ export default function PurchasesPage() {
             await supabase
               .from('vendor_items')
               .update({
-                last_purchase_rate: line.rate,
+                last_purchase_rate: baseRate,
                 last_purchase_date: businessDate,
                 is_preferred: true,
               })
@@ -240,7 +269,7 @@ export default function PurchasesPage() {
               .insert({
                 vendor_id: selectedVendorId,
                 inventory_item_id: line.item_id,
-                last_purchase_rate: line.rate,
+                last_purchase_rate: baseRate,
                 last_purchase_date: businessDate,
                 is_preferred: true,
               });
@@ -250,7 +279,7 @@ export default function PurchasesPage() {
         }
       }
 
-      setMessage({ type: 'success', text: `Purchase invoice ${purchaseNumber} recorded and stock updated!` });
+      setMessage({ type: 'success', text: `Purchase invoice ${purchaseNumber} recorded and stock inwarded to Central Store!` });
       setShowPurchaseModal(false);
       setLines([{ item_id: '', quantity: 1, rate: 0 }]);
       setInvoiceNumber('');
@@ -529,36 +558,54 @@ export default function PurchasesPage() {
 
                 {lines.map((line, idx) => {
                   const currentItem = items.find((i) => i.id === line.item_id);
+                  const hasPack = Boolean(currentItem?.sec_unit && Number(currentItem.conversion_factor) > 1);
+                  const conv = Number(currentItem?.conversion_factor) || 1;
+
+                  const lineBaseQty = line.use_pack && conv > 0 ? (line.pack_quantity || 0) * conv : line.quantity;
+                  const lineBaseRate = line.use_pack && conv > 0 ? (line.pack_rate || 0) / conv : line.rate;
+                  const lineTotalVal = line.use_pack ? (line.pack_quantity || 0) * (line.pack_rate || 0) : line.quantity * line.rate;
+
                   const isDeviation =
                     line.previous_rate &&
-                    line.rate > 0 &&
-                    Math.abs(line.rate - line.previous_rate) / line.previous_rate > 0.2;
+                    lineBaseRate > 0 &&
+                    Math.abs(lineBaseRate - line.previous_rate) / line.previous_rate > 0.2;
                   const deviationPct = line.previous_rate
-                    ? Math.round(((line.rate - line.previous_rate) / line.previous_rate) * 100)
+                    ? Math.round(((lineBaseRate - line.previous_rate) / line.previous_rate) * 100)
                     : 0;
 
                   return (
-                    <div key={idx} className="p-2.5 bg-stone-50 rounded-lg border border-stone-200 space-y-1.5">
-                      <div className="flex items-center gap-2">
+                    <div key={idx} className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2">
+                      {/* Top Row: Item Select, Pack Toggle, Qty, Rate, Total, Delete */}
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                         <select
                           value={line.item_id}
                           onChange={(e) => {
                             const next = [...lines];
                             const selectedId = e.target.value;
                             next[idx].item_id = selectedId;
+                            const selItem = items.find((it) => it.id === selectedId);
                             const mem = vendorPriceMemory[selectedId];
                             if (mem && mem.rate > 0) {
                               next[idx].rate = mem.rate;
                               next[idx].previous_rate = mem.rate;
                               next[idx].previous_date = mem.date;
+                              if (selItem?.conversion_factor && Number(selItem.conversion_factor) > 1) {
+                                next[idx].pack_rate = mem.rate * Number(selItem.conversion_factor);
+                              }
                             } else {
                               next[idx].previous_rate = undefined;
                               next[idx].previous_date = undefined;
                             }
+                            // Auto-set suggested expiry if shelf life exists
+                            if (selItem?.shelf_life_days) {
+                              const d = new Date();
+                              d.setDate(d.getDate() + Number(selItem.shelf_life_days));
+                              next[idx].expiry_date = d.toISOString().split('T')[0];
+                            }
                             setLines(next);
                           }}
                           required
-                          className="flex-1 rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
+                          className="flex-1 min-w-[200px] rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
                         >
                           <option value="">Select Item SKU...</option>
                           {items
@@ -570,36 +617,73 @@ export default function PurchasesPage() {
                             ))}
                         </select>
 
+                        {/* Pack Toggle Button */}
+                        {hasPack && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...lines];
+                              const willUse = !next[idx].use_pack;
+                              next[idx].use_pack = willUse;
+                              if (willUse) {
+                                next[idx].pack_quantity = next[idx].pack_quantity || 1;
+                                next[idx].pack_rate = next[idx].pack_rate || (next[idx].rate > 0 ? next[idx].rate * conv : 0);
+                              }
+                              setLines(next);
+                            }}
+                            className={`px-2 py-1.5 rounded text-[10px] font-bold border transition-colors shrink-0 ${
+                              line.use_pack
+                                ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-xs'
+                                : 'bg-white border-stone-300 text-stone-600 hover:bg-stone-100'
+                            }`}
+                            title={`1 ${currentItem?.sec_unit?.symbol} = ${conv} ${currentItem?.unit?.symbol}`}
+                          >
+                            📦 {line.use_pack ? `Pack (${currentItem?.sec_unit?.symbol} ×${conv})` : `Base (${currentItem?.unit?.symbol})`}
+                          </button>
+                        )}
+
+                        {/* Quantity Input */}
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
                             step="0.001"
-                            value={line.quantity || ''}
+                            value={line.use_pack ? (line.pack_quantity || '') : (line.quantity || '')}
                             onChange={(e) => {
                               const next = [...lines];
-                              next[idx].quantity = parseFloat(e.target.value) || 0;
+                              const val = parseFloat(e.target.value) || 0;
+                              if (line.use_pack) {
+                                next[idx].pack_quantity = val;
+                              } else {
+                                next[idx].quantity = val;
+                              }
                               setLines(next);
                             }}
                             placeholder="Qty"
                             required
                             className="w-16 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
                           />
-                          <span className="px-2 py-1.5 bg-stone-200/80 border border-stone-300 rounded text-stone-700 font-mono text-[11px] font-bold">
-                            {currentItem?.unit?.symbol || 'Units'}
+                          <span className="px-1.5 py-1.5 bg-stone-200/80 border border-stone-300 rounded text-stone-700 font-mono text-[11px] font-bold">
+                            {line.use_pack ? currentItem?.sec_unit?.symbol || 'Packs' : currentItem?.unit?.symbol || 'Units'}
                           </span>
                         </div>
 
+                        {/* Rate Input */}
                         <div className="relative">
                           <input
                             type="number"
                             step="0.01"
-                            value={line.rate || ''}
+                            value={line.use_pack ? (line.pack_rate || '') : (line.rate || '')}
                             onChange={(e) => {
                               const next = [...lines];
-                              next[idx].rate = parseFloat(e.target.value) || 0;
+                              const val = parseFloat(e.target.value) || 0;
+                              if (line.use_pack) {
+                                next[idx].pack_rate = val;
+                              } else {
+                                next[idx].rate = val;
+                              }
                               setLines(next);
                             }}
-                            placeholder="Rate (₹)"
+                            placeholder={line.use_pack ? `₹ / ${currentItem?.sec_unit?.symbol}` : "Rate (₹)"}
                             required
                             className={`w-24 rounded-md border p-2 text-right text-stone-900 text-xs focus:outline-none bg-white ${
                               isDeviation ? 'border-amber-400 bg-amber-50/50' : 'border-stone-300'
@@ -607,8 +691,9 @@ export default function PurchasesPage() {
                           />
                         </div>
 
+                        {/* Line Total */}
                         <div className="w-24 text-right font-semibold text-stone-800">
-                          {formatINR(line.quantity * line.rate)}
+                          {formatINR(lineTotalVal)}
                         </div>
 
                         <button
@@ -620,11 +705,89 @@ export default function PurchasesPage() {
                         </button>
                       </div>
 
+                      {/* Pack Conversion Explanation Helper */}
+                      {line.use_pack && hasPack && (
+                        <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200 rounded px-2 py-1 font-mono flex items-center justify-between">
+                          <span>
+                            Conversion: <strong>{line.pack_quantity || 0} {currentItem?.sec_unit?.symbol}</strong> × {conv} = <strong>{lineBaseQty.toFixed(2)} {currentItem?.unit?.symbol}</strong>
+                          </span>
+                          <span>
+                            Derived Rate: <strong>{formatINR(lineBaseRate)}</strong> / {currentItem?.unit?.symbol}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Sub-row: Batch #, Expiry Date & Destination Location */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-stone-200/60 text-[11px]">
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Batch / Lot # (optional)"
+                            value={line.batch_number || ''}
+                            onChange={(e) => {
+                              const next = [...lines];
+                              next[idx].batch_number = e.target.value;
+                              setLines(next);
+                            }}
+                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="date"
+                            value={line.expiry_date || ''}
+                            onChange={(e) => {
+                              const next = [...lines];
+                              next[idx].expiry_date = e.target.value;
+                              setLines(next);
+                            }}
+                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
+                            title="Expiry Date"
+                          />
+                          {currentItem?.shelf_life_days && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const d = new Date();
+                                d.setDate(d.getDate() + Number(currentItem.shelf_life_days));
+                                const next = [...lines];
+                                next[idx].expiry_date = d.toISOString().split('T')[0];
+                                setLines(next);
+                              }}
+                              className="px-1.5 py-1 rounded bg-stone-100 border border-stone-200 text-[10px] text-stone-600 hover:bg-stone-200 whitespace-nowrap"
+                              title={`Auto-fill +${currentItem.shelf_life_days} days shelf life`}
+                            >
+                              +{currentItem.shelf_life_days}d
+                            </button>
+                          )}
+                        </div>
+
+                        <div>
+                          <select
+                            value={line.destination_location_id || ''}
+                            onChange={(e) => {
+                              const next = [...lines];
+                              next[idx].destination_location_id = e.target.value;
+                              setLines(next);
+                            }}
+                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
+                          >
+                            <option value="">Store: Central Store Room</option>
+                            {locations.map((loc) => (
+                              <option key={loc.id} value={loc.id}>
+                                Store at {loc.name} ({loc.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
                       {/* Price Memory Helper & Deviation Badge */}
                       {line.previous_rate !== undefined && line.previous_rate > 0 && (
                         <div className="flex items-center justify-between text-[11px] px-1 text-stone-500">
                           <span>
-                            Previous Purchase: <strong className="text-stone-700">{formatINR(line.previous_rate)}</strong>
+                            Previous Base Purchase: <strong className="text-stone-700">{formatINR(line.previous_rate)}</strong>
                             {line.previous_date && ` on ${line.previous_date}`}
                           </span>
                           {isDeviation && (
