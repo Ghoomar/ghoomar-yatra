@@ -136,31 +136,44 @@ export default function UniformsPage() {
       });
       if (itemErr) throw itemErr;
 
-      // 3. Record authoritative stock movement
-      const unitCost = Number(targetUni.current_weighted_average_cost || 0);
-      const { error: smErr } = await supabase.from('stock_movements').insert({
-        item_id: selectedUniformId,
-        business_date: businessDate,
-        movement_type: 'issue',
-        purpose: 'Uniform Issue to Staff',
-        quantity: -issueQty,
-        unit_cost: unitCost,
-        total_value: -issueQty * unitCost,
-        notes: `Issued to staff member: ${selectedEmpId}`,
-      });
-      if (smErr) throw smErr;
+      // 3. Find source location with available stock or fallback to Central Store
+      const { data: locStock } = await supabase
+        .from('item_location_stocks')
+        .select('location_id, quantity')
+        .eq('item_id', selectedUniformId)
+        .gt('quantity', 0)
+        .order('quantity', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      // 4. Update authoritative inventory_items current_stock
-      const nextStock = Math.max(0, Number(targetUni.current_stock || 0) - issueQty);
-      await supabase
-        .from('inventory_items')
-        .update({
-          current_stock: nextStock,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', selectedUniformId);
+      let sourceLocId = locStock?.location_id;
+      if (!sourceLocId) {
+        const { data: defLoc } = await supabase
+          .from('inventory_locations')
+          .select('id')
+          .ilike('name', '%Store%')
+          .limit(1)
+          .maybeSingle();
+        sourceLocId = defLoc?.id;
+      }
+
+      // 4. Record atomic inventory transaction
+      const unitCost = Number(targetUni.current_weighted_average_cost || 0);
+      const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
+        p_item_id: selectedUniformId,
+        p_movement_type: 'issue',
+        p_quantity: issueQty,
+        p_source_location_id: sourceLocId || null,
+        p_destination_location_id: null,
+        p_unit_cost: unitCost,
+        p_purpose: 'Uniform Issue to Staff',
+        p_notes: `Issued to staff member: ${selectedEmpId}. ${issueNotes || ''}`.trim(),
+        p_business_date: businessDate,
+      });
+      if (txErr) throw txErr;
 
       // 5. Central Audit Log
+      const remainingStock = Math.max(0, Number(targetUni.current_stock || 0) - issueQty);
       await logAuditAction({
         action: 'CREATE',
         entity: 'Uniform Issue',
@@ -169,7 +182,7 @@ export default function UniformsPage() {
           employee_id: selectedEmpId,
           item_id: selectedUniformId,
           quantity: issueQty,
-          remaining_stock: nextStock,
+          remaining_stock: remainingStock,
         },
       });
 
@@ -199,30 +212,30 @@ export default function UniformsPage() {
         .eq('id', issueItemId);
       if (updErr) throw updErr;
 
-      // 2. Add back stock movement
+      // 2. Get destination location (Central Store)
+      const { data: defLoc } = await supabase
+        .from('inventory_locations')
+        .select('id')
+        .ilike('name', '%Store%')
+        .limit(1)
+        .maybeSingle();
+
       const targetUni = uniforms.find((u) => u.id === uniformItemId);
       const unitCost = Number(targetUni?.current_weighted_average_cost || 0);
-      await supabase.from('stock_movements').insert({
-        item_id: uniformItemId,
-        business_date: businessDate,
-        movement_type: 'return',
-        purpose: 'Uniform Return by Staff',
-        quantity: qty,
-        unit_cost: unitCost,
-        total_value: qty * unitCost,
-        notes: `Returned item from issue item ${issueItemId}`,
-      });
 
-      // 3. Update inventory_items stock
-      if (targetUni) {
-        await supabase
-          .from('inventory_items')
-          .update({
-            current_stock: Number(targetUni.current_stock || 0) + qty,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', uniformItemId);
-      }
+      // 3. Authoritative atomic inventory transaction
+      const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
+        p_item_id: uniformItemId,
+        p_movement_type: 'return',
+        p_quantity: qty,
+        p_source_location_id: null,
+        p_destination_location_id: defLoc?.id || null,
+        p_unit_cost: unitCost,
+        p_purpose: 'Uniform Return by Staff',
+        p_notes: `Returned item from issue item ${issueItemId}`,
+        p_business_date: businessDate,
+      });
+      if (txErr) throw txErr;
 
       await logAuditAction({
         action: 'UPDATE',

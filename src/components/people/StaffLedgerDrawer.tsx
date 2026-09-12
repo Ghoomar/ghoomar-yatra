@@ -196,37 +196,35 @@ export function StaffLedgerDrawer({
         .eq('id', issueItemId);
       if (updErr) throw updErr;
 
-      // 2. Fetch current item info
+      // 2. Fetch destination location (Central Store)
+      const { data: defLoc } = await supabase
+        .from('inventory_locations')
+        .select('id')
+        .ilike('name', '%Store%')
+        .limit(1)
+        .maybeSingle();
+
       const { data: itemData } = await supabase
         .from('inventory_items')
-        .select('current_stock, current_weighted_average_cost')
+        .select('current_weighted_average_cost')
         .eq('id', itemId)
         .maybeSingle();
 
       const unitCost = Number(itemData?.current_weighted_average_cost || 0);
 
-      // 3. Stock movement
-      await supabase.from('stock_movements').insert({
-        item_id: itemId,
-        business_date: today,
-        movement_type: 'return',
-        purpose: 'Uniform Return by Staff',
-        quantity: qty,
-        unit_cost: unitCost,
-        total_value: qty * unitCost,
-        notes: `Returned by staff member ${employee?.name} (${employee?.employee_code})`,
+      // 3. Authoritative atomic inventory transaction
+      const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
+        p_item_id: itemId,
+        p_movement_type: 'return',
+        p_quantity: qty,
+        p_source_location_id: null,
+        p_destination_location_id: defLoc?.id || null,
+        p_unit_cost: unitCost,
+        p_purpose: 'Uniform Return by Staff',
+        p_notes: `Returned by staff member ${employee?.name || ''} (${employee?.employee_code || ''})`.trim(),
+        p_business_date: today,
       });
-
-      // 4. Update inventory_items stock
-      if (itemData) {
-        await supabase
-          .from('inventory_items')
-          .update({
-            current_stock: Number(itemData.current_stock || 0) + qty,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', itemId);
-      }
+      if (txErr) throw txErr;
 
       await logAuditAction({
         action: 'UPDATE',

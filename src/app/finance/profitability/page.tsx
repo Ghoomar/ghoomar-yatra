@@ -58,6 +58,10 @@ export default function ProfitabilityPage() {
       let sample = 0;
       let other = 0;
       (movs || []).forEach((m) => {
+        // Exclude internal transfers, purchases, opening stock, returns, and physical count adjustments from P&L expense
+        if (['transfer', 'purchase', 'opening', 'return', 'count_adjustment', 'physical_count_adjustment'].includes(m.movement_type)) {
+          return;
+        }
         const val = Math.abs(Number(m.total_value)) || 0;
         if (m.purpose === 'Customer Food') cust += val;
         else if (m.purpose === 'Staff Food' || m.movement_type === 'staff_food') staff += val;
