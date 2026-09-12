@@ -13,6 +13,7 @@ import { InventoryCategoryModal } from '@/components/inventory/InventoryCategory
 import { ActivityMasterModal } from '@/components/activities/ActivityMasterModal';
 import { UserManagementModal } from '@/components/admin/UserManagementModal';
 import { DeleteUserModal } from '@/components/admin/DeleteUserModal';
+import { DepartmentCategoryModal } from '@/components/admin/DepartmentCategoryModal';
 import { RolePermissionMatrix } from '@/components/admin/RolePermissionMatrix';
 import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { logAuditAction } from '@/lib/audit-logger';
@@ -60,6 +61,7 @@ export default function AdminSettingsPage() {
   const [unitModalOpen, setUnitModalOpen] = useState(false);
   const [vendorCategoryModalOpen, setVendorCategoryModalOpen] = useState(false);
   const [inventoryCategoryModalOpen, setInventoryCategoryModalOpen] = useState(false);
+  const [deptCategoryModalOpen, setDeptCategoryModalOpen] = useState(false);
   const [activityModalOpen, setActivityModalOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -252,6 +254,14 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Tag className="h-4 w-4 text-stone-500" /> Vendor Categories ({vendorCategories.length})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeptCategoryModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <Layers className="h-4 w-4 text-amber-600" /> Dept ↔ Category Mapping
             </Button>
           </div>
 
@@ -717,6 +727,11 @@ export default function AdminSettingsPage() {
       <InventoryCategoryModal
         isOpen={inventoryCategoryModalOpen}
         onClose={() => setInventoryCategoryModalOpen(false)}
+        onUpdated={loadData}
+      />
+      <DepartmentCategoryModal
+        isOpen={deptCategoryModalOpen}
+        onClose={() => setDeptCategoryModalOpen(false)}
         onUpdated={loadData}
       />
       <ActivityMasterModal

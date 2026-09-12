@@ -85,7 +85,7 @@ export default function StoreIssuesPage() {
         supabase.from('inventory_locations').select('*').eq('is_active', true).order('name'),
         supabase.from('departments').select('*').eq('is_active', true).order('name'),
         supabase.from('teams').select('*, department:departments(id, name)').eq('is_active', true).order('name'),
-        supabase.from('employees').select('id, name, employment_status, department_id, team_id, role:employee_roles(name)').eq('employment_status', 'Active').order('name'),
+        supabase.from('employees').select('id, name, employment_status, department_id, team_id, role:employee_roles(id, name, is_active, can_receive_store_issues)').eq('employment_status', 'Active').order('name'),
         supabase.from('department_inventory_categories').select('*'),
       ]);
 
@@ -153,17 +153,20 @@ export default function StoreIssuesPage() {
     return items;
   }, [items, departmentId, deptCategories]);
 
-  // Smart Staff Filtering: Department -> Team -> Staff
+  // Smart Staff Filtering: Department -> Team -> Eligible Role (can_receive_store_issues) -> Eligible Staff
   const filteredEmployees = useMemo(() => {
+    // Only active employees whose active role permits receiving store issues
+    const eligiblePool = employees.filter(
+      (e) => e.role?.can_receive_store_issues && e.role?.is_active !== false
+    );
+
     if (teamId) {
-      const teamStaff = employees.filter((e) => e.team_id === teamId);
-      if (teamStaff.length > 0) return teamStaff;
+      return eligiblePool.filter((e) => e.team_id === teamId);
     }
     if (departmentId) {
-      const deptStaff = employees.filter((e) => e.department_id === departmentId);
-      if (deptStaff.length > 0) return deptStaff;
+      return eligiblePool.filter((e) => e.department_id === departmentId);
     }
-    return employees;
+    return eligiblePool;
   }, [employees, departmentId, teamId]);
 
   // Filter available teams based on selected department
@@ -541,13 +544,27 @@ export default function StoreIssuesPage() {
                     </div>
 
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Receiving Staff In-Charge</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-medium text-stone-700">
+                          Receiving Staff In-Charge <span className="text-rose-500">*</span>
+                        </label>
+                        {filteredEmployees.length === 0 && (departmentId || teamId) && (
+                          <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            No eligible receivers
+                          </span>
+                        )}
+                      </div>
                       <select
                         value={employeeId}
                         onChange={(e) => setEmployeeId(e.target.value)}
+                        required
                         className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                       >
-                        <option value="">Select Staff...</option>
+                        <option value="">
+                          {filteredEmployees.length === 0
+                            ? 'No staff with issue receiving permission'
+                            : 'Select Eligible Staff...'}
+                        </option>
                         {filteredEmployees.map((emp) => (
                           <option key={emp.id} value={emp.id}>
                             {emp.name} ({emp.role?.name || 'Staff'})

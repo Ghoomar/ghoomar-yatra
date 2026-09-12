@@ -245,35 +245,20 @@ export default function PurchasesPage() {
 
         if (txErr) throw txErr;
 
-        // Upsert vendor-item price memory
+        // Atomic Upsert vendor-item price memory
         try {
-          const { data: existingLink } = await supabase
+          await supabase
             .from('vendor_items')
-            .select('id')
-            .eq('vendor_id', selectedVendorId)
-            .eq('inventory_item_id', line.item_id)
-            .maybeSingle();
-
-          if (existingLink) {
-            await supabase
-              .from('vendor_items')
-              .update({
-                last_purchase_rate: baseRate,
-                last_purchase_date: businessDate,
-                is_preferred: true,
-              })
-              .eq('id', existingLink.id);
-          } else {
-            await supabase
-              .from('vendor_items')
-              .insert({
+            .upsert(
+              {
                 vendor_id: selectedVendorId,
                 inventory_item_id: line.item_id,
                 last_purchase_rate: baseRate,
                 last_purchase_date: businessDate,
                 is_preferred: true,
-              });
-          }
+              },
+              { onConflict: 'vendor_id,inventory_item_id' }
+            );
         } catch (memErr) {
           console.warn('Could not update vendor price memory:', memErr);
         }

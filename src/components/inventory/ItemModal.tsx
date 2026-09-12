@@ -276,9 +276,9 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
   if (!isOpen) return null;
 
-  // Filter categories by selected inventory class
+  // Filter categories by selected inventory class (active for new, or existing if editing)
   const filteredCategories = categories.filter(
-    (c) => c.is_active && (!c.inventory_class || c.inventory_class === inventoryClass)
+    (c) => (c.is_active || c.id === categoryId) && (!c.inventory_class || c.inventory_class === inventoryClass || c.id === categoryId)
   );
 
   return (
@@ -426,7 +426,9 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
                   <option value="">Same as Base Unit</option>
-                  {units.map((u) => (
+                  {units
+                    .filter((u) => u.is_active || u.id === secondaryUnitId)
+                    .map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.symbol})
                     </option>
