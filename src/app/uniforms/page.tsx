@@ -9,6 +9,12 @@ import { getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
 import { Shirt, Plus, RefreshCw, CheckCircle, AlertCircle, ShieldCheck, RotateCcw } from 'lucide-react';
 
+function getEmployeeRoleName(emp: any): string {
+  if (!emp) return 'Staff';
+  if (Array.isArray(emp.role)) return emp.role[0]?.name || 'Staff';
+  return emp.role?.name || emp.designation || 'Staff';
+}
+
 export default function UniformsPage() {
   const supabase = createClient();
   const [businessDate] = useState(getTodayBusinessDate());
@@ -39,7 +45,7 @@ export default function UniformsPage() {
       // 2. Active Employees
       const { data: empData, error: eError } = await supabase
         .from('employees')
-        .select('id, name, employee_code, designation')
+        .select('id, name, employee_code, role:employee_roles(name)')
         .eq('employment_status', 'Active')
         .order('name');
 
@@ -48,7 +54,7 @@ export default function UniformsPage() {
         .from('employee_uniform_issues')
         .select(`
           id, business_date, created_at, notes,
-          employee:employees(name, employee_code, designation),
+          employee:employees(name, employee_code, role:employee_roles(name)),
           items:employee_uniform_issue_items(
             id, quantity, status, item_id, uniform_item_id, returned_at,
             item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, item_code),
@@ -390,7 +396,7 @@ export default function UniformsPage() {
                     <td className="py-3 px-3">
                       <div className="font-semibold text-stone-900">{iss.employee?.name || 'Unknown Staff'}</div>
                       <div className="text-[11px] text-stone-400 font-mono">
-                        {iss.employee?.employee_code} • {iss.employee?.designation || 'Staff'}
+                        {iss.employee?.employee_code} • {getEmployeeRoleName(iss.employee)}
                       </div>
                     </td>
                     <td className="py-3 px-3">
@@ -462,7 +468,7 @@ export default function UniformsPage() {
                 >
                   <option value="">Select Staff...</option>
                   {employees.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.employee_code}) - {e.designation || 'Staff'}</option>
+                    <option key={e.id} value={e.id}>{e.name} ({e.employee_code}) - {getEmployeeRoleName(e)}</option>
                   ))}
                 </select>
               </div>
