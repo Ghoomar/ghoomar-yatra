@@ -143,6 +143,9 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
             const visibleItems = section.items.filter((item) => hasPermission(item.permission));
             if (visibleItems.length === 0) return null;
 
+            // Collect all navigation hrefs to resolve hierarchical route collisions
+            const allNavHrefs = navSections.flatMap((s) => s.items.map((i) => i.href));
+
             return (
               <div key={section.title}>
                 <div className="text-[10px] font-bold text-stone-300 uppercase tracking-wider px-3 mb-2">
@@ -150,7 +153,13 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
                 </div>
                 <div className="space-y-1">
                   {visibleItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                    const isExactMatch = pathname === item.href;
+                    const isPrefixMatch = pathname.startsWith(item.href + '/');
+                    // If this is a prefix match, ensure no other nav item is a more specific match
+                    const hasCloserMatch = isPrefixMatch && allNavHrefs.some(
+                      (other) => other !== item.href && (pathname === other || (other.length > item.href.length && pathname.startsWith(other)))
+                    );
+                    const isActive = isExactMatch || (isPrefixMatch && !hasCloserMatch);
                     const Icon = item.icon;
 
                     return (

@@ -183,6 +183,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
     }
   };
 
+  const isSameUnit = !secondaryUnitId || secondaryUnitId === unitId;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -191,6 +193,12 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
     }
     if (!unitId) {
       setErrorMessage('Base Unit is required.');
+      return;
+    }
+
+    const parsedFactor = isSameUnit ? 1 : Number(conversionFactor);
+    if (isNaN(parsedFactor) || parsedFactor <= 0 || !isFinite(parsedFactor)) {
+      setErrorMessage('Conversion factor must be a valid positive number greater than 0.');
       return;
     }
 
@@ -206,7 +214,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         inventory_class: inventoryClass,
         unit_id: unitId || null,
         secondary_unit_id: secondaryUnitId || null,
-        conversion_factor: Number(conversionFactor) || 1,
+        conversion_factor: parsedFactor,
         storage_type: isFood ? storageType : 'Ambient',
         minimum_stock: minimumStock,
         preferred_stock: preferredStock,
@@ -382,7 +390,13 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 <select
                   required
                   value={unitId}
-                  onChange={(e) => setUnitId(e.target.value)}
+                  onChange={(e) => {
+                    const newUnit = e.target.value;
+                    setUnitId(newUnit);
+                    if (!secondaryUnitId || secondaryUnitId === newUnit) {
+                      setConversionFactor(1);
+                    }
+                  }}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
                   <option value="">Select Base Unit...</option>
@@ -402,7 +416,13 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 </label>
                 <select
                   value={secondaryUnitId}
-                  onChange={(e) => setSecondaryUnitId(e.target.value)}
+                  onChange={(e) => {
+                    const newSec = e.target.value;
+                    setSecondaryUnitId(newSec);
+                    if (!newSec || newSec === unitId) {
+                      setConversionFactor(1);
+                    }
+                  }}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
                   <option value="">Same as Base Unit</option>
@@ -420,19 +440,32 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 </label>
                 <input
                   type="number"
-                  min="0.001"
-                  step="0.01"
-                  value={conversionFactor}
-                  onChange={(e) => setConversionFactor(parseFloat(e.target.value) || 1)}
+                  min="0.000001"
+                  step="any"
+                  value={isSameUnit ? 1 : conversionFactor}
+                  disabled={isSameUnit}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setConversionFactor(val === '' ? ('' as any) : parseFloat(val));
+                  }}
                   placeholder="1.0"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                  className={`w-full rounded-md border p-2 text-stone-900 focus:outline-none ${
+                    isSameUnit 
+                      ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed' 
+                      : 'border-stone-300 focus:border-amber-500 bg-white'
+                  }`}
                 />
+                {isSameUnit && (
+                  <span className="text-[10px] text-stone-400 mt-0.5 block">
+                    Fixed at 1 for identical units
+                  </span>
+                )}
               </div>
             </div>
 
-            {secondaryUnitId && secondaryUnitId !== unitId && (
+            {!isSameUnit && secondaryUnitId && (
               <div className="p-2.5 bg-amber-50/80 rounded-lg border border-amber-200/70 text-[11px] text-amber-800">
-                <strong>Conversion Formula:</strong> 1 {units.find((u) => u.id === secondaryUnitId)?.name || 'Purchase Unit'} = {conversionFactor} {units.find((u) => u.id === unitId)?.symbol || 'Base Units'}.
+                <strong>Conversion Formula:</strong> 1 {units.find((u) => u.id === secondaryUnitId)?.name || 'Purchase Unit'} = {conversionFactor || 1} {units.find((u) => u.id === unitId)?.symbol || 'Base Units'}.
               </div>
             )}
           </div>

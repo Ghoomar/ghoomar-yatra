@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatNumber } from '@/lib/utils';
 import { BarChart3, Download, RefreshCw, FileSpreadsheet, Layers, ArrowRightLeft, TrendingUp } from 'lucide-react';
+import { DailySalesLineGraph } from '@/components/reports/DailySalesLineGraph';
 
 export default function ReportsPage() {
   const supabase = createClient();
@@ -143,7 +144,14 @@ export default function ReportsPage() {
 
       {/* TAB 1: DAILY OPS */}
       {activeTab === 'daily' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Section A: Daily Sales Trend Line Graph with Month & Custom Range Filtering */}
+          <DailySalesLineGraph
+            selectedDate={businessDate}
+            onSelectDate={(date) => setBusinessDate(date)}
+          />
+
+          {/* Section B: Daily Operations Flash Report */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
