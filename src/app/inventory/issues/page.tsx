@@ -38,6 +38,7 @@ export default function StoreIssuesPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [deptCategories, setDeptCategories] = useState<any[]>([]);
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
+  const [dispatchFilter, setDispatchFilter] = useState<'all' | 'issue' | 'transfer'>('all');
 
   // Issue Form State
   const [sourceLocationId, setSourceLocationId] = useState('');
@@ -109,21 +110,28 @@ export default function StoreIssuesPage() {
         setTransferDestLoc(fridgeLoc.id);
       }
 
-      // Load recent ledger movements
-      const { data: mData } = await supabase
+      // Load recent ledger movements (issues, consumption issues, and transfers)
+      const { data: mData, error: mErr } = await supabase
         .from('stock_movements')
         .select(`
           id, business_date, movement_type, quantity, purpose, notes, created_at,
           item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)),
           department:departments(name),
-          team:teams(name),
-          responsible_person:employees(name),
+          responsible_person:employees!stock_movements_responsible_person_id_fkey(
+            name,
+            team:teams(name),
+            role:employee_roles(name)
+          ),
           source_loc:inventory_locations!stock_movements_source_location_id_fkey(name),
           dest_loc:inventory_locations!stock_movements_destination_location_id_fkey(name)
         `)
+        .in('movement_type', ['issue', 'consumption_issue', 'staff_food', 'wastage', 'spoilage', 'transfer'])
         .order('created_at', { ascending: false })
-        .limit(15);
+        .limit(25);
 
+      if (mErr) {
+        console.error('Error loading recent store dispatches:', mErr);
+      }
       setRecentMovements(mData || []);
     } catch (err: any) {
       console.error('Error loading store issues data:', err);
@@ -261,6 +269,10 @@ export default function StoreIssuesPage() {
     setMessage(null);
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       // 1. Create consumption_issues header
       const { data: issueHeader, error: hErr } = await supabase
         .from('consumption_issues')
@@ -271,6 +283,7 @@ export default function StoreIssuesPage() {
           responsible_chef_id: employeeId || null,
           purpose,
           notes,
+          created_by: user?.id || null,
         })
         .select()
         .single();
@@ -314,6 +327,7 @@ export default function StoreIssuesPage() {
           p_reference_id: issueHeader.id,
           p_reference_type: 'consumption_issues',
           p_notes: notes || `Issued to ${departments.find((d) => d.id === departmentId)?.name}`,
+          p_created_by: user?.id || null,
         });
 
         if (txErr) throw txErr;
@@ -334,7 +348,7 @@ export default function StoreIssuesPage() {
       setMessage({ type: 'success', text: 'Store issue recorded and stock deducted successfully.' });
       setLines([{ item_id: '', quantity: 1, use_pack_unit: false }]);
       setNotes('');
-      loadData();
+      await loadData();
     } catch (err: any) {
       console.error('Error executing store issue:', err);
       setMessage({ type: 'error', text: err.message || 'Error recording store issue.' });
@@ -371,6 +385,10 @@ export default function StoreIssuesPage() {
     setMessage(null);
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const unitCost = Number(it.current_weighted_average_cost || 0);
       const srcName = locations.find((l) => l.id === transferSrcLoc)?.name || 'Store';
       const destName = locations.find((l) => l.id === transferDestLoc)?.name || 'Fridge';
@@ -385,6 +403,7 @@ export default function StoreIssuesPage() {
         p_destination_location_id: transferDestLoc,
         p_purpose: 'Inter-Location Stock Transfer',
         p_notes: transferNotes || `Transferred from ${srcName} to ${destName} (${transferQty} ${transferUsePack ? it.sec_unit?.symbol || 'packs' : it.unit?.symbol || 'units'})`,
+        p_created_by: user?.id || null,
       });
 
       if (txErr) throw txErr;
@@ -395,7 +414,7 @@ export default function StoreIssuesPage() {
       });
       setTransferQty(1);
       setTransferNotes('');
-      loadData();
+      await loadData();
     } catch (err: any) {
       console.error('Error executing location transfer:', err);
       setMessage({ type: 'error', text: err.message || 'Error executing location transfer.' });
@@ -745,35 +764,157 @@ export default function StoreIssuesPage() {
           <div>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Recent Store Dispatches</CardTitle>
-                <CardDescription className="text-xs">Audit ledger of dispatches and transfers</CardDescription>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Recent Store Dispatches</CardTitle>
+                  <div className="flex gap-1 bg-stone-100 p-0.5 rounded-md">
+                    <button
+                      type="button"
+                      onClick={() => setDispatchFilter('all')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                        dispatchFilter === 'all'
+                          ? 'bg-white text-stone-900 shadow-xs'
+                          : 'text-stone-500 hover:text-stone-800'
+                      }`}
+                    >
+                      All ({recentMovements.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDispatchFilter('issue')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                        dispatchFilter === 'issue'
+                          ? 'bg-white text-stone-900 shadow-xs'
+                          : 'text-stone-500 hover:text-stone-800'
+                      }`}
+                    >
+                      Issues ({recentMovements.filter((m) => m.movement_type !== 'transfer').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDispatchFilter('transfer')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                        dispatchFilter === 'transfer'
+                          ? 'bg-white text-stone-900 shadow-xs'
+                          : 'text-stone-500 hover:text-stone-800'
+                      }`}
+                    >
+                      Transfers ({recentMovements.filter((m) => m.movement_type === 'transfer').length})
+                    </button>
+                  </div>
+                </div>
+                <CardDescription className="text-xs">
+                  Authoritative audit ledger of department dispatches & internal transfers
+                </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="space-y-2 text-xs">
-                  {recentMovements.map((m) => (
-                    <div key={m.id} className="p-2.5 rounded-lg border border-stone-200 bg-stone-50/50 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-stone-900">{m.item?.name}</span>
-                        <Badge
-                          variant={m.movement_type === 'transfer' ? 'info' : 'warning'}
-                          className="capitalize text-[10px] py-0"
+                <div className="space-y-2.5 text-xs max-h-[600px] overflow-y-auto pr-1">
+                  {recentMovements
+                    .filter((m) => {
+                      if (dispatchFilter === 'issue') return m.movement_type !== 'transfer';
+                      if (dispatchFilter === 'transfer') return m.movement_type === 'transfer';
+                      return true;
+                    })
+                    .map((m) => {
+                      const isTransfer = m.movement_type === 'transfer';
+                      const timeStr = m.created_at
+                        ? new Date(m.created_at).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : '';
+
+                      return (
+                        <div
+                          key={m.id}
+                          className="p-3 rounded-lg border border-stone-200 bg-white hover:border-amber-300 transition-colors shadow-xs space-y-2"
                         >
-                          {m.movement_type}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-stone-500">
-                        <span>
-                          {m.quantity} {m.item?.unit?.symbol || 'units'}
-                        </span>
-                        <span className="font-mono">{m.business_date}</span>
-                      </div>
-                      <div className="text-[10px] text-stone-400 truncate">
-                        {m.movement_type === 'transfer'
-                          ? `${m.source_loc?.name} → ${m.dest_loc?.name}`
-                          : `To: ${m.department?.name || 'Operations'} • By: ${m.responsible_person?.name || 'Staff'}`}
-                      </div>
-                    </div>
-                  ))}
+                          {/* Item SKU & Movement Type Badge */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-stone-900 text-xs truncate">
+                                {m.item?.name}
+                              </div>
+                              {m.item?.item_code && (
+                                <span className="text-[10px] font-mono text-stone-400">
+                                  [{m.item.item_code}]
+                                </span>
+                              )}
+                            </div>
+                            <Badge
+                              variant={
+                                isTransfer
+                                  ? 'info'
+                                  : m.movement_type === 'issue'
+                                  ? 'warning'
+                                  : 'default'
+                              }
+                              className="capitalize text-[10px] px-1.5 py-0.5 shrink-0"
+                            >
+                              {m.movement_type.replace('_', ' ')}
+                            </Badge>
+                          </div>
+
+                          {/* Quantity & Date/Time */}
+                          <div className="flex items-center justify-between text-xs text-stone-600">
+                            <span className="font-bold text-stone-900 font-mono">
+                              {m.quantity} {m.item?.unit?.symbol || 'units'}
+                            </span>
+                            <span className="text-[10px] text-stone-500 font-mono">
+                              {m.business_date} {timeStr ? `• ${timeStr}` : ''}
+                            </span>
+                          </div>
+
+                          {/* Chain of Custody / Routing */}
+                          <div className="text-[11px] text-stone-700 bg-stone-50/80 p-2 rounded border border-stone-100 font-medium">
+                            {isTransfer ? (
+                              <div className="flex items-center gap-1.5 text-xs">
+                                <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
+                                <span className="text-blue-600 font-bold">→</span>
+                                <span className="text-stone-900 font-semibold">{m.dest_loc?.name || 'Fridge'}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center flex-wrap gap-1 leading-tight">
+                                <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
+                                <span className="text-amber-600 font-bold">→</span>
+                                <span className="text-stone-900 font-semibold">{m.department?.name || 'Operations'}</span>
+                                {m.responsible_person?.team?.name && (
+                                  <>
+                                    <span className="text-amber-600 font-bold">→</span>
+                                    <span className="text-stone-800">{m.responsible_person.team.name}</span>
+                                  </>
+                                )}
+                                {m.responsible_person?.name && (
+                                  <>
+                                    <span className="text-amber-600 font-bold">→</span>
+                                    <span className="text-amber-900 font-semibold">
+                                      {m.responsible_person.name}
+                                      {m.responsible_person.role?.name ? ` (${m.responsible_person.role.name})` : ''}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Purpose & Notes */}
+                          {(m.purpose || (m.notes && m.notes !== `Issued to ${m.department?.name}`)) && (
+                            <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5 border-t border-stone-100">
+                              {m.purpose && (
+                                <span className="truncate">
+                                  <span className="font-semibold text-stone-600">Purpose:</span> {m.purpose}
+                                </span>
+                              )}
+                              {m.notes && m.notes !== `Issued to ${m.department?.name}` && (
+                                <span className="text-stone-400 italic truncate max-w-[150px]" title={m.notes}>
+                                  {m.notes}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
                   {recentMovements.length === 0 && (
                     <div className="py-8 text-center text-stone-400">No recent store issues logged.</div>
                   )}
@@ -786,8 +927,9 @@ export default function StoreIssuesPage() {
 
       {/* TAB 2: Inter-Location Stock Transfer (Fridge / Counters) */}
       {activeTab === 'transfer' && (
-        <div className="max-w-2xl mx-auto">
-          <Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5 text-amber-600" />
@@ -943,7 +1085,85 @@ export default function StoreIssuesPage() {
                 </div>
               </form>
             </CardContent>
-          </Card>
+            </Card>
+          </div>
+
+          {/* Recent Location Transfers on Tab 2 */}
+          <div>
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Recent Location Transfers</CardTitle>
+                  <Badge variant="info" className="text-[10px]">
+                    {recentMovements.filter((m) => m.movement_type === 'transfer').length}
+                  </Badge>
+                </div>
+                <CardDescription className="text-xs">
+                  Transfers between stores, fridges, and counters
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2.5 text-xs max-h-[600px] overflow-y-auto pr-1">
+                  {recentMovements
+                    .filter((m) => m.movement_type === 'transfer')
+                    .map((m) => {
+                      const timeStr = m.created_at
+                        ? new Date(m.created_at).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : '';
+                      return (
+                        <div
+                          key={m.id}
+                          className="p-3 rounded-lg border border-stone-200 bg-white hover:border-blue-300 transition-colors shadow-xs space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-stone-900 text-xs truncate">
+                                {m.item?.name}
+                              </div>
+                              {m.item?.item_code && (
+                                <span className="text-[10px] font-mono text-stone-400">
+                                  [{m.item.item_code}]
+                                </span>
+                              )}
+                            </div>
+                            <Badge variant="info" className="capitalize text-[10px] px-1.5 py-0.5 shrink-0">
+                              Transfer
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-stone-600">
+                            <span className="font-bold text-stone-900 font-mono">
+                              {m.quantity} {m.item?.unit?.symbol || 'units'}
+                            </span>
+                            <span className="text-[10px] text-stone-500 font-mono">
+                              {m.business_date} {timeStr ? `• ${timeStr}` : ''}
+                            </span>
+                          </div>
+
+                          <div className="text-xs text-stone-700 bg-blue-50/50 p-2 rounded border border-blue-100 flex items-center gap-1.5 font-medium">
+                            <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
+                            <span className="text-blue-600 font-bold">→</span>
+                            <span className="text-stone-900 font-semibold">{m.dest_loc?.name || 'Fridge'}</span>
+                          </div>
+
+                          {m.notes && (
+                            <div className="text-[10px] text-stone-400 italic truncate" title={m.notes}>
+                              {m.notes}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {recentMovements.filter((m) => m.movement_type === 'transfer').length === 0 && (
+                    <div className="py-8 text-center text-stone-400">No recent location transfers logged.</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
     </div>
