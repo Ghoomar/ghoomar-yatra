@@ -17,8 +17,6 @@ export default function UtilitiesPage() {
   const [meters, setMeters] = useState<any[]>([]);
   const [readings, setReadings] = useState<any[]>([]);
   const [selectedMeterId, setSelectedMeterId] = useState('');
-  const [lpgTransactions, setLpgTransactions] = useState<any[]>([]);
-  const [dieselTransactions, setDieselTransactions] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -28,8 +26,8 @@ export default function UtilitiesPage() {
     try {
       const { data: mData } = await supabase.from('meters').select('*').order('meter_name');
       const { data: rData } = await supabase
-        .from('meter_readings')
-        .select('*, meter:meters(meter_name)')
+        .from('meter_readings_ledger')
+        .select('*, meter:meters(meter_name, unit)')
         .eq('business_date', businessDate)
         .order('reading_timestamp', { ascending: true });
 
@@ -38,20 +36,8 @@ export default function UtilitiesPage() {
       if (mData && mData.length > 0 && !selectedMeterId) {
         setSelectedMeterId(mData[0].id);
       }
-
-      const { data: lpgData } = await supabase
-        .from('lpg_transactions')
-        .select('*')
-        .order('transaction_date', { ascending: false });
-      setLpgTransactions(lpgData || []);
-
-      const { data: dData } = await supabase
-        .from('diesel_transactions')
-        .select('*')
-        .order('transaction_date', { ascending: false });
-      setDieselTransactions(dData || []);
     } catch (err: any) {
-      console.error(err);
+      console.error('Failed to load utilities data:', err);
     } finally {
       setLoading(false);
     }
@@ -67,10 +53,10 @@ export default function UtilitiesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Zap className="h-6 w-6 text-amber-600" />
-            Utilities & Fuel Management
+            Utilities &amp; Fuel Management
           </h1>
           <p className="text-sm text-stone-500">
-            Electricity meter delta ledger, commercial LPG cylinder inventory, and diesel generator tracking.
+            Continuous electricity KVAH meter ledger, commercial LPG cylinder inventory, and diesel generator operations.
           </p>
         </div>
 
@@ -110,6 +96,16 @@ export default function UtilitiesPage() {
           <Zap className="h-4 w-4" /> Electricity Meter Readings
         </button>
         <button
+          onClick={() => setActiveTab('diesel')}
+          className={`pb-3 flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
+            activeTab === 'diesel'
+              ? 'border-amber-600 text-amber-700 font-bold'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          <Fuel className="h-4 w-4" /> Diesel &amp; Generator
+        </button>
+        <button
           onClick={() => setActiveTab('lpg')}
           className={`pb-3 flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
             activeTab === 'lpg'
@@ -118,16 +114,6 @@ export default function UtilitiesPage() {
           }`}
         >
           <Flame className="h-4 w-4" /> Commercial LPG Cylinders
-        </button>
-        <button
-          onClick={() => setActiveTab('diesel')}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'diesel'
-              ? 'border-amber-600 text-amber-700 font-bold'
-              : 'border-transparent text-stone-500 hover:text-stone-800'
-          }`}
-        >
-          <Fuel className="h-4 w-4" /> Diesel & Generator
         </button>
       </div>
 
@@ -143,19 +129,17 @@ export default function UtilitiesPage() {
         />
       )}
 
-      {activeTab === 'lpg' && (
-        <LpgTab
+      {activeTab === 'diesel' && (
+        <DieselTab
           businessDate={businessDate}
-          transactions={lpgTransactions}
           onRefresh={loadData}
           setMessage={setMessage}
         />
       )}
 
-      {activeTab === 'diesel' && (
-        <DieselTab
+      {activeTab === 'lpg' && (
+        <LpgTab
           businessDate={businessDate}
-          transactions={dieselTransactions}
           onRefresh={loadData}
           setMessage={setMessage}
         />

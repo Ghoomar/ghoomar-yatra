@@ -42,6 +42,11 @@ export default function DashboardPage() {
   const [planningBreakEven, setPlanningBreakEven] = useState<number>(3000000);
   const [rentRate, setRentRate] = useState<number>(0.10);
   const [investorRate, setInvestorRate] = useState<number>(0.08);
+  const [operationalUtilitiesCost, setOperationalUtilitiesCost] = useState({
+    electricityCost: 0,
+    generatorDieselCost: 0,
+    commercialLpgCost: 0,
+  });
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -99,15 +104,20 @@ export default function DashboardPage() {
       setAbsentStaffCount((attRecords || []).filter((a) => a.status === 'Absent').length);
       setIsDayClosed(bDay?.status === 'closed');
 
-      // 7. Authoritative MTD Financial RPC & Fixed Cost Rules & Targets
-      const [mtdRes, { data: costRules }, { data: bepTarget }] = await Promise.all([
+      // 7. Authoritative MTD Financial RPC, Fixed Cost Rules, Electricity & Fuel
+      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: elecReadings }, { data: fuelMovs }] = await Promise.all([
         fetchMTDFinancialSummary(supabase, businessDate),
         supabase.from('financial_cost_rules').select('*').eq('is_active', true),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
+        supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
+        supabase.from('stock_movements').select('purpose, movement_type, total_value')
+          .eq('business_date', businessDate)
+          .in('purpose', ['Generator Fuel', 'Kitchen Gas']),
       ]);
 
       setMtdSummary(mtdRes);
 
+      let elecRate = 10.00;
       if (costRules && costRules.length > 0) {
         const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
         const fixedSum = fixedRules.reduce((sum, r) => sum + (Number(r.amount_or_rate) || 0), 0);
@@ -118,7 +128,26 @@ export default function DashboardPage() {
 
         const investorRule = costRules.find((r) => r.category === 'Finance' && r.calculation_method === 'percentage_of_revenue');
         if (investorRule) setInvestorRate(Number(investorRule.amount_or_rate) || 0.08);
+
+        const elecCostRule = costRules.find((r) => r.category === 'Utilities' && r.calculation_method === 'meter_based');
+        if (elecCostRule) elecRate = Number(elecCostRule.amount_or_rate) || 10.00;
       }
+
+      // Calculate Operational Utilities (Electricity, Diesel, LPG)
+      const totalKvah = (elecReadings || []).reduce((s: number, r: any) => s + (Number(r.delta_consumption) || 0), 0);
+      const totalElec = totalKvah * elecRate;
+      const dieselVal = (fuelMovs || [])
+        .filter((m: any) => m.purpose === 'Generator Fuel' && m.movement_type === 'consumption')
+        .reduce((s: number, m: any) => s + (Number(m.total_value) || 0), 0);
+      const lpgVal = (fuelMovs || [])
+        .filter((m: any) => m.purpose === 'Kitchen Gas' && m.movement_type === 'consumption')
+        .reduce((s: number, m: any) => s + (Number(m.total_value) || 0), 0);
+
+      setOperationalUtilitiesCost({
+        electricityCost: totalElec,
+        generatorDieselCost: dieselVal,
+        commercialLpgCost: lpgVal,
+      });
 
       if (bepTarget?.target_value) {
         setPlanningBreakEven(Number(bepTarget.target_value) || 3000000);
@@ -163,6 +192,7 @@ export default function DashboardPage() {
     staffFoodConsumption: Number(financialSummary?.staff_food_consumption) || 0,
     wastageCost: Number(financialSummary?.wastage_cost) || 0,
     variableExpenses: Number(financialSummary?.variable_expenses) || 0,
+    operationalUtilities: operationalUtilitiesCost,
     revenueLinkedRates: { rentPercent: rentRate, investorSharePercent: investorRate },
     monthlyFixedAllocations: { 
       totalMonthlySalaries: actualSalariesPool, 

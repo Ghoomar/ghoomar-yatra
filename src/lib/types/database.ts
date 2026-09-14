@@ -267,3 +267,25 @@ export interface FinancialCostRule {
   updated_at?: string;
 }
 
+export interface MeterReadingLedger {
+  id: string;
+  meter_id: string;
+  business_date: string;
+  reading_timestamp: string;
+  reading_value: number;
+  is_reset: boolean;
+  notes?: string | null;
+  recorded_by?: string | null;
+  created_at?: string;
+  previous_reading_value?: number | null;
+  previous_reading_timestamp?: string | null;
+  previous_is_reset?: boolean | null;
+  delta_consumption: number;
+  meter?: {
+    id: string;
+    meter_name: string;
+    meter_number?: string | null;
+    unit?: string;
+  };
+}
+

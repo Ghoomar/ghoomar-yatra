@@ -8,7 +8,10 @@ import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatPercent, getMonthDateRange } from '@/lib/utils';
 import { calculateDailyProfitability, calculateBreakEvenPacing, fetchMTDFinancialSummary } from '@/lib/finance-engine';
 import { MTDFinancialSummary } from '@/lib/types/database';
-import { TrendingUp, RefreshCw } from 'lucide-react';
+import { TrendingUp, RefreshCw, Zap, Fuel, Flame } from 'lucide-react';
+
+const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
+const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
 
 export default function ProfitabilityPage() {
   const supabase = createClient();
@@ -24,6 +27,16 @@ export default function ProfitabilityPage() {
     complimentaryFood: 0,
     sampling: 0,
     other: 0,
+  });
+  const [operationalUtilities, setOperationalUtilities] = useState({
+    electricityCost: 0,
+    electricityKvah: 0,
+    electricityRate: 10,
+    generatorDieselCost: 0,
+    generatorDieselLiters: 0,
+    commercialLpgCost: 0,
+    commercialLpgCylinders: 0,
+    totalOperationalUtilities: 0,
   });
   const [variableExpenses, setVariableExpenses] = useState(0);
   const [totalSalaries, setTotalSalaries] = useState(68000);
@@ -45,10 +58,10 @@ export default function ProfitabilityPage() {
 
       setSalesReport(sale || null);
 
-      // 2. Fetch stock movements for this date
+      // 2. Fetch stock movements for this date (Material Consumption & Fuel Issues)
       const { data: movs } = await supabase
         .from('stock_movements')
-        .select('movement_type, purpose, total_value')
+        .select('item_id, movement_type, purpose, total_value, quantity')
         .eq('business_date', businessDate);
 
       let cust = 0;
@@ -57,19 +70,41 @@ export default function ProfitabilityPage() {
       let comp = 0;
       let sample = 0;
       let other = 0;
+      let dieselCost = 0;
+      let dieselLiters = 0;
+      let lpgCost = 0;
+      let lpgCylinders = 0;
+
       (movs || []).forEach((m) => {
         // Exclude internal transfers, purchases, opening stock, returns, and physical count adjustments from P&L expense
         if (['transfer', 'purchase', 'opening', 'return', 'count_adjustment', 'physical_count_adjustment'].includes(m.movement_type)) {
           return;
         }
         const val = Math.abs(Number(m.total_value)) || 0;
-        if (m.purpose === 'Customer Food') cust += val;
-        else if (m.purpose === 'Staff Food' || m.movement_type === 'staff_food') staff += val;
-        else if (m.purpose === 'Wastage' || m.purpose === 'Spoilage' || m.movement_type === 'wastage' || m.movement_type === 'spoilage') waste += val;
-        else if (m.purpose === 'Complimentary Food') comp += val;
-        else if (m.purpose === 'Sampling') sample += val;
-        else other += val;
+        const qty = Math.abs(Number(m.quantity)) || 0;
+
+        // Check if fuel consumption vs food material consumption
+        if (m.item_id === DIESEL_ITEM_ID || m.purpose === 'Generator Fuel') {
+          dieselCost += val;
+          dieselLiters += qty;
+        } else if (m.item_id === LPG_ITEM_ID || m.purpose === 'Kitchen Gas') {
+          lpgCost += val;
+          lpgCylinders += qty;
+        } else if (m.purpose === 'Customer Food') {
+          cust += val;
+        } else if (m.purpose === 'Staff Food' || m.movement_type === 'staff_food') {
+          staff += val;
+        } else if (m.purpose === 'Wastage' || m.purpose === 'Spoilage' || m.movement_type === 'wastage' || m.movement_type === 'spoilage') {
+          waste += val;
+        } else if (m.purpose === 'Complimentary Food') {
+          comp += val;
+        } else if (m.purpose === 'Sampling') {
+          sample += val;
+        } else {
+          other += val;
+        }
       });
+
       setMaterialConsumption({
         customerFood: cust,
         staffFood: staff,
@@ -97,14 +132,19 @@ export default function ProfitabilityPage() {
       const payroll = (emps || []).reduce((s, e) => s + (Number(e.monthly_salary) || 0), 0);
       setTotalSalaries(payroll > 0 ? payroll : 68000);
 
-      // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules & Break-Even Targets
-      const [mtdRes, { data: costRules }, { data: bepTarget }] = await Promise.all([
+      // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules, Electricity Ledger & Break-Even Targets
+      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: elecReadings }] = await Promise.all([
         fetchMTDFinancialSummary(supabase, businessDate),
         supabase.from('financial_cost_rules').select('*').eq('is_active', true),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
+        supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
       ]);
 
       setMtdSummary(mtdRes);
+
+      // Calculate Electricity Cost from Continuous Ledger & Configured Rule
+      const totalKvah = (elecReadings || []).reduce((sum, r) => sum + (Number(r.delta_consumption) || 0), 0);
+      let elecRate = 10.00;
 
       if (costRules && costRules.length > 0) {
         const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
@@ -116,7 +156,22 @@ export default function ProfitabilityPage() {
 
         const investorRule = costRules.find((r) => r.category === 'Finance' && r.calculation_method === 'percentage_of_revenue');
         if (investorRule) setInvestorRate(Number(investorRule.amount_or_rate) || 0.08);
+
+        const elecCostRule = costRules.find((r) => r.category === 'Utilities' && r.calculation_method === 'meter_based');
+        if (elecCostRule) elecRate = Number(elecCostRule.amount_or_rate) || 10.00;
       }
+
+      const totalElecCost = totalKvah * elecRate;
+      setOperationalUtilities({
+        electricityCost: totalElecCost,
+        electricityKvah: totalKvah,
+        electricityRate: elecRate,
+        generatorDieselCost: dieselCost,
+        generatorDieselLiters: dieselLiters,
+        commercialLpgCost: lpgCost,
+        commercialLpgCylinders: lpgCylinders,
+        totalOperationalUtilities: totalElecCost + dieselCost + lpgCost,
+      });
 
       if (bepTarget?.target_value) {
         setPlanningBreakEven(Number(bepTarget.target_value) || 3000000);
@@ -147,6 +202,7 @@ export default function ProfitabilityPage() {
     complimentaryFoodConsumption: materialConsumption.complimentaryFood,
     samplingConsumption: materialConsumption.sampling,
     otherConsumption: materialConsumption.other,
+    operationalUtilities: operationalUtilities,
     variableExpenses: variableExpenses,
     revenueLinkedRates: {
       rentPercent: rentRate,
@@ -290,6 +346,31 @@ export default function ProfitabilityPage() {
                     <span className="font-mono text-stone-700">{formatINR(pnl.otherConsumption)}</span>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Operational Utilities & Fuel Costs */}
+            <div className="py-3.5 space-y-2 px-2">
+              <div className="flex items-center justify-between font-semibold text-stone-800">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-amber-600" />
+                  <span>Operational Utilities &amp; Fuel (WAC &amp; Meter Valued)</span>
+                </div>
+                <span className="text-rose-600">− {formatINR(pnl.operationalUtilities.totalOperationalUtilities)}</span>
+              </div>
+              <div className="pl-4 space-y-1 text-xs text-stone-500">
+                <div className="flex items-center justify-between">
+                  <span>• Electricity ({operationalUtilities.electricityKvah.toFixed(1)} KVAH × {formatINR(operationalUtilities.electricityRate)}/KVAH)</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.electricityCost)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Generator Diesel ({operationalUtilities.generatorDieselLiters.toFixed(1)} L consumed @ WAC)</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.generatorDieselCost)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Commercial LPG ({operationalUtilities.commercialLpgCylinders} Cyl issued @ WAC)</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.commercialLpgCost)}</span>
+                </div>
               </div>
             </div>
 

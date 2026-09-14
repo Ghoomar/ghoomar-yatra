@@ -12,6 +12,11 @@ export interface DailyFinanceInput {
   samplingConsumption?: number;
   otherConsumption?: number;
   variableExpenses: number;
+  operationalUtilities?: {
+    electricityCost: number;
+    generatorDieselCost: number;
+    commercialLpgCost: number;
+  };
   revenueLinkedRates: {
     rentPercent: number; // e.g. 0.10 for 10%
     investorSharePercent: number; // e.g. 0.08 for 8%
@@ -33,6 +38,12 @@ export interface DailyFinanceOutput {
   complimentaryFoodConsumption: number;
   samplingConsumption: number;
   otherConsumption: number;
+  operationalUtilities: {
+    electricityCost: number;
+    generatorDieselCost: number;
+    commercialLpgCost: number;
+    totalOperationalUtilities: number;
+  };
   foodCostPercent: number;
   revenueLinkedExpenses: number;
   totalVariableExpenses: number;
@@ -53,6 +64,12 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
       complimentaryFoodConsumption: 0,
       samplingConsumption: 0,
       otherConsumption: 0,
+      operationalUtilities: {
+        electricityCost: 0,
+        generatorDieselCost: 0,
+        commercialLpgCost: 0,
+        totalOperationalUtilities: 0,
+      },
       foodCostPercent: 0,
       revenueLinkedExpenses: 0,
       totalVariableExpenses: 0,
@@ -76,6 +93,12 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
     ? Number(((totalFoodProduction / revenue) * 100).toFixed(1))
     : 0;
 
+  // Operational Utilities (Electricity + Diesel + Commercial LPG)
+  const elec = input.operationalUtilities?.electricityCost || 0;
+  const diesel = input.operationalUtilities?.generatorDieselCost || 0;
+  const lpg = input.operationalUtilities?.commercialLpgCost || 0;
+  const totalOperationalUtilities = Number((elec + diesel + lpg).toFixed(2));
+
   const rentExpense = revenue * (input.revenueLinkedRates.rentPercent || 0);
   const investorExpense = revenue * (input.revenueLinkedRates.investorSharePercent || 0);
   const revenueLinkedExpenses = rentExpense + investorExpense;
@@ -89,7 +112,7 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
   const dailyAllocatedFixedCosts = Number((dailySalaries + dailyOtherFixed).toFixed(2));
 
   const estimatedNetProfit = Number(
-    (revenue - totalDirectConsumption - totalVariableExpenses - dailyAllocatedFixedCosts).toFixed(2)
+    (revenue - totalDirectConsumption - totalOperationalUtilities - totalVariableExpenses - dailyAllocatedFixedCosts).toFixed(2)
   );
 
   const netProfitMarginPercent = revenue > 0
@@ -106,6 +129,12 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
     complimentaryFoodConsumption: comp,
     samplingConsumption: sample,
     otherConsumption: other,
+    operationalUtilities: {
+      electricityCost: elec,
+      generatorDieselCost: diesel,
+      commercialLpgCost: lpg,
+      totalOperationalUtilities,
+    },
     foodCostPercent,
     revenueLinkedExpenses,
     totalVariableExpenses,
