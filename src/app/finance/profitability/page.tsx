@@ -330,7 +330,7 @@ export default function ProfitabilityPage() {
                   <span>{formatINR(totalSalaries / daysInMonth)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>• Fixed Contracts &amp; Utilities ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
+                  <span>• Fixed Internet &amp; Telecom ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
                   <span>{formatINR(monthlyOtherFixed / daysInMonth)}</span>
                 </div>
               </div>

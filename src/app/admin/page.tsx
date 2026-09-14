@@ -16,6 +16,7 @@ import { DeleteUserModal } from '@/components/admin/DeleteUserModal';
 import { DepartmentCategoryModal } from '@/components/admin/DepartmentCategoryModal';
 import { RolePermissionMatrix } from '@/components/admin/RolePermissionMatrix';
 import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
+import { EditCostRuleModal } from '@/components/admin/EditCostRuleModal';
 import { logAuditAction } from '@/lib/audit-logger';
 import {
   Settings,
@@ -67,6 +68,8 @@ export default function AdminSettingsPage() {
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any | null>(null);
+  const [costRuleModalOpen, setCostRuleModalOpen] = useState(false);
+  const [editingCostRule, setEditingCostRule] = useState<any | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -462,9 +465,13 @@ export default function AdminSettingsPage() {
       {/* TAB 2: COST RULES */}
       {activeTab === 'cost_rules' && (
         <Card>
-          <CardHeader>
-            <CardTitle>Financial Cost Rule Master</CardTitle>
-            <CardDescription>Configurable calculation methods (Fixed, % Revenue, Variable, Metered)</CardDescription>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <CardTitle>Financial Cost Rule Master</CardTitle>
+              <CardDescription>
+                Configurable calculation methods (Fixed, % Revenue, Variable, Metered) driving Daily P&amp;L and Break-Even
+              </CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
@@ -481,14 +488,30 @@ export default function AdminSettingsPage() {
                       <th className="py-2.5 px-3">Method</th>
                       <th className="py-2.5 px-3 text-right">Amount / Rate</th>
                       <th className="py-2.5 px-3 text-center">Class</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-center">Effective Period</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {costRules.map((cr) => (
                       <tr key={cr.id} className="hover:bg-stone-50/80">
-                        <td className="py-3 px-3 font-semibold text-stone-900">{cr.cost_name}</td>
-                        <td className="py-3 px-3 text-stone-600">{cr.category}</td>
-                        <td className="py-3 px-3 text-stone-700 font-mono">{cr.calculation_method}</td>
+                        <td className="py-3 px-3">
+                          <div className="font-semibold text-stone-900">{cr.cost_name}</div>
+                          {cr.notes && (
+                            <div className="text-[10px] text-stone-400 max-w-xs truncate" title={cr.notes}>
+                              {cr.notes}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-stone-600">
+                          <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-700 text-[11px] font-medium">
+                            {cr.category}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-stone-700 font-mono text-[11px]">
+                          {cr.calculation_method === 'percentage_of_revenue' ? '% of Revenue' : cr.calculation_method === 'fixed_monthly' ? 'Fixed Monthly' : cr.calculation_method}
+                        </td>
                         <td className="py-3 px-3 text-right font-bold text-stone-900">
                           {cr.calculation_method === 'percentage_of_revenue'
                             ? `${(Number(cr.amount_or_rate || 0) * 100).toFixed(1)}%`
@@ -498,6 +521,29 @@ export default function AdminSettingsPage() {
                           <Badge variant={cr.cost_classification === 'Fixed' ? 'info' : 'warning'}>
                             {cr.cost_classification}
                           </Badge>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <Badge variant={cr.is_active !== false ? 'success' : 'outline'}>
+                            {cr.is_active !== false ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-3 text-center text-[11px] text-stone-500 font-mono">
+                          {cr.start_date ? cr.start_date : '2026-01-01'}
+                          {cr.end_date ? ` → ${cr.end_date}` : ' → Ongoing'}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingCostRule(cr);
+                              setCostRuleModalOpen(true);
+                            }}
+                            className="h-7 px-2.5 text-xs gap-1 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                            Edit
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -754,6 +800,15 @@ export default function AdminSettingsPage() {
         }}
         user={userToDelete}
         onDeleted={loadData}
+      />
+      <EditCostRuleModal
+        isOpen={costRuleModalOpen}
+        onClose={() => {
+          setCostRuleModalOpen(false);
+          setEditingCostRule(null);
+        }}
+        rule={editingCostRule}
+        onUpdated={loadData}
       />
     </div>
   );

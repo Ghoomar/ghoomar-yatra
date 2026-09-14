@@ -250,3 +250,20 @@ export type ReplenishmentFrequency = 'Daily' | 'Periodic' | 'Monthly' | 'As Requ
 
 export type InventoryClass = 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
 
+export interface FinancialCostRule {
+  id: string;
+  cost_name: string;
+  category: string;
+  calculation_method: 'fixed_monthly' | 'percentage_of_revenue' | 'actual_variable' | 'meter_based' | 'monthly_estimated' | string;
+  amount_or_rate: number;
+  start_date: string;
+  end_date?: string | null;
+  is_active: boolean;
+  cost_classification: 'Fixed' | 'Variable';
+  include_in_daily_profit: boolean;
+  include_in_break_even: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
