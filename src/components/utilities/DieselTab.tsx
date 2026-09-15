@@ -49,33 +49,46 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
   const loadDieselData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Diesel Item Position & Location Stock
-      const [{ data: itemData }, { data: locStock }, { data: vData }, { data: movs }] = await Promise.all([
+      // 1. Fetch Diesel Item Position, Location Stock, Vendors, and Direct Stock Movements
+      const [itemRes, locRes, vRes, movsRes] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('id', DIESEL_ITEM_ID).single(),
         supabase.from('item_location_stocks').select('quantity').eq('item_id', DIESEL_ITEM_ID).eq('location_id', CENTRAL_STORE_ID).maybeSingle(),
         supabase.from('vendors').select('id, name').eq('is_active', true).order('name'),
         supabase.from('stock_movements')
-          .select('*, vendor:vendors(name)')
+          .select('*')
           .eq('item_id', DIESEL_ITEM_ID)
           .order('created_at', { ascending: false })
-          .limit(20),
+          .limit(50),
       ]);
 
-      setDieselItem(itemData);
-      setStoreStock(Number(locStock?.quantity) || Number(itemData?.current_stock) || 0);
-      setVendors(vData || []);
-      setRecentMovements(movs || []);
+      if (itemRes.error) {
+        console.error('Failed to load diesel item:', itemRes.error);
+        setMessage({ type: 'error', text: `Failed to load diesel master: ${itemRes.error.message}` });
+      }
+      if (locRes.error) {
+        console.error('Failed to load diesel location stock:', locRes.error);
+      }
+      if (movsRes.error) {
+        console.error('Failed to load diesel movements:', movsRes.error);
+        setMessage({ type: 'error', text: `Failed to load stock movements: ${movsRes.error.message}` });
+      }
+
+      setDieselItem(itemRes.data);
+      setStoreStock(Number(locRes.data?.quantity) || Number(itemRes.data?.current_stock) || 0);
+      setVendors(vRes.data || []);
+      setRecentMovements(movsRes.data || []);
 
       // Calculate Today's Consumption on selected business date
-      const todayMovs = (movs || []).filter(
+      const todayMovs = (movsRes.data || []).filter(
         (m: any) => m.business_date === businessDate && m.movement_type === 'consumption'
       );
       const todayLiters = todayMovs.reduce((sum: number, m: any) => sum + (Number(m.quantity) || 0), 0);
       const todayVal = todayMovs.reduce((sum: number, m: any) => sum + (Number(m.total_value) || 0), 0);
       setTodayConsumptionLiters(todayLiters);
       setTodayConsumptionValue(todayVal);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load diesel inventory:', err);
+      setMessage({ type: 'error', text: err.message || 'Failed to load diesel data.' });
     } finally {
       setLoading(false);
     }
@@ -594,7 +607,12 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                             {formatINR(Number(m.total_value))}
                           </td>
                           <td className="py-2.5 px-3 text-stone-500 max-w-xs truncate">
-                            {m.notes || m.purpose || '—'}
+                            {(() => {
+                              const vendor = vendors.find((v) => v.id === m.reference_id);
+                              if (vendor && m.notes) return `${vendor.name} • ${m.notes}`;
+                              if (vendor) return vendor.name;
+                              return m.notes || m.purpose || '—';
+                            })()}
                           </td>
                         </tr>
                       );

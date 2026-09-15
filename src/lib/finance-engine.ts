@@ -53,33 +53,8 @@ export interface DailyFinanceOutput {
 }
 
 export function calculateDailyProfitability(input: DailyFinanceInput): DailyFinanceOutput {
-  if (!input.isReported) {
-    return {
-      isReported: false,
-      revenue: 0,
-      totalDirectConsumption: 0,
-      customerFoodConsumption: 0,
-      staffFoodConsumption: 0,
-      wastageCost: 0,
-      complimentaryFoodConsumption: 0,
-      samplingConsumption: 0,
-      otherConsumption: 0,
-      operationalUtilities: {
-        electricityCost: 0,
-        generatorDieselCost: 0,
-        commercialLpgCost: 0,
-        totalOperationalUtilities: 0,
-      },
-      foodCostPercent: 0,
-      revenueLinkedExpenses: 0,
-      totalVariableExpenses: 0,
-      dailyAllocatedFixedCosts: 0,
-      estimatedNetProfit: 0,
-      netProfitMarginPercent: 0,
-    };
-  }
-
-  const revenue = input.netSales;
+  const isReported = Boolean(input.isReported);
+  const revenue = isReported ? (input.netSales || 0) : 0;
   const comp = input.complimentaryFoodConsumption || 0;
   const sample = input.samplingConsumption || 0;
   const other = input.otherConsumption || 0;
@@ -120,7 +95,7 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
     : 0;
 
   return {
-    isReported: true,
+    isReported,
     revenue,
     totalDirectConsumption,
     customerFoodConsumption: input.customerFoodConsumption,
@@ -143,6 +118,8 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
     netProfitMarginPercent,
   };
 }
+
+
 
 export type BreakEvenStatus = 'Healthy' | 'At Risk' | 'Below Break-Even';
 
