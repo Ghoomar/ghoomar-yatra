@@ -74,10 +74,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [supabase]);
 
-  const handleSignOut = useCallback(async () => {
+  const handleSignOut = useCallback(async (reason: string = 'USER_INITIATED') => {
+    console.info(`[AppShell] Initiating sign out. Reason: ${reason}`);
     try {
       await supabase.auth.signOut();
-    } catch {}
+    } catch (err) {
+      console.warn('[AppShell] supabase.auth.signOut error:', err);
+    }
     try {
       localStorage.removeItem('ghoomar_active_role');
       sessionStorage.clear();
@@ -126,6 +129,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }
 
         const currentUser = session.user;
+        if (isMounted) {
+          setUser(currentUser);
+        }
 
         // Fetch User Profile with Assigned Role
         const { data: userProfile, error: profErr } = await supabase
@@ -134,18 +140,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           .eq('id', currentUser.id)
           .maybeSingle();
 
-        if (profErr || !userProfile) {
-          console.error('Failed to load profile:', profErr);
-          if (isMounted) {
-            await handleSignOut();
-          }
+        if (profErr) {
+          console.warn('[AppShell] Transient error loading user profile, keeping session alive:', profErr);
+          if (isMounted) setLoading(false);
+          return;
+        }
+
+        if (!userProfile) {
+          console.warn('[AppShell] Profile record not found for user ID:', currentUser.id);
+          if (isMounted) setLoading(false);
           return;
         }
 
         // Deactivated user check: Immediately terminate and redirect
         if (userProfile.is_active === false) {
+          console.warn('[AppShell] User account is deactivated by admin. Signing out.');
           if (isMounted) {
-            await handleSignOut();
+            await handleSignOut('ACCOUNT_DEACTIVATED');
           }
           return;
         }
@@ -154,7 +165,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         const rolePerms = await fetchRolePermissions(userProfile.role_id);
 
         if (isMounted) {
-          setUser(currentUser);
           setProfile(userProfile);
           setActualRole(roleName);
 
@@ -170,9 +180,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           setLoading(false);
         }
       } catch (err) {
-        console.error('Session validation error:', err);
+        console.warn('[AppShell] Session validation transient exception; maintaining session:', err);
         if (isMounted) {
-          router.replace('/login');
+          setLoading(false);
         }
       }
     }

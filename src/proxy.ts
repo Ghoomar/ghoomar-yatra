@@ -45,7 +45,18 @@ export async function proxy(request: NextRequest) {
 
   const authHeader = request.headers.get('authorization');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
-  const { data: { user } } = await supabase.auth.getUser(bearerToken);
+  const { data: { user } } = bearerToken
+    ? await supabase.auth.getUser(bearerToken)
+    : await supabase.auth.getUser();
+
+  // Helper to ensure cookies refreshed by @supabase/ssr are preserved on redirects
+  const createRedirectWithCookies = (url: URL) => {
+    const redirectResponse = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  };
 
   // 3. Unauthenticated access enforcement
   if (!user) {
@@ -61,13 +72,13 @@ export async function proxy(request: NextRequest) {
 
     // Redirect all protected browser routes directly to /login
     const redirectUrl = new URL('/login', request.url);
-    return NextResponse.redirect(redirectUrl);
+    return createRedirectWithCookies(redirectUrl);
   }
 
   // 4. Authenticated user accessing /login or root / -> route to dashboard
   if (pathname === '/login' || pathname === '/') {
     const dashboardUrl = new URL('/dashboard', request.url);
-    return NextResponse.redirect(dashboardUrl);
+    return createRedirectWithCookies(dashboardUrl);
   }
 
   // 5. Invalidate back-button caching for protected views
