@@ -338,11 +338,8 @@ function InventoryContent() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Package className="h-6 w-6 text-amber-600" />
-            Store Inventory &amp; Movement Ledger
+            Stock &amp; Items
           </h1>
-          <p className="text-sm text-stone-500">
-            Location-aware SKU catalog, inter-location transfers, authoritative ledger, and real-time WAC valuation.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -355,7 +352,7 @@ function InventoryContent() {
             }}
             className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
           >
-            <Plus className="h-4 w-4" /> Add SKU
+            <Plus className="h-4 w-4" /> Add Item
           </Button>
 
           <Button
@@ -399,8 +396,7 @@ function InventoryContent() {
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
             <div>
-              <span className="font-bold">{expiringItemsCount} item(s)</span> have batches expiring within the next 30 days or already expired!
-              <span className="text-amber-700 ml-1">Practice First-Expiry-First-Out (FEFO) store management.</span>
+              <span className="font-bold">{expiringItemsCount} {expiringItemsCount === 1 ? 'item has' : 'items have'}</span> batches expiring within 30 days or already expired.
             </div>
           </div>
           <Button
@@ -409,7 +405,7 @@ function InventoryContent() {
             onClick={() => setExpiryFilter(expiryFilter === 'EXPIRING_SOON' ? 'ALL' : 'EXPIRING_SOON')}
             className="text-xs h-7 border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
           >
-            {expiryFilter === 'EXPIRING_SOON' ? 'Show All SKUs' : 'View Expiring Items'}
+            {expiryFilter === 'EXPIRING_SOON' ? 'Show All Items' : 'View Expiring Items'}
           </Button>
         </div>
       )}
@@ -429,7 +425,7 @@ function InventoryContent() {
             }`}
           >
             <Package className="h-4 w-4" />
-            Store Catalog &amp; Positions ({items.length})
+            Catalog ({items.length})
           </button>
 
           <button
@@ -444,7 +440,7 @@ function InventoryContent() {
             }`}
           >
             <ArrowRightLeft className="h-4 w-4" />
-            Stock Movement Ledger ({movements.length})
+            Movements ({movements.length})
           </button>
         </div>
       </div>
@@ -454,43 +450,34 @@ function InventoryContent() {
           {/* Catalog KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Total Stock Valuation</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Stock Value</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalStockValue)}</div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Weighted Average Cost (WAC) × Total System Stock
-              </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Active Locations</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Locations</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1 flex items-center gap-1.5">
                   <MapPin className="h-5 w-5 text-amber-600" />
                   {locations.length} Locations
                 </div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Store, fridges, beverage counters &amp; halls
-              </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Low Stock Alerts</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Low Stock</CardDescription>
                 <div className={`text-2xl font-bold mt-1 ${lowStockCount > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                   {lowStockCount} Below Minimum
                 </div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Requires replenishment purchase orders
-              </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Catalog Master Status</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Items</CardDescription>
                 <div className="text-xl font-bold text-stone-800 mt-1">
                   {activeCount} <span className="text-xs font-normal text-emerald-600">Active</span>
                   {inactiveCount > 0 && (
@@ -498,9 +485,6 @@ function InventoryContent() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Authoritative Movement Ledger (Open + Inward − Issues)
-              </CardContent>
             </Card>
           </div>
 
@@ -511,14 +495,14 @@ function InventoryContent() {
               {/* Location Selector */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-stone-700 flex items-center gap-1.5 shrink-0">
-                  <MapPin className="h-4 w-4 text-amber-600" /> Physical Location:
+                  <MapPin className="h-4 w-4 text-amber-600" /> Location:
                 </span>
                 <select
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value)}
                   className="font-semibold text-xs rounded-lg border border-stone-300 py-1.5 px-3 bg-stone-50 text-stone-900 focus:outline-none focus:border-amber-500 focus:bg-white"
                 >
-                  <option value="ALL">🏢 All Locations (Total System Stock)</option>
+                  <option value="ALL">🏢 All Locations</option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
                       📍 {loc.name} ({loc.code})
@@ -588,7 +572,7 @@ function InventoryContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Search SKU name or code..."
+                  placeholder="Search items..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
@@ -603,18 +587,13 @@ function InventoryContent() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <CardTitle>
-                    Catalog Items ({filteredItems.length})
+                    Items ({filteredItems.length})
                     {selectedLocationObj && (
                       <span className="ml-2 text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                         Location: {selectedLocationObj.name}
                       </span>
                     )}
                   </CardTitle>
-                  <CardDescription>
-                    {selectedLocationId === 'ALL'
-                      ? 'Total system quantities, location allocations, and weighted average cost'
-                      : `Quantities and status physically located at ${selectedLocationObj?.name}`}
-                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -630,18 +609,18 @@ function InventoryContent() {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                        <th className="py-2.5 px-3">SKU Code</th>
-                        <th className="py-2.5 px-3">Item Name</th>
-                        <th className="py-2.5 px-3">Category / Class</th>
+                        <th className="py-2.5 px-3">SKU</th>
+                        <th className="py-2.5 px-3">Item</th>
+                        <th className="py-2.5 px-3">Category</th>
                         <th className="py-2.5 px-3 text-right">
-                          {selectedLocationId === 'ALL' ? 'Total Quantity' : `Stock at ${selectedLocationObj?.code || 'Loc'}`}
+                          {selectedLocationId === 'ALL' ? 'Qty' : `Stock at ${selectedLocationObj?.code || 'Loc'}`}
                         </th>
                         {selectedLocationId === 'ALL' && (
-                          <th className="py-2.5 px-3">Location Breakdown</th>
+                          <th className="py-2.5 px-3">Locations</th>
                         )}
-                        <th className="py-2.5 px-3 text-right">Min Stock</th>
-                        <th className="py-2.5 px-3 text-right">WAC Rate (₹)</th>
-                        <th className="py-2.5 px-3 text-right">Total Value</th>
+                        <th className="py-2.5 px-3 text-right">Min</th>
+                        <th className="py-2.5 px-3 text-right">Rate (₹)</th>
+                        <th className="py-2.5 px-3 text-right">Value</th>
                         <th className="py-2.5 px-3 text-center">Status</th>
                         <th className="py-2.5 px-3 text-right">Actions</th>
                       </tr>
@@ -787,47 +766,35 @@ function InventoryContent() {
           {/* Movement Ledger KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Logged Stock Movements</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Movements</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1">{movements.length}</div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Authoritative movement transactions
-              </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Physical Count Audits</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Count Audits</CardDescription>
                 <div className="text-2xl font-bold text-amber-700 mt-1">
                   {totalAdjustments.length} <span className="text-xs font-normal text-stone-500">postings</span>
                 </div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Net Variance: {formatINR(netAdjustmentValue)}
-              </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Procurement Inward Receipts</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Purchases</CardDescription>
                 <div className="text-2xl font-bold text-emerald-700 mt-1">{formatINR(totalPurchasesValue)}</div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                {totalPurchasesLogged.length} inward movement transactions
-              </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-1">
-                <CardDescription>Location Transfers &amp; Issues</CardDescription>
+              <CardHeader className="pb-3">
+                <CardDescription>Transfers &amp; Issues</CardDescription>
                 <div className="text-2xl font-bold text-blue-700 mt-1">
                   {totalTransfersLogged.length} <span className="text-xs font-normal text-stone-500">transfers</span> / {totalIssuesLogged.length} <span className="text-xs font-normal text-stone-500">issues</span>
                 </div>
               </CardHeader>
-              <CardContent className="pt-0 text-[11px] text-stone-500">
-                Total Issues Value: {formatINR(totalIssuesValue)}
-              </CardContent>
             </Card>
           </div>
 
@@ -915,10 +882,7 @@ function InventoryContent() {
           <Card>
             <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-stone-100">
               <div>
-                <CardTitle>Stock Movement Ledger ({filteredMovements.length})</CardTitle>
-                <CardDescription>
-                  Chronological transaction log with location route, batches, issues, and physical count audit adjustments
-                </CardDescription>
+                <CardTitle>Movements ({filteredMovements.length})</CardTitle>
               </div>
               <Link href="/inventory/count">
                 <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
@@ -941,13 +905,13 @@ function InventoryContent() {
                     <thead>
                       <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                         <th className="py-2.5 px-3">Date</th>
-                        <th className="py-2.5 px-3">SKU &amp; Item Name</th>
+                        <th className="py-2.5 px-3">Item</th>
                         <th className="py-2.5 px-3 text-center">Type</th>
-                        <th className="py-2.5 px-3">Location Route</th>
-                        <th className="py-2.5 px-3 text-right">Quantity</th>
-                        <th className="py-2.5 px-3 text-right">Rate (₹)</th>
-                        <th className="py-2.5 px-3 text-right">Total Value</th>
-                        <th className="py-2.5 px-3">Purpose &amp; Batch</th>
+                        <th className="py-2.5 px-3">Location</th>
+                        <th className="py-2.5 px-3 text-right">Qty</th>
+                        <th className="py-2.5 px-3 text-right">Rate</th>
+                        <th className="py-2.5 px-3 text-right">Value</th>
+                        <th className="py-2.5 px-3">Purpose / Batch</th>
                         <th className="py-2.5 px-3">Notes / Ref</th>
                       </tr>
                     </thead>

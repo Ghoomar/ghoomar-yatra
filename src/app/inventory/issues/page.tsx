@@ -430,11 +430,8 @@ export default function StoreIssuesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ArrowRightLeft className="h-6 w-6 text-amber-600" />
-            Store Issues & Internal Transfers
+            Store Issues &amp; Transfers
           </h1>
-          <p className="text-sm text-stone-500">
-            Issue goods to operational sections or transfer pre-packaged stock to customer-facing fridges and counters.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -487,7 +484,7 @@ export default function StoreIssuesPage() {
               : 'text-stone-500 hover:text-stone-800'
           }`}
         >
-          <MapPin className="h-4 w-4" /> Inter-Location Transfer (Fridge / Counters)
+          <MapPin className="h-4 w-4" /> Transfer Between Locations
         </button>
       </div>
 
@@ -497,17 +494,14 @@ export default function StoreIssuesPage() {
           <div className="lg:col-span-2">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle>Issue Goods to Department</CardTitle>
-                <CardDescription>
-                  Deducts inventory atomically from store location and records operational material consumption.
-                </CardDescription>
+                <CardTitle>Issue Goods</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleIssueSubmit} className="space-y-4 text-xs">
                   {/* Source Store Location */}
                   <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-200">
                     <label className="block font-semibold text-amber-900 mb-1 flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-amber-600" /> Source Store Location{' '}
+                      <MapPin className="h-3.5 w-3.5 text-amber-600" /> Source Location{' '}
                       <span className="text-red-500">*</span>
                     </label>
                     <select
@@ -529,7 +523,7 @@ export default function StoreIssuesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block font-medium text-stone-700 mb-1">
-                        Receiving Department <span className="text-red-500">*</span>
+                        Department <span className="text-red-500">*</span>
                       </label>
                       <select
                         value={departmentId}
@@ -547,7 +541,7 @@ export default function StoreIssuesPage() {
                     </div>
 
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Section / Team</label>
+                      <label className="block font-medium text-stone-700 mb-1">Team</label>
                       <select
                         value={teamId}
                         onChange={(e) => handleTeamChange(e.target.value)}
@@ -565,7 +559,7 @@ export default function StoreIssuesPage() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block font-medium text-stone-700">
-                          Receiving Staff In-Charge <span className="text-rose-500">*</span>
+                          Staff In-Charge <span className="text-rose-500">*</span>
                         </label>
                         {filteredEmployees.length === 0 && (departmentId || teamId) && (
                           <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
@@ -596,7 +590,7 @@ export default function StoreIssuesPage() {
                   {/* Purpose & Notes */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Purpose / Classification</label>
+                      <label className="block font-medium text-stone-700 mb-1">Purpose</label>
                       <select
                         value={purpose}
                         onChange={(e) => setPurpose(e.target.value)}
@@ -613,7 +607,7 @@ export default function StoreIssuesPage() {
                     </div>
 
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Requisition Notes</label>
+                      <label className="block font-medium text-stone-700 mb-1">Notes</label>
                       <input
                         type="text"
                         value={notes}
@@ -627,9 +621,9 @@ export default function StoreIssuesPage() {
                   {/* Line Items */}
                   <div className="border-t pt-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-stone-900">Issue Line Items</span>
+                      <span className="font-semibold text-stone-900">Items</span>
                       <Button type="button" variant="outline" size="sm" onClick={handleAddLine} className="gap-1 text-xs">
-                        <Plus className="h-3.5 w-3.5" /> Add Item Line
+                        <Plus className="h-3.5 w-3.5" /> Add Item
                       </Button>
                     </div>
 
@@ -658,7 +652,7 @@ export default function StoreIssuesPage() {
                                 required
                                 className="w-full rounded-md border border-stone-300 p-1.5 text-stone-900 bg-white focus:outline-none"
                               >
-                                <option value="">Select Item SKU...</option>
+                                <option value="">Select Item...</option>
                                 {selectableItems.map((it) => {
                                   const locQty =
                                     it.location_stocks?.find((ls: any) => ls.location_id === sourceLocationId)?.quantity || 0;
@@ -745,14 +739,14 @@ export default function StoreIssuesPage() {
                   {/* Submit Button */}
                   <div className="flex items-center justify-between pt-3 border-t">
                     <div className="text-xs">
-                      <span className="text-stone-500">Estimated Requisition Value: </span>
+                      <span className="text-stone-500">Estimated Value: </span>
                       <span className="font-bold text-base text-stone-900 font-mono">
                         {formatINR(calculateIssueTotal())}
                       </span>
                     </div>
 
                     <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                      {saving ? 'Processing Requisition...' : 'Approve & Issue Requisition'}
+                      {saving ? 'Processing...' : 'Approve & Issue'}
                     </Button>
                   </div>
                 </form>
@@ -765,7 +759,7 @@ export default function StoreIssuesPage() {
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">Recent Store Dispatches</CardTitle>
+                  <CardTitle className="text-sm">Recent Dispatches</CardTitle>
                   <div className="flex gap-1 bg-stone-100 p-0.5 rounded-md">
                     <button
                       type="button"
@@ -802,9 +796,6 @@ export default function StoreIssuesPage() {
                     </button>
                   </div>
                 </div>
-                <CardDescription className="text-xs">
-                  Authoritative audit ledger of department dispatches & internal transfers
-                </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-2.5 text-xs max-h-[600px] overflow-y-auto pr-1">
@@ -850,11 +841,11 @@ export default function StoreIssuesPage() {
                               }
                               className="capitalize text-[10px] px-1.5 py-0.5 shrink-0"
                             >
-                              {m.movement_type.replace('_', ' ')}
+                              {isTransfer ? 'Transfer' : 'Issue'}
                             </Badge>
                           </div>
 
-                          {/* Quantity & Date/Time */}
+                          {/* Quantity & Time */}
                           <div className="flex items-center justify-between text-xs text-stone-600">
                             <span className="font-bold text-stone-900 font-mono">
                               {m.quantity} {m.item?.unit?.symbol || 'units'}
@@ -864,19 +855,21 @@ export default function StoreIssuesPage() {
                             </span>
                           </div>
 
-                          {/* Chain of Custody / Routing */}
-                          <div className="text-[11px] text-stone-700 bg-stone-50/80 p-2 rounded border border-stone-100 font-medium">
-                            {isTransfer ? (
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
-                                <span className="text-blue-600 font-bold">→</span>
-                                <span className="text-stone-900 font-semibold">{m.dest_loc?.name || 'Fridge'}</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center flex-wrap gap-1 leading-tight">
-                                <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
-                                <span className="text-amber-600 font-bold">→</span>
-                                <span className="text-stone-900 font-semibold">{m.department?.name || 'Operations'}</span>
+                          {/* Source to Destination Route */}
+                          <div className="text-xs text-stone-700 bg-stone-50 p-2 rounded border border-stone-200/80 space-y-1">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
+                              <span className="text-amber-600 font-bold">→</span>
+                              <span className="text-stone-900 font-semibold">
+                                {isTransfer
+                                  ? m.dest_loc?.name || 'Destination'
+                                  : m.department?.name || 'Operations'}
+                              </span>
+                            </div>
+
+                            {/* Receiving Team / Staff if Issue */}
+                            {!isTransfer && (
+                              <div className="text-[11px] text-stone-500 flex items-center gap-1 flex-wrap">
                                 {m.responsible_person?.team?.name && (
                                   <>
                                     <span className="text-amber-600 font-bold">→</span>
@@ -886,7 +879,7 @@ export default function StoreIssuesPage() {
                                 {m.responsible_person?.name && (
                                   <>
                                     <span className="text-amber-600 font-bold">→</span>
-                                    <span className="text-amber-900 font-semibold">
+                                    <span className="text-stone-800 font-semibold">
                                       {m.responsible_person.name}
                                       {m.responsible_person.role?.name ? ` (${m.responsible_person.role.name})` : ''}
                                     </span>
@@ -925,7 +918,7 @@ export default function StoreIssuesPage() {
         </div>
       )}
 
-      {/* TAB 2: Inter-Location Stock Transfer (Fridge / Counters) */}
+      {/* TAB 2: Transfer Between Locations */}
       {activeTab === 'transfer' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
@@ -933,18 +926,15 @@ export default function StoreIssuesPage() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5 text-amber-600" />
-                Inter-Location Transfer (Pre-Packaged / Room Transfer)
+                Transfer Between Locations
               </CardTitle>
-              <CardDescription>
-                Transfers packaged items (e.g. Water Bottles, Coke Cans, Juices, Glasses) between Store and Service Fridges / Counters. Total business stock remains unchanged.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleTransferSubmit} className="space-y-4 text-xs">
                 {/* Item Selection */}
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Select Inventory Item <span className="text-red-500">*</span>
+                    Select Item <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={transferItemId}
@@ -952,7 +942,7 @@ export default function StoreIssuesPage() {
                     required
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                   >
-                    <option value="">Select Item SKU...</option>
+                    <option value="">Select Item...</option>
                     {items.map((it) => (
                       <option key={it.id} value={it.id}>
                         [{it.item_code}] {it.name} ({it.inventory_class})
@@ -1080,7 +1070,7 @@ export default function StoreIssuesPage() {
 
                 <div className="flex justify-end pt-3 border-t">
                   <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                    {saving ? 'Executing Transfer...' : 'Confirm Location Transfer'}
+                    {saving ? 'Executing Transfer...' : 'Confirm Transfer'}
                   </Button>
                 </div>
               </form>
@@ -1093,14 +1083,11 @@ export default function StoreIssuesPage() {
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">Recent Location Transfers</CardTitle>
+                  <CardTitle className="text-sm">Recent Transfers</CardTitle>
                   <Badge variant="info" className="text-[10px]">
                     {recentMovements.filter((m) => m.movement_type === 'transfer').length}
                   </Badge>
                 </div>
-                <CardDescription className="text-xs">
-                  Transfers between stores, fridges, and counters
-                </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-2.5 text-xs max-h-[600px] overflow-y-auto pr-1">

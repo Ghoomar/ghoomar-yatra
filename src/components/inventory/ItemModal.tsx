@@ -292,11 +292,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
             </div>
             <div>
               <h2 className="text-base font-bold text-stone-900">
-                {isEdit ? `Edit SKU: ${item?.name}` : 'Add New Inventory SKU'}
+                {isEdit ? `Edit Item: ${item?.name}` : 'Add Item'}
               </h2>
-              <p className="text-xs text-stone-500">
-                Maintain raw materials, consumable goods, assets, and units
-              </p>
             </div>
           </div>
           <button
@@ -321,7 +318,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
                 <label className="block font-medium text-stone-700 mb-1">
-                  Item / SKU Name <span className="text-rose-500">*</span>
+                  Item Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -347,7 +344,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Inventory Class</label>
+                <label className="block font-medium text-stone-700 mb-1">Class</label>
                 <select
                   value={inventoryClass}
                   onChange={(e) => handleClassChange(e.target.value)}
@@ -381,11 +378,11 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
           {/* Unit & Conversions */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
-            <h3 className="font-semibold text-stone-800">Units &amp; Packaging Conversion</h3>
+            <h3 className="font-semibold text-stone-800">Units &amp; Packaging</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Base Stock Unit <span className="text-rose-500">*</span>
+                  Base Unit <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -412,7 +409,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Purchase Unit (Optional)
+                  Purchase Unit
                 </label>
                 <select
                   value={secondaryUnitId}
@@ -453,7 +450,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   placeholder="1.0"
                   className={`w-full rounded-md border p-2 text-stone-900 focus:outline-none ${
                     isSameUnit 
-                      ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed' 
+                       ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed' 
                       : 'border-stone-300 focus:border-amber-500 bg-white'
                   }`}
                 />
@@ -474,13 +471,11 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
           {/* Storage & Replenishment */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
-            <h3 className="font-semibold text-stone-800">
-              Stock Thresholds {inventoryClass === 'Food Raw Material' ? '& Food Storage' : ''}
-            </h3>
+            <h3 className="font-semibold text-stone-800">Stock &amp; Storage</h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               {inventoryClass === 'Food Raw Material' && (
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Storage Condition</label>
+                  <label className="block font-medium text-stone-700 mb-1">Storage</label>
                   <select
                     value={storageType}
                     onChange={(e) => setStorageType(e.target.value)}
@@ -534,7 +529,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
             </div>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Replenishment Schedule</label>
+              <label className="block font-medium text-stone-700 mb-1">Replenishment</label>
               <select
                 value={replenishmentFrequency}
                 onChange={(e) => setReplenishmentFrequency(e.target.value)}
@@ -552,7 +547,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           {/* Notes & Active Status */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Internal Notes</label>
+              <label className="block font-medium text-stone-700 mb-1">Notes</label>
               <textarea
                 rows={2}
                 value={notes}
@@ -564,10 +559,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
             <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200">
               <div>
-                <div className="font-semibold text-stone-800">Item Active Status</div>
-                <div className="text-[11px] text-stone-500">
-                  Inactive SKUs are hidden from purchase and kitchen issue entries, while preserving all historical movements.
-                </div>
+                <div className="font-semibold text-stone-800">Active</div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -587,7 +579,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
               Cancel
             </Button>
             <Button type="submit" variant="amber" disabled={saving}>
-              {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Item SKU'}
+              {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Item'}
             </Button>
           </div>
         </form>
