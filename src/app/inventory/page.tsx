@@ -732,7 +732,7 @@ function InventoryContent() {
                                     setItemModalOpen(true);
                                   }}
                                   className="h-7 px-2 text-stone-600 hover:text-stone-900"
-                                  title="Edit SKU"
+                                  title="Edit Item"
                                 >
                                   <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
                                 </Button>
@@ -745,7 +745,7 @@ function InventoryContent() {
                                       ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50'
                                       : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
                                   }`}
-                                  title={isActive ? 'Deactivate SKU' : 'Activate SKU'}
+                                  title={isActive ? 'Deactivate Item' : 'Activate Item'}
                                 >
                                   <Power className="h-3.5 w-3.5" />
                                 </Button>
@@ -776,7 +776,7 @@ function InventoryContent() {
               <CardHeader className="pb-3">
                 <CardDescription>Count Audits</CardDescription>
                 <div className="text-2xl font-bold text-amber-700 mt-1">
-                  {totalAdjustments.length} <span className="text-xs font-normal text-stone-500">postings</span>
+                  {totalAdjustments.length} <span className="text-xs font-normal text-stone-500">{totalAdjustments.length === 1 ? 'posting' : 'postings'}</span>
                 </div>
               </CardHeader>
             </Card>
@@ -792,7 +792,7 @@ function InventoryContent() {
               <CardHeader className="pb-3">
                 <CardDescription>Transfers &amp; Issues</CardDescription>
                 <div className="text-2xl font-bold text-blue-700 mt-1">
-                  {totalTransfersLogged.length} <span className="text-xs font-normal text-stone-500">transfers</span> / {totalIssuesLogged.length} <span className="text-xs font-normal text-stone-500">issues</span>
+                  {totalTransfersLogged.length} <span className="text-xs font-normal text-stone-500">{totalTransfersLogged.length === 1 ? 'transfer' : 'transfers'}</span> / {totalIssuesLogged.length} <span className="text-xs font-normal text-stone-500">{totalIssuesLogged.length === 1 ? 'issue' : 'issues'}</span>
                 </div>
               </CardHeader>
             </Card>
@@ -849,7 +849,7 @@ function InventoryContent() {
 
               {/* Item Filter Dropdown */}
               <div className="flex items-center gap-1.5">
-                <span className="text-stone-500 font-medium shrink-0">SKU:</span>
+                <span className="text-stone-500 font-medium shrink-0">Item:</span>
                 <select
                   value={movementItemFilter}
                   onChange={(e) => setMovementItemFilter(e.target.value)}
@@ -869,7 +869,7 @@ function InventoryContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Search SKU, reason, batch..."
+                  placeholder="Search item, reason, batch..."
                   value={movementSearch}
                   onChange={(e) => setMovementSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"

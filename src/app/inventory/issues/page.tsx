@@ -244,7 +244,7 @@ export default function StoreIssuesPage() {
       return;
     }
     if (lines.length === 0 || lines.some((l) => !l.item_id || l.quantity <= 0)) {
-      setMessage({ type: 'error', text: 'Please specify all item SKUs and valid quantities greater than 0.' });
+      setMessage({ type: 'error', text: 'Please specify all items and valid quantities greater than 0.' });
       return;
     }
 
@@ -1008,7 +1008,7 @@ export default function StoreIssuesPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block font-medium text-stone-700 mb-1">
-                          Transfer Quantity <span className="text-red-500">*</span>
+                          Quantity <span className="text-rose-500">*</span>
                         </label>
                         <div className="flex gap-2">
                           <input
@@ -1058,7 +1058,7 @@ export default function StoreIssuesPage() {
 
                 {/* Transfer Remarks */}
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Transfer Remarks</label>
+                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
                   <input
                     type="text"
                     value={transferNotes}
@@ -1145,7 +1145,7 @@ export default function StoreIssuesPage() {
                       );
                     })}
                   {recentMovements.filter((m) => m.movement_type === 'transfer').length === 0 && (
-                    <div className="py-8 text-center text-stone-400">No recent location transfers logged.</div>
+                    <div className="py-8 text-center text-stone-400">No recent transfers logged.</div>
                   )}
                 </div>
               </CardContent>

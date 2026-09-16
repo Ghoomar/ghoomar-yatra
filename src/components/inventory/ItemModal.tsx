@@ -188,7 +188,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('Item / SKU Name is required.');
+      setErrorMessage('Item Name is required.');
       return;
     }
     if (!unitId) {
