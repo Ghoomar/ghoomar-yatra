@@ -131,10 +131,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
               <Tag className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-stone-900">Manage Vendor Categories</h2>
-              <p className="text-xs text-stone-500">
-                Add, rename, and activate/deactivate supply categories for vendor classification
-              </p>
+              <h2 className="text-base font-bold text-stone-900">Vendor Categories</h2>
             </div>
           </div>
           <button
@@ -157,7 +154,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-4 bg-stone-50 rounded-lg border border-stone-200 space-y-3">
             <div className="font-semibold text-stone-800 flex items-center justify-between">
-              <span>{editingCat ? `Edit Category: ${editingCat.name}` : 'Add New Category'}</span>
+              <span>{editingCat ? 'Edit Category' : 'Add Category'}</span>
               {editingCat && (
                 <button
                   type="button"

@@ -255,11 +255,8 @@ export default function VendorsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2.5">
             <Building2 className="h-6 w-6 text-amber-600" />
-            Vendor Master Directory
+            Vendors
           </h1>
-          <p className="text-sm text-stone-500">
-            Authoritative master catalog for raw material suppliers, payment terms, and vendor ledgers.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
@@ -286,27 +283,23 @@ export default function VendorsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardDescription>Total Registered Vendors</CardDescription>
+          <CardDescription>Vendors</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{totalVendors}</div>
-          <div className="text-[11px] text-stone-500 mt-1">Across all supply categories</div>
         </Card>
 
         <Card>
-          <CardDescription>Active Suppliers</CardDescription>
+          <CardDescription>Active</CardDescription>
           <div className="text-2xl font-bold text-emerald-700 mt-1">{activeVendorsCount}</div>
-          <div className="text-[11px] text-stone-500 mt-1">Eligible for purchase inward receipts</div>
         </Card>
 
         <Card>
-          <CardDescription>Total Outstanding Payables</CardDescription>
+          <CardDescription>Outstanding</CardDescription>
           <div className="text-2xl font-bold text-rose-600 mt-1">{formatINR(totalOutstanding)}</div>
-          <div className="text-[11px] text-stone-500 mt-1">Purchases minus allocated payments</div>
         </Card>
 
         <Card>
-          <CardDescription>Cumulative Procurements</CardDescription>
+          <CardDescription>Purchases</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalPurchasesAllTime)}</div>
-          <div className="text-[11px] text-stone-500 mt-1">Total inward procurement invoices</div>
         </Card>
       </div>
 
@@ -341,7 +334,7 @@ export default function VendorsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search vendor name, code, contact person, or phone..."
+                placeholder="Search vendors..."
                 className="w-full pl-9 pr-4 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"
               />
             </div>
@@ -354,9 +347,9 @@ export default function VendorsPage() {
                 onChange={(e) => setStatusFilter(e.target.value as any)}
                 className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
               >
-                <option value="all">All Vendors</option>
-                <option value="active">Active Only</option>
-                <option value="inactive">Inactive Only</option>
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
 
@@ -369,7 +362,7 @@ export default function VendorsPage() {
                   onChange={(e) => setCategoryFilter(e.target.value)}
                   className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
                 >
-                  <option value="all">All Categories</option>
+                  <option value="all">All</option>
                   {allCategories.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -382,13 +375,13 @@ export default function VendorsPage() {
             {/* Item Supplied Filter */}
             {catalogItems.length > 0 && (
               <div className="flex items-center gap-1.5 w-full md:w-auto">
-                <span className="text-xs text-stone-500 font-medium">Item Supplied:</span>
+                <span className="text-xs text-stone-500 font-medium">Item:</span>
                 <select
                   value={itemFilter}
                   onChange={(e) => setItemFilter(e.target.value)}
                   className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white max-w-[220px] truncate"
                 >
-                  <option value="all">All Items</option>
+                  <option value="all">All</option>
                   {catalogItems.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name} ({item.item_code})
@@ -421,9 +414,9 @@ export default function VendorsPage() {
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-stone-100">
           <div>
-            <CardTitle>Registered Suppliers</CardTitle>
+            <CardTitle>Vendors</CardTitle>
             <CardDescription>
-              Showing {filteredVendors.length} of {totalVendors} suppliers
+              {filteredVendors.length} vendors
             </CardDescription>
           </div>
         </CardHeader>
@@ -444,12 +437,12 @@ export default function VendorsPage() {
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                     <th className="py-3 px-3">Code</th>
-                    <th className="py-3 px-3">Supplier Name</th>
+                    <th className="py-3 px-3">Vendor</th>
                     <th className="py-3 px-3">Categories</th>
-                    <th className="py-3 px-3">Contact & Phone</th>
+                    <th className="py-3 px-3">Contact</th>
                     <th className="py-3 px-3">Payment Terms</th>
-                    <th className="py-3 px-3 text-right">Total Purchased</th>
-                    <th className="py-3 px-3 text-right">Total Paid</th>
+                    <th className="py-3 px-3 text-right">Purchased</th>
+                    <th className="py-3 px-3 text-right">Paid</th>
                     <th className="py-3 px-3 text-right">Outstanding</th>
                     <th className="py-3 px-3 text-center">Status</th>
                     <th className="py-3 px-3 text-right">Actions</th>

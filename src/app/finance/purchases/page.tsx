@@ -364,11 +364,8 @@ export default function PurchasesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ShoppingBag className="h-6 w-6 text-amber-600" />
-            Purchases & Vendor Financial Ledger
+            Purchases & Bills
           </h1>
-          <p className="text-sm text-stone-500">
-            Raw material procurements, stock receipts, and dynamic vendor settlement tracking.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -381,7 +378,7 @@ export default function PurchasesPage() {
             <Plus className="h-4 w-4" /> New Purchase Invoice
           </Button>
           <Button variant="secondary" size="sm" onClick={() => setShowPaymentModal(true)} className="gap-1.5">
-            <CreditCard className="h-4 w-4" /> Record Vendor Payment
+            <CreditCard className="h-4 w-4" /> Record Payment
           </Button>
           <Button variant="outline" size="sm" onClick={loadData}>
             <RefreshCw className="h-4 w-4" />
@@ -391,23 +388,20 @@ export default function PurchasesPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Total Outstanding to All Vendors</CardDescription>
+          <CardDescription>Outstanding</CardDescription>
           <div className="text-2xl font-bold text-rose-600 mt-1">
             {formatINR(totalOutstandingAllVendors)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Authoritative derived payable balance</div>
         </Card>
 
         <Card>
-          <CardDescription>Active Registered Suppliers</CardDescription>
+          <CardDescription>Active Vendors</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{vendors.length}</div>
-          <div className="text-[11px] text-stone-500 mt-1">Vegetables, Dairy, Grains, Utilities</div>
         </Card>
 
         <Card>
           <CardDescription>Settlement Model</CardDescription>
-          <div className="text-lg font-bold text-stone-800 mt-1">Automated FIFO Allocation</div>
-          <div className="text-[11px] text-stone-500 mt-1">Weekly payments auto-settle oldest invoices</div>
+          <div className="text-lg font-bold text-stone-800 mt-1">FIFO Allocation</div>
         </Card>
       </div>
 
@@ -422,20 +416,19 @@ export default function PurchasesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Vendor Accounts & Balances</CardTitle>
-          <CardDescription>Source of truth: Purchases − Allocated Payments = Current Outstanding</CardDescription>
+          <CardTitle>Vendor Balances</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-stone-200 text-stone-500 font-semibold">
-                  <th className="py-2.5 px-3">Vendor Code</th>
-                  <th className="py-2.5 px-3">Supplier Name</th>
+                  <th className="py-2.5 px-3">Code</th>
+                  <th className="py-2.5 px-3">Vendor</th>
                   <th className="py-2.5 px-3">Contact</th>
-                  <th className="py-2.5 px-3 text-right">Total Purchased</th>
-                  <th className="py-2.5 px-3 text-right">Total Paid</th>
-                  <th className="py-2.5 px-3 text-right">Outstanding Balance</th>
+                  <th className="py-2.5 px-3 text-right">Purchased</th>
+                  <th className="py-2.5 px-3 text-right">Paid</th>
+                  <th className="py-2.5 px-3 text-right">Outstanding</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
                 </tr>
               </thead>
@@ -488,7 +481,7 @@ export default function PurchasesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-lg font-bold text-stone-900">Record New Purchase Invoice</h2>
+              <h2 className="text-lg font-bold text-stone-900">New Purchase</h2>
               <button onClick={() => setShowPurchaseModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
             </div>
 
@@ -496,7 +489,7 @@ export default function PurchasesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-medium text-stone-700">Supplier / Vendor</label>
+                    <label className="block font-medium text-stone-700">Vendor</label>
                     <button
                       type="button"
                       onClick={() => setShowQuickVendorModal(true)}
@@ -511,7 +504,7 @@ export default function PurchasesPage() {
                     required
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">Select Supplier...</option>
+                    <option value="">Select Vendor...</option>
                     {vendors
                       .filter((v) => v.is_active !== false)
                       .map((v) => (
@@ -522,7 +515,7 @@ export default function PurchasesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Invoice / Bill Ref #</label>
+                  <label className="block font-medium text-stone-700 mb-1">Invoice / Bill #</label>
                   <input
                     type="text"
                     value={invoiceNumber}
@@ -535,7 +528,7 @@ export default function PurchasesPage() {
 
               <div className="space-y-2 border-t pt-3">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-stone-800">Procured Items</label>
+                  <label className="font-bold text-stone-800">Items</label>
                   <Button type="button" variant="secondary" size="sm" onClick={handleAddLine} className="gap-1 text-xs">
                     <Plus className="h-3 w-3" /> Add Item
                   </Button>
@@ -592,7 +585,7 @@ export default function PurchasesPage() {
                           required
                           className="flex-1 min-w-[200px] rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
                         >
-                          <option value="">Select Item SKU...</option>
+                          <option value="">Select Item...</option>
                           {items
                             .filter((i) => i.is_active !== false || i.id === line.item_id)
                             .map((i) => (
@@ -707,7 +700,7 @@ export default function PurchasesPage() {
                         <div>
                           <input
                             type="text"
-                            placeholder="Batch / Lot # (optional)"
+                            placeholder="Batch / Lot #"
                             value={line.batch_number || ''}
                             onChange={(e) => {
                               const next = [...lines];
@@ -788,7 +781,7 @@ export default function PurchasesPage() {
               </div>
 
               <div className="flex items-center justify-between border-t pt-3">
-                <span className="font-bold text-stone-700 text-sm">Total Invoice Value:</span>
+                <span className="font-bold text-stone-700 text-sm">Invoice Total:</span>
                 <span className="font-extrabold text-amber-600 text-lg">
                   {formatINR(calculatePurchaseTotal())}
                 </span>
@@ -797,7 +790,7 @@ export default function PurchasesPage() {
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="secondary" onClick={() => setShowPurchaseModal(false)}>Cancel</Button>
                 <Button type="submit" variant="amber" disabled={purchaseSaving}>
-                  {purchaseSaving ? 'Saving...' : 'Post Purchase & Update Stock'}
+                  {purchaseSaving ? 'Saving...' : 'Post Purchase'}
                 </Button>
               </div>
             </form>
@@ -809,20 +802,20 @@ export default function PurchasesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
             <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-base font-bold text-stone-900">Record Payment to Vendor</h2>
+              <h2 className="text-base font-bold text-stone-900">Record Payment</h2>
               <button onClick={() => setShowPaymentModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
             </div>
 
             <form onSubmit={handleRecordPayment} className="space-y-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Vendor / Supplier</label>
+                <label className="block font-medium text-stone-700 mb-1">Vendor</label>
                 <select
                   value={paymentVendorId}
                   onChange={(e) => setPaymentVendorId(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Supplier...</option>
+                  <option value="">Select Vendor...</option>
                   {vendors
                     .filter((v) => v.is_active !== false)
                     .map((v) => (
@@ -834,7 +827,7 @@ export default function PurchasesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Payment Amount (₹)</label>
+                <label className="block font-medium text-stone-700 mb-1">Amount (₹)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -863,7 +856,7 @@ export default function PurchasesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">UTR / Cheque / Ref #</label>
+                <label className="block font-medium text-stone-700 mb-1">Reference #</label>
                 <input
                   type="text"
                   value={paymentRef}
@@ -876,7 +869,7 @@ export default function PurchasesPage() {
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <Button type="button" variant="secondary" onClick={() => setShowPaymentModal(false)}>Cancel</Button>
                 <Button type="submit" variant="amber" disabled={paymentSaving}>
-                  {paymentSaving ? 'Saving...' : 'Confirm & Allocate Payment'}
+                  {paymentSaving ? 'Saving...' : 'Record Payment'}
                 </Button>
               </div>
             </form>

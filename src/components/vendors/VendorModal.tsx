@@ -239,11 +239,8 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
             </div>
             <div>
               <h2 className="text-lg font-bold text-stone-900">
-                {isEdit ? `Edit Vendor: ${vendor?.name}` : 'Add New Supplier / Vendor'}
+                {isEdit ? 'Edit Vendor' : 'Add Vendor'}
               </h2>
-              <p className="text-xs text-stone-500">
-                {isEdit ? 'Update vendor details and commercial terms safely' : 'Register a new supplier for purchasing & inventory'}
-              </p>
             </div>
           </div>
           <button
@@ -272,7 +269,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
                 <label className="block font-medium text-stone-700 mb-1">
-                  Vendor / Supplier Name <span className="text-rose-500">*</span>
+                  Vendor Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -335,7 +332,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
             </div>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Physical / Billing Address</label>
+              <label className="block font-medium text-stone-700 mb-1">Address</label>
               <textarea
                 rows={2}
                 value={address}
@@ -348,9 +345,8 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
 
           {/* Section 2: Supplier Categories */}
           <div className="space-y-2">
-            <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5 flex items-center justify-between">
-              <span>Supplier Categories</span>
-              <span className="text-[11px] font-normal text-stone-500">Select all that apply</span>
+            <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5">
+              Categories
             </h3>
 
             <div className="flex flex-wrap gap-1.5 pt-1">
@@ -396,7 +392,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
           {/* Section 3: Commercial & Payment Terms */}
           <div className="space-y-3">
             <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5">
-              Commercial & Settlement Terms
+              Payment Terms
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -440,7 +436,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Preferred Payment Mode</label>
+                <label className="block font-medium text-stone-700 mb-1">Payment Method</label>
                 <select
                   value={preferredPaymentMethodId}
                   onChange={(e) => setPreferredPaymentMethodId(e.target.value)}
@@ -460,27 +456,22 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
           {/* Section 4: Notes & Status */}
           <div className="space-y-3">
             <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5">
-              Notes & Status
+              Notes
             </h3>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Internal Notes</label>
+              <label className="block font-medium text-stone-700 mb-1">Notes</label>
               <textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Bank details, GSTIN, delivery schedule instructions, preferred mandi broker..."
+                placeholder="Optional notes..."
                 className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 resize-none"
               />
             </div>
 
             <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200">
-              <div>
-                <div className="font-semibold text-stone-800">Vendor Active Status</div>
-                <div className="text-[11px] text-stone-500">
-                  Inactive vendors are hidden from purchase entry dropdowns but preserved in financial records.
-                </div>
-              </div>
+              <div className="font-semibold text-stone-800">Active</div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
