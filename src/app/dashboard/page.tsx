@@ -264,10 +264,7 @@ export default function DashboardPage() {
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="text-xs font-bold text-amber-600 uppercase tracking-wider">
-            Ghoomar Yatra Operations Intelligence
-          </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-stone-900 mt-0.5 flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <LayoutDashboard className="h-6 w-6 text-stone-800" />
             Central Command Center
           </h1>

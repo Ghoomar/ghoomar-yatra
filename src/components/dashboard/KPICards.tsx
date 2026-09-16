@@ -52,15 +52,15 @@ export function KPICards({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-      {/* 1. Today's Revenue -> /finance/sales */}
+      {/* 1. Today's Sales -> /finance/sales */}
       <Link
         href="/finance/sales"
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
       >
         <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              Today's Revenue
+            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+              Today's Sales
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
@@ -70,24 +70,23 @@ export function KPICards({
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
             {isSalesReported ? formatINR(revenue) : 'Pending POS'}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1 flex items-center justify-between">
-            <span>Net Petpooja Sales</span>
-            <span className={isSalesReported ? 'text-emerald-700 font-semibold' : 'text-amber-600'}>
+          <div className="text-[11px] mt-1">
+            <span className={isSalesReported ? 'text-emerald-700 font-medium' : 'text-amber-600 font-medium'}>
               {isSalesReported ? 'Reported' : 'Not entered'}
             </span>
           </div>
         </Card>
       </Link>
 
-      {/* 2. Today's Visitors -> /operations/gate */}
+      {/* 2. Footfall -> /operations/gate */}
       <Link
         href="/operations/gate"
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
       >
         <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              Today's Footfall
+            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+              Footfall
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
@@ -97,22 +96,18 @@ export function KPICards({
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
             {formatNumber(visitors)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1 flex items-center justify-between">
-            <span>Gate Touch Counter</span>
-            <span className="text-stone-700 font-medium">Highway Visitors</span>
-          </div>
         </Card>
       </Link>
 
-      {/* 3. Today's Cars -> /operations/gate */}
+      {/* 3. Vehicles -> /operations/gate */}
       <Link
         href="/operations/gate"
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
       >
         <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              Today's Vehicles
+            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+              Vehicles
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
@@ -122,22 +117,18 @@ export function KPICards({
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
             {formatNumber(cars)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1 flex items-center justify-between">
-            <span>Origin Counters</span>
-            <span className="text-stone-700 font-medium">Cars Parked</span>
-          </div>
         </Card>
       </Link>
 
-      {/* 4. Revenue / Visitor -> /finance/profitability */}
+      {/* 4. Spend / Guest -> /finance/profitability */}
       <Link
         href="/finance/profitability"
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
       >
         <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              Avg Spend / Person
+            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+              Spend / Guest
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="text-[10px] text-stone-400 font-mono">Target: ₹300</span>
@@ -145,10 +136,9 @@ export function KPICards({
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
             {formatINR(spendPerVisitor)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1 flex items-center justify-between">
-            <span>Revenue ÷ Footfall</span>
-            <span className={spendPerVisitor >= 300 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
-              {spendPerVisitor >= 300 ? 'Above ₹300' : 'Below ₹300'}
+          <div className="text-[11px] mt-1">
+            <span className={spendPerVisitor >= 300 ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
+              {spendPerVisitor >= 300 ? 'Above target' : 'Below target'}
             </span>
           </div>
         </Card>
@@ -160,32 +150,31 @@ export function KPICards({
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
       >
         <Card className="p-4 transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
-          <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-            Operational Target
+          <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+            Daily Target
             <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
           </CardDescription>
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
             {formatINR(dailyTarget)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Configured for weekday</div>
         </Card>
       </Link>
 
-      {/* 6. Target Achievement -> /finance/profitability */}
+      {/* 6. Target Progress -> /finance/profitability */}
       <Link
         href="/finance/profitability"
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
       >
         <Card className="p-4 transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
-          <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-            Target Achievement
+          <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+            Target Progress
             <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
           </CardDescription>
           <div className={`text-2xl sm:text-3xl font-black mt-1.5 tracking-tight ${achievementPercent >= 100 ? 'text-emerald-700' : 'text-amber-700'}`}>
             {formatPercent(achievementPercent)}
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            {achievementPercent >= 100 ? 'Daily Goal Met' : `${formatINR(Math.max(0, dailyTarget - revenue))} remaining`}
+            {achievementPercent >= 100 ? 'Goal Met' : `${formatINR(Math.max(0, dailyTarget - revenue))} remaining`}
           </div>
         </Card>
       </Link>
@@ -197,7 +186,7 @@ export function KPICards({
       >
         <Card className="p-4 transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
               Estimated Net Profit
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
@@ -206,7 +195,6 @@ export function KPICards({
           <div className={`text-2xl sm:text-3xl font-black mt-1.5 tracking-tight ${estimatedNetProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
             {isSalesReported ? formatINR(estimatedNetProfit) : 'Pending POS'}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Economic daily net</div>
         </Card>
       </Link>
 
@@ -217,7 +205,7 @@ export function KPICards({
       >
         <Card className="p-4 transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-600 group-hover:text-amber-700 transition-colors flex items-center gap-1">
+            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
               Monthly Position
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>

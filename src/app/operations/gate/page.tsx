@@ -280,9 +280,9 @@ export default function GateCounterPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-stone-900 text-white p-4 rounded-2xl shadow-md">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-amber-400 font-bold uppercase tracking-wider">
-              Highway Gate & Footfall Console
-            </span>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2">
+              Gate Counter
+            </h1>
             {enrollment ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-stone-800 text-stone-300 px-2 py-0.5 rounded-full border border-stone-700">
                 <Smartphone className="h-3 w-3 text-amber-400" />
@@ -294,9 +294,6 @@ export default function GateCounterPage() {
               </Link>
             )}
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight mt-0.5 flex items-center gap-2">
-            Fast Touch Counter
-          </h1>
         </div>
 
         {/* Sync & Date Badges */}
@@ -352,7 +349,6 @@ export default function GateCounterPage() {
           <div data-testid="visitors-count" className="text-4xl sm:text-5xl font-black text-stone-900 mt-2 tracking-tight">
             {formatNumber(totalVisitors)}
           </div>
-          <div className="text-[11px] text-stone-400 mt-1">Cumulative footfall</div>
         </div>
 
         <div className="bg-white border-2 border-stone-200/80 rounded-2xl p-4 sm:p-5 text-center shadow-xs">
@@ -362,7 +358,6 @@ export default function GateCounterPage() {
           <div data-testid="vehicles-count" className="text-4xl sm:text-5xl font-black text-stone-900 mt-2 tracking-tight">
             {formatNumber(totalCars)}
           </div>
-          <div className="text-[11px] text-stone-400 mt-1">Total cars logged</div>
         </div>
       </div>
 
@@ -390,9 +385,8 @@ export default function GateCounterPage() {
       <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
-            <Users className="h-4 w-4 text-amber-600" /> Record Entering Visitors
+            <Users className="h-4 w-4 text-amber-600" /> Visitors
           </h2>
-          <span className="text-[11px] text-stone-400">Instant touch response</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
@@ -416,9 +410,8 @@ export default function GateCounterPage() {
       <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
-            <Car className="h-4 w-4 text-sky-600" /> Record Vehicle by Origin
+            <Car className="h-4 w-4 text-sky-600" /> Vehicles by Origin
           </h2>
-          <span className="text-[11px] text-stone-400">No registration plate stored</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">

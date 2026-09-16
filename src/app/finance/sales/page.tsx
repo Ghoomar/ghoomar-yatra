@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -254,11 +254,8 @@ export default function SalesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Receipt className="h-6 w-6 text-amber-600" />
-            Petpooja Daily Sales Entry
+            Daily Sales
           </h1>
-          <p className="text-sm text-stone-500">
-            Official midnight POS closing figures for financial reconciliation & profit intelligence.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -314,41 +311,42 @@ export default function SalesPage() {
         <form onSubmit={handleSave} className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
-              <CardDescription>Net Sales (Petpooja)</CardDescription>
-              <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(netSales)}</div>
-              <div className="text-[11px] text-stone-500 mt-1">Gross − Discounts</div>
+              <CardDescription className="font-medium text-stone-500">Net Sales</CardDescription>
+              <div className="text-2xl font-black text-stone-900 mt-1 tracking-tight">{formatINR(netSales)}</div>
             </Card>
 
             <Card>
-              <CardDescription>Customer Bills</CardDescription>
-              <div className="text-2xl font-bold text-stone-900 mt-1">{billCount || 0}</div>
-              <div className="text-[11px] text-stone-500 mt-1">
-                {customerCount ? `${customerCount} Guests` : 'Total transactions'}
-              </div>
+              <CardDescription className="font-medium text-stone-500">Bills</CardDescription>
+              <div className="text-2xl font-black text-stone-900 mt-1 tracking-tight">{billCount || 0}</div>
+              {customerCount > 0 && (
+                <div className="text-[11px] text-stone-500 mt-1">
+                  {customerCount} Guests
+                </div>
+              )}
             </Card>
 
             <Card>
-              <CardDescription>Payment Commissions</CardDescription>
-              <div className="text-2xl font-bold text-rose-600 mt-1">{formatINR(totalCommissions)}</div>
-              <div className="text-[11px] text-stone-500 mt-1">Card & Gateway Charges</div>
+              <CardDescription className="font-medium text-stone-500">Commissions</CardDescription>
+              <div className="text-2xl font-black text-rose-600 mt-1 tracking-tight">{formatINR(totalCommissions)}</div>
             </Card>
 
             <Card>
-              <CardDescription>Average Bill / Spend</CardDescription>
-              <div className="text-2xl font-bold text-stone-900 mt-1">
+              <CardDescription className="font-medium text-stone-500">Avg Bill</CardDescription>
+              <div className="text-2xl font-black text-stone-900 mt-1 tracking-tight">
                 {formatINR(billCount > 0 ? netSales / billCount : 0)}
               </div>
-              <div className="text-[11px] text-stone-500 mt-1">
-                {customerCount > 0 ? `${formatINR(netSales / customerCount)} / guest` : 'Per bill'}
-              </div>
+              {customerCount > 0 && (
+                <div className="text-[11px] text-stone-500 mt-1">
+                  {formatINR(netSales / customerCount)} / guest
+                </div>
+              )}
             </Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>1. Sales Summary</CardTitle>
-                <CardDescription>Direct figures from Petpooja Day-End Report</CardDescription>
+                <CardTitle>Sales Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-xs">
                 <div className="grid grid-cols-2 gap-3">
@@ -429,8 +427,7 @@ export default function SalesPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>2. Payment Modes Reconciliation</CardTitle>
-                <CardDescription>Collection breakdown & automatic commission derivation</CardDescription>
+                <CardTitle>Payments</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
                 {paymentModes.map((pm, idx) => (
@@ -470,8 +467,7 @@ export default function SalesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>3. Sales Categories Split</CardTitle>
-                <CardDescription>Departmental revenue contribution</CardDescription>
+                <CardTitle>Sales by Category</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
                 {categories.map((cat, idx) => (
@@ -499,8 +495,7 @@ export default function SalesPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>4. Key Menu Focus Items</CardTitle>
-                <CardDescription>Top high-volume highway dishes tracking</CardDescription>
+                <CardTitle>Key Items</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
                 {focusItems.map((fi, idx) => (
@@ -539,13 +534,10 @@ export default function SalesPage() {
             </Card>
           </div>
 
-          <div className="flex items-center justify-between bg-white border border-stone-200 p-4 rounded-xl shadow-2xs">
-            <div className="text-xs text-stone-500">
-              All saves create an auditable timestamp for business date {businessDate}.
-            </div>
+          <div className="flex items-center justify-end bg-white border border-stone-200 p-4 rounded-xl shadow-2xs">
             <Button variant="amber" size="lg" type="submit" disabled={saving} className="gap-2">
               <Save className="h-4 w-4" />
-              {saving ? 'Recording Sales...' : 'Save Petpooja Day-End Report'}
+              {saving ? 'Recording Sales...' : 'Save Daily Sales'}
             </Button>
           </div>
         </form>

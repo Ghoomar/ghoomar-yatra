@@ -80,65 +80,65 @@ export default function DailyClosingPage() {
       const items: ChecklistItem[] = [
         {
           key: 'sales',
-          label: 'Petpooja Sales & Collections',
+          label: 'Petpooja Sales',
           isComplete: Boolean(sales?.is_reported),
           statusText: sales?.is_reported
             ? `Reported: ${formatINR(Number(sales.net_sales || 0))}`
-            : 'NOT REPORTED (Missing Petpooja upload)',
+            : 'Not reported',
           isRequired: true,
         },
         {
           key: 'attendance',
-          label: 'Staff Attendance Register',
+          label: 'Attendance',
           isComplete: Boolean(attendance && attendance.length > 0),
-          statusText: attendance && attendance.length > 0 ? 'Muster Roll Submitted' : 'NOT SUBMITTED (Missing muster roll)',
+          statusText: attendance && attendance.length > 0 ? 'Muster roll submitted' : 'Not submitted',
           isRequired: true,
         },
         {
           key: 'visitors',
-          label: 'Visitor Footfall Count (Zero PII Gate Counter)',
+          label: 'Footfall',
           isComplete: Boolean(visitors && visitors.length > 0),
-          statusText: visitors && visitors.length > 0 ? `${visitorTotal} Visitors Logged` : 'No Counter Events Logged',
+          statusText: visitors && visitors.length > 0 ? `${visitorTotal} Visitors logged` : 'No events logged',
           isRequired: true,
         },
         {
           key: 'vehicles',
-          label: 'Vehicle Origin Traffic (Zero PII Gate Counter)',
+          label: 'Vehicle Count',
           isComplete: Boolean(cars && cars.length > 0),
-          statusText: cars && cars.length > 0 ? `${vehicleTotal} Vehicles Logged` : 'No Vehicles Logged',
+          statusText: cars && cars.length > 0 ? `${vehicleTotal} Vehicles logged` : 'No vehicles logged',
           isRequired: true,
         },
         {
           key: 'expenses',
-          label: 'Operational Expenses & Petty Cash',
+          label: 'Expenses & Petty Cash',
           isComplete: true, // Expenses may legitimately be zero
           statusText: `${expenses?.length || 0} vouchers (${formatINR(expenseTotal)})`,
           isRequired: false,
         },
         {
           key: 'purchases',
-          label: 'Inward Purchases & Vendor Invoices',
+          label: 'Purchases & Bills',
           isComplete: true,
           statusText: `${purchases?.length || 0} bills recorded (${formatINR(purchaseTotal)})`,
           isRequired: false,
         },
         {
           key: 'inventory_issues',
-          label: 'Kitchen Store Issues / Consumption',
+          label: 'Store Issues',
           isComplete: Boolean(issues && issues.length > 0),
-          statusText: issues && issues.length > 0 ? 'Material issues logged' : 'No store issues logged',
+          statusText: issues && issues.length > 0 ? 'Store issues logged' : 'No store issues logged',
           isRequired: false,
         },
         {
           key: 'activities',
-          label: 'Paid Activities Report (Camel, Pottery, etc.)',
+          label: 'Activities',
           isComplete: Boolean(activities && activities.length > 0),
-          statusText: activities && activities.length > 0 ? 'Activity revenue reported' : 'Not submitted',
+          statusText: activities && activities.length > 0 ? 'Activities reported' : 'Not submitted',
           isRequired: false,
         },
         {
           key: 'utilities',
-          label: 'Electricity, LPG & Diesel Meter Readings',
+          label: 'Utilities & Fuel',
           isComplete: Boolean(utilities && utilities.length > 0),
           statusText: utilities && utilities.length > 0 ? 'Meter readings logged' : 'No readings entered',
           isRequired: false,
@@ -229,11 +229,8 @@ export default function DailyClosingPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Lock className="h-6 w-6 text-amber-600" />
-            Midnight Daily Closing Console
+            Daily Closing
           </h1>
-          <p className="text-sm text-stone-500">
-            Final reconciliation, missing vs reported validation, and authoritative financial lock for 12:00 AM – 11:59 PM.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -268,7 +265,7 @@ export default function DailyClosingPage() {
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-bold text-stone-400 uppercase tracking-wider">Business Day Status (12:00 AM – 11:59 PM)</div>
+              <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Business Day Status</div>
               <div className="text-2xl font-black text-stone-900 mt-1 flex items-center gap-2">
                 {dayStatus === 'closed' ? (
                   <>
@@ -343,8 +340,7 @@ export default function DailyClosingPage() {
       {/* Detailed Checklist Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Midnight Closing Checklist</CardTitle>
-          <CardDescription>Explicit distinction between Reported ₹0 vs Missing unsubmitted reports</CardDescription>
+          <CardTitle>Closing Checklist</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="divide-y divide-stone-100">

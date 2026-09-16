@@ -119,11 +119,8 @@ export default function ActivitiesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Sparkles className="h-6 w-6 text-amber-600" />
-            Paid Activities & Experiences
+            Activities
           </h1>
-          <p className="text-sm text-stone-500">
-            Camel rides, Mehendi, Jyotish, and Magic shows. Configurable pricing and daily unit tracking.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -164,9 +161,6 @@ export default function ActivitiesPage() {
             </Badge>
           )}
         </div>
-        <div className="text-stone-500 text-[11px]">
-          <strong>Distinction:</strong> Reported ₹0 is treated as zero revenue; unsubmitted is flagged as missing.
-        </div>
       </div>
 
       {message && (
@@ -179,30 +173,26 @@ export default function ActivitiesPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Total Activities Revenue Today</CardDescription>
-          <div className="text-2xl font-bold text-amber-600 mt-1">
+          <CardDescription className="font-medium text-stone-500">Revenue</CardDescription>
+          <div className="text-2xl font-black text-amber-600 mt-1 tracking-tight">
             {formatINR(totalActivityRevenue)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Contributes to total daily revenue</div>
         </Card>
 
         <Card>
-          <CardDescription>Total Units / Tickets Sold</CardDescription>
-          <div className="text-2xl font-bold text-stone-900 mt-1">{totalRidesSold} Tickets</div>
-          <div className="text-[11px] text-stone-500 mt-1">Guest participation volume</div>
+          <CardDescription className="font-medium text-stone-500">Tickets</CardDescription>
+          <div className="text-2xl font-black text-stone-900 mt-1 tracking-tight">{totalRidesSold}</div>
         </Card>
 
         <Card>
-          <CardDescription>Configurable Activities</CardDescription>
-          <div className="text-2xl font-bold text-stone-900 mt-1">{records.length} Active</div>
-          <div className="text-[11px] text-stone-500 mt-1">Managed via master data</div>
+          <CardDescription className="font-medium text-stone-500">Active Activities</CardDescription>
+          <div className="text-2xl font-black text-stone-900 mt-1 tracking-tight">{records.length}</div>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Daily Activity Sales Register</CardTitle>
-          <CardDescription>Enter units sold and total revenue for each activity</CardDescription>
+          <CardTitle>Today's Activity Sales</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <form onSubmit={handleSave} className="space-y-4">
@@ -210,11 +200,11 @@ export default function ActivitiesPage() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold">
-                    <th className="py-2.5 px-3">Activity Name</th>
-                    <th className="py-2.5 px-3 text-center">Default Price</th>
-                    <th className="py-2.5 px-3 text-center">Tickets Sold (Units)</th>
-                    <th className="py-2.5 px-3 text-right">Total Revenue (₹)</th>
-                    <th className="py-2.5 px-3">Notes / Operational Remarks</th>
+                    <th className="py-2.5 px-3">Activity</th>
+                    <th className="py-2.5 px-3 text-center">Price</th>
+                    <th className="py-2.5 px-3 text-center">Units</th>
+                    <th className="py-2.5 px-3 text-right">Revenue</th>
+                    <th className="py-2.5 px-3">Notes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -263,7 +253,7 @@ export default function ActivitiesPage() {
                             next[idx].notes = e.target.value;
                             setRecords(next);
                           }}
-                          placeholder="e.g. Weather good, 4 camels active"
+                          placeholder="Notes..."
                           className="w-full rounded border border-stone-300 p-1.5 focus:outline-none focus:border-amber-500"
                         />
                       </td>

@@ -31,8 +31,7 @@ export function BusinessHealth({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>Business Health Status</CardTitle>
-        <CardDescription>Real-time cross-functional health indicator</CardDescription>
+        <CardTitle>System Status</CardTitle>
       </CardHeader>
       <CardContent className="pt-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">

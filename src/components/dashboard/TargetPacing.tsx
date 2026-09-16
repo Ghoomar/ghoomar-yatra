@@ -25,12 +25,11 @@ export function TargetPacing({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle>Daily Target Pacing Intelligence</CardTitle>
+          <CardTitle>Daily Target</CardTitle>
           <span className="text-xs font-semibold text-stone-500">
             Goal: {formatINR(dailyTarget)}
           </span>
         </div>
-        <CardDescription>Real-time revenue pace vs required footfall economics</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-2 text-xs">
         <div className="w-full bg-stone-100 rounded-full h-3 overflow-hidden">

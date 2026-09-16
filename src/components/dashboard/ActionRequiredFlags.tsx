@@ -18,8 +18,7 @@ export function ActionRequiredFlags({ flags }: { flags: ActionFlag[] }) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Action Required</CardTitle>
-          <CardDescription>Operational alerts & anomalies</CardDescription>
+          <CardTitle>Alerts</CardTitle>
         </CardHeader>
         <CardContent className="pt-2 text-xs text-stone-500 py-6 text-center">
           All systems operating smoothly. No active exceptions detected.
@@ -32,10 +31,9 @@ export function ActionRequiredFlags({ flags }: { flags: ActionFlag[] }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle>Action Required</CardTitle>
+          <CardTitle>Alerts</CardTitle>
           <Badge variant="danger">{flags.length} Attention Items</Badge>
         </div>
-        <CardDescription>Operational exceptions surfaced for immediate management action</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2.5 pt-2 text-xs">
         {flags.map((flag) => (

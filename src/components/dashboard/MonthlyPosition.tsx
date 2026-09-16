@@ -33,12 +33,11 @@ export function MonthlyPosition({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle>Monthly Break-Even Pacing</CardTitle>
+          <CardTitle>Monthly Position</CardTitle>
           <Badge variant={status === 'Healthy' ? 'success' : status === 'At Risk' ? 'warning' : 'danger'}>
             {status.toUpperCase()}
           </Badge>
         </div>
-        <CardDescription>Month-to-date position vs break-even requirement</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-2 text-xs">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
