@@ -223,7 +223,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* Central Store Cylinder Balance */}
         <Card className={`relative overflow-hidden ${isLowStock ? 'border-rose-300 bg-rose-50/20' : ''}`}>
-          <CardDescription>Central Store LPG Cylinders</CardDescription>
+          <CardDescription>LPG Stock</CardDescription>
           <div className="flex items-baseline gap-2 mt-1">
             <span className={`text-2xl font-bold font-mono ${isLowStock ? 'text-rose-600' : 'text-stone-900'}`}>
               {storeStock} Cylinders
@@ -234,39 +234,27 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
               </Badge>
             )}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Available full commercial cylinders in Central Store
-          </div>
         </Card>
 
         {/* Minimum Reserve */}
         <Card>
-          <CardDescription>Minimum Cylinder Reserve</CardDescription>
+          <CardDescription>Minimum Reserve</CardDescription>
           <div className="text-2xl font-bold text-amber-700 mt-1 font-mono">{minReserve} Cylinders</div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Admin configurable safety threshold
-          </div>
         </Card>
 
         {/* Current WAC */}
         <Card>
-          <CardDescription>Weighted Average Cost (WAC)</CardDescription>
+          <CardDescription>Avg Cost</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1 font-mono">
             {currentWac > 0 ? `${formatINR(currentWac)} / cyl` : '—'}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Dynamic valuation charged on kitchen issue
           </div>
         </Card>
 
         {/* Standard Commercial Spec */}
         <Card className="bg-stone-50/50">
-          <CardDescription>Standard Cylinder Size</CardDescription>
+          <CardDescription>Cylinder Size</CardDescription>
           <div className="text-2xl font-bold text-stone-700 mt-1 font-mono">
             19.5 kg
-          </div>
-          <div className="text-[11px] text-stone-400 mt-1">
-            Commercial bulk kitchen red cylinder specification
           </div>
         </Card>
       </div>
@@ -291,7 +279,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Flame className="h-4 w-4 text-amber-600" />
-                Record Cylinder Action
+                LPG Action
               </CardTitle>
             </div>
             {/* Mode Switch Tabs */}
@@ -338,7 +326,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Cylinders Issued to Kitchen <span className="text-rose-500">*</span>
+                    Cylinders Issued <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -373,7 +361,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 )}
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Kitchen Station / Notes</label>
+                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
                   <input
                     type="text"
                     value={issueNotes}
@@ -381,9 +369,6 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                     placeholder="e.g. Main burner bank exchange"
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-stone-400">
-                    Cylinders are recognized as consumed upon issue from Central Store.
-                  </span>
                 </div>
 
                 <Button
@@ -398,7 +383,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                     </>
                   ) : (
                     <>
-                      <Utensils className="h-4 w-4" /> Issue to Kitchen (Consume)
+                      <Utensils className="h-4 w-4" /> Issue to Kitchen
                     </>
                   )}
                 </Button>
@@ -429,7 +414,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Actual Purchase Price per Cylinder (₹) <span className="text-rose-500">*</span>
+                    Purchase Price per Cylinder <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400 font-bold">
@@ -446,9 +431,6 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pl-8"
                     />
                   </div>
-                  <span className="text-[10px] text-stone-400">
-                    Must be entered each time based on actual gas agency commercial invoice.
-                  </span>
                 </div>
 
                 {parseInt(purchaseQty, 10) > 0 && parseFloat(purchaseRate) > 0 && (
@@ -461,7 +443,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 )}
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Gas Agency / Vendor</label>
+                  <label className="block font-medium text-stone-700 mb-1">Vendor</label>
                   <select
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
@@ -477,7 +459,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Invoice / Delivery Challan No.</label>
+                  <label className="block font-medium text-stone-700 mb-1">Invoice / Challan No.</label>
                   <input
                     type="text"
                     value={invoiceNo}
@@ -510,13 +492,10 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                     </>
                   ) : (
                     <>
-                      <Truck className="h-4 w-4" /> Record Purchase (Inward Cylinders)
+                      <Truck className="h-4 w-4" /> Record Purchase
                     </>
                   )}
                 </Button>
-                <p className="text-[10px] text-stone-400 text-center leading-tight">
-                  Purchase increases Central Store inventory &amp; updates WAC. It is NOT immediately a Daily P&amp;L expense.
-                </p>
               </form>
             )}
           </CardContent>
@@ -526,8 +505,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-base font-bold">Commercial LPG Movements Ledger</CardTitle>
-              <CardDescription>Authoritative purchase inwards &amp; kitchen issues</CardDescription>
+              <CardTitle className="text-base font-bold">LPG Movements</CardTitle>
             </div>
             {todayIssuesCylinders > 0 && (
               <Badge variant="warning">

@@ -53,11 +53,8 @@ export default function UtilitiesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Zap className="h-6 w-6 text-amber-600" />
-            Utilities &amp; Fuel Management
+            Utilities &amp; Fuel
           </h1>
-          <p className="text-sm text-stone-500">
-            Continuous electricity KVAH meter ledger, commercial LPG cylinder inventory, and diesel generator operations.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -93,7 +90,7 @@ export default function UtilitiesPage() {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <Zap className="h-4 w-4" /> Electricity Meter Readings
+          <Zap className="h-4 w-4" /> Electricity
         </button>
         <button
           onClick={() => setActiveTab('diesel')}
@@ -113,7 +110,7 @@ export default function UtilitiesPage() {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <Flame className="h-4 w-4" /> Commercial LPG Cylinders
+          <Flame className="h-4 w-4" /> LPG
         </button>
       </div>
 

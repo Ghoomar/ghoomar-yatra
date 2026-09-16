@@ -174,7 +174,7 @@ export function ElectricityTab({
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Today's Electricity Consumption</CardDescription>
+          <CardDescription>Today's Consumption</CardDescription>
           <div className="text-2xl font-bold text-amber-600 mt-1">
             {todayConsumption > 0 ? `${formatNumber(todayConsumption)} ${unitLabel}` : `0.0 ${unitLabel}`}
           </div>
@@ -185,23 +185,17 @@ export function ElectricityTab({
         </Card>
 
         <Card>
-          <CardDescription>Continuous Meter Baseline</CardDescription>
+          <CardDescription>Meter Reading</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1 font-mono">
             {latestPriorReading !== null ? `${latestPriorReading.toFixed(1)} ${unitLabel}` : 'No Prior Reading'}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Chained chronologically across business dates
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Internal Costing Assumption</CardDescription>
+          <CardDescription>Cost Rate</CardDescription>
           <div className="text-base font-semibold text-stone-800 mt-1 flex items-center gap-1.5">
             <Calculator className="h-4 w-4 text-amber-600" />
             <span>{formatINR(costPerUnit)} / {unitLabel}</span>
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Configurable Admin costing rate (Not raw utility tariff)
           </div>
         </Card>
       </div>
@@ -212,9 +206,8 @@ export function ElectricityTab({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-600" />
-              Log Meter Reading
+              Meter Reading
             </CardTitle>
-            <CardDescription>Record continuous {unitLabel} reading for {businessDate}</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
@@ -240,14 +233,11 @@ export function ElectricityTab({
                     {loadingBaseline ? 'Loading...' : latestPriorReading !== null ? `${latestPriorReading.toFixed(1)} ${unitLabel}` : '—'}
                   </strong>
                 </div>
-                <div className="text-[10px] text-stone-400">
-                  Authoritative predecessor reading from continuous chronological ledger
-                </div>
               </div>
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Current Reading ({unitLabel}) <span className="text-rose-500">*</span>
+                  Current Reading <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative rounded-lg shadow-2xs">
                   <input
@@ -287,14 +277,9 @@ export function ElectricityTab({
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-stone-600 text-[11px]">
-                    <span>Estimated Internal Cost:</span>
+                    <span>Estimated Cost:</span>
                     <strong className="font-mono text-stone-900">{formatINR(previewCost)}</strong>
                   </div>
-                  <p className="text-[10px] text-amber-700/80 leading-tight">
-                    {isReset
-                      ? 'Meter replacement/rollover flagged: this establishes the new starting baseline without negative consumption.'
-                      : `Formula: (${parsedNewReading.toFixed(1)} − ${latestPriorReading.toFixed(1)}) × ${formatINR(costPerUnit)}/${unitLabel}`}
-                  </p>
                 </div>
               )}
 
@@ -306,16 +291,13 @@ export function ElectricityTab({
                   onChange={(e) => setIsReset(e.target.checked)}
                   className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                 />
-                <label htmlFor="isReset" className="text-xs text-stone-700 cursor-pointer select-none leading-tight">
-                  <span className="font-semibold text-stone-900">Meter Replaced / Rolled Over</span>
-                  <span className="block text-[10px] text-stone-500 mt-0.5">
-                    Check if physical meter rolled over to 0 or was replaced with a new unit
-                  </span>
+                <label htmlFor="isReset" className="text-xs text-stone-700 cursor-pointer select-none leading-tight font-semibold text-stone-900">
+                  Meter Replaced / Rolled Over
                 </label>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Shift / Operational Notes</label>
+                <label className="block font-medium text-stone-700 mb-1">Notes</label>
                 <input
                   type="text"
                   value={notes}
@@ -349,10 +331,7 @@ export function ElectricityTab({
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-base font-bold">Meter Reading Ledger ({businessDate})</CardTitle>
-              <CardDescription>
-                Continuous chronological readings with previous baseline chaining
-              </CardDescription>
+              <CardTitle className="text-base font-bold">Meter Readings</CardTitle>
             </div>
             <Badge variant={meterReadings.length > 0 ? 'success' : 'outline'}>
               {meterReadings.length} {meterReadings.length === 1 ? 'Reading' : 'Readings'} Today

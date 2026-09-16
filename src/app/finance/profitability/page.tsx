@@ -237,11 +237,8 @@ export default function ProfitabilityPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <TrendingUp className="h-6 w-6 text-amber-600" />
-            Profitability & Daily P&L Waterfall
+            Profitability & P&L
           </h1>
-          <p className="text-sm text-stone-500">
-            Economic profit model distinguishing actual expenditures from allocated fixed overheads and dynamic break-even pacing.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -263,27 +260,24 @@ export default function ProfitabilityPage() {
       {/* Top Level Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-2 border-stone-200/80">
-          <CardDescription>Daily Estimated Net Profit</CardDescription>
+          <CardDescription>Net Profit</CardDescription>
           <div className={`text-3xl font-black mt-1 ${pnl.estimatedNetProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
             {pnl.isReported ? formatINR(pnl.estimatedNetProfit) : 'NOT REPORTED'}
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            {pnl.isReported ? `Margin: ${pnl.netProfitMarginPercent}% of net sales` : 'Petpooja sales entry missing'}
+            {pnl.isReported ? `Margin: ${pnl.netProfitMarginPercent}%` : 'Sales not entered'}
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Direct Food Cost %</CardDescription>
+          <CardDescription>Food Cost %</CardDescription>
           <div className="text-3xl font-bold text-stone-900 mt-1">
             {pnl.foodCostPercent}%
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Food production (Cust + Comp + Sample) ÷ Net Sales
-          </div>
         </Card>
 
         <Card>
-          <CardDescription>Monthly Break-Even Pacing</CardDescription>
+          <CardDescription>Monthly Position</CardDescription>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant={breakEven.status === 'Healthy' ? 'success' : breakEven.status === 'At Risk' ? 'warning' : 'danger'} className="text-xs py-1 px-2.5 font-bold">
               {breakEven.status.toUpperCase()}
@@ -298,8 +292,7 @@ export default function ProfitabilityPage() {
       {/* P&L Waterfall Breakdown */}
       <Card>
         <CardHeader>
-          <CardTitle>Daily P&L Statement for {businessDate}</CardTitle>
-          <CardDescription>Separation of actual direct costs and estimated fixed allocations</CardDescription>
+          <CardTitle>Daily P&L</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="divide-y divide-stone-100 text-xs sm:text-sm">
@@ -307,7 +300,7 @@ export default function ProfitabilityPage() {
             <div className="py-3 flex items-center justify-between font-bold text-stone-900 bg-stone-50/50 px-2 rounded-lg">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span>Total Net Revenue (Petpooja)</span>
+                <span>Net Sales</span>
                 <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ACTUAL</span>
               </div>
               <span className="text-emerald-700 text-base font-extrabold">{formatINR(pnl.revenue)}</span>
@@ -316,7 +309,7 @@ export default function ProfitabilityPage() {
             {/* Direct Material Consumption */}
             <div className="py-3.5 space-y-2 px-2">
               <div className="flex items-center justify-between font-semibold text-stone-800">
-                <span>Direct Material Consumption (WAC Valued)</span>
+                <span>Food & Materials</span>
                 <span className="text-rose-600">− {formatINR(pnl.totalDirectConsumption)}</span>
               </div>
               <div className="pl-4 space-y-1 text-xs text-stone-500">
@@ -354,7 +347,7 @@ export default function ProfitabilityPage() {
               <div className="flex items-center justify-between font-semibold text-stone-800">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-amber-600" />
-                  <span>Operational Utilities &amp; Fuel (WAC &amp; Meter Valued)</span>
+                  <span>Utilities & Fuel</span>
                 </div>
                 <span className="text-rose-600">− {formatINR(pnl.operationalUtilities.totalOperationalUtilities)}</span>
               </div>
@@ -377,7 +370,7 @@ export default function ProfitabilityPage() {
             {/* Variable Expenses */}
             <div className="py-3.5 space-y-2 px-2">
               <div className="flex items-center justify-between font-semibold text-stone-800">
-                <span>Variable Operating Expenses</span>
+                <span>Operating Expenses</span>
                 <span className="text-rose-600">− {formatINR(pnl.totalVariableExpenses)}</span>
               </div>
               <div className="pl-4 space-y-1 text-xs text-stone-500">
@@ -400,7 +393,7 @@ export default function ProfitabilityPage() {
             <div className="py-3.5 space-y-2 px-2">
               <div className="flex items-center justify-between font-semibold text-stone-800">
                 <div className="flex items-center gap-2">
-                  <span>Allocated Monthly Overheads</span>
+                  <span>Monthly Overheads</span>
                   <span className="text-[10px] text-amber-800 font-normal bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">ALLOCATED ESTIMATE</span>
                 </div>
                 <span className="text-rose-600">− {formatINR(pnl.dailyAllocatedFixedCosts)}</span>
@@ -419,7 +412,7 @@ export default function ProfitabilityPage() {
 
             {/* Final Bottom Line */}
             <div className="py-4 flex items-center justify-between font-extrabold text-base bg-stone-100 px-3 rounded-xl">
-              <span className="text-stone-900">Daily Estimated Net Profit</span>
+              <span className="text-stone-900">Net Profit</span>
               <span className={pnl.estimatedNetProfit >= 0 ? 'text-emerald-700 text-lg' : 'text-rose-600 text-lg'}>
                 {formatINR(pnl.estimatedNetProfit)}
               </span>
@@ -431,26 +424,25 @@ export default function ProfitabilityPage() {
       {/* Break Even Comparison */}
       <Card>
         <CardHeader>
-          <CardTitle>Break-Even Engine Intelligence</CardTitle>
-          <CardDescription>Planning management target vs dynamic cost-derived break-even</CardDescription>
+          <CardTitle>Break-Even</CardTitle>
         </CardHeader>
         <CardContent className="pt-0 text-xs space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">1. Planning Break-Even Target</div>
+              <div className="text-xs font-bold text-stone-700 uppercase">Monthly Target</div>
               <div className="text-2xl font-black text-stone-900">{formatINR(planningBreakEven)} / month</div>
               <p className="text-stone-500 text-[11px]">
-                Fixed management objective. Requires <strong>{formatINR(breakEven.requiredDailyRevenuePlanning)}/day</strong> across the remaining {breakEven.daysRemaining} days.
+                Requires <strong>{formatINR(breakEven.requiredDailyRevenuePlanning)}/day</strong> across the remaining {breakEven.daysRemaining} days.
               </p>
             </div>
 
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">2. Calculated Break-Even Point</div>
+              <div className="text-xs font-bold text-stone-700 uppercase">Calculated Break-Even</div>
               <div className="text-2xl font-black text-amber-700">
                 {formatINR(breakEven.calculatedBreakEven)} / month
               </div>
               <p className="text-stone-500 text-[11px]">
-                Dynamically derived from actual fixed costs divided by current contribution margin ratio (CM Ratio: {cmRatioPercent}%).
+                Derived from fixed costs and current contribution margin ratio ({cmRatioPercent}%).
               </p>
             </div>
           </div>

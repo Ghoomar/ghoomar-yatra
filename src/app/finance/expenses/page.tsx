@@ -163,9 +163,6 @@ export default function ExpensesPage() {
             <IndianRupee className="h-6 w-6 text-amber-600" />
             Operational Expenses
           </h1>
-          <p className="text-sm text-stone-500">
-            Record approved operational expenditures for day-to-day highway facility management.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -195,31 +192,28 @@ export default function ExpensesPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Today's Total Logged Expenses</CardDescription>
+          <CardDescription>Today's Expenses</CardDescription>
           <div className="text-2xl font-bold text-rose-600 mt-1">
             {formatINR(totalDayExpenses)}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Deducted directly in daily P&L</div>
         </Card>
 
         <Card>
-          <CardDescription>Voucher Count</CardDescription>
+          <CardDescription>Vouchers</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{expenses.length}</div>
-          <div className="text-[11px] text-stone-500 mt-1">Logged expenditures for {businessDate}</div>
         </Card>
 
         <Card>
-          <CardDescription>Approval Rule</CardDescription>
+          <CardDescription>Approval</CardDescription>
           <div className="text-base font-semibold text-stone-800 mt-1">Pre-Approved Vouchers Only</div>
-          <div className="text-[11px] text-stone-500 mt-1">Operational policy: Spend approved before payment</div>
+          <div className="text-[11px] text-stone-500 mt-1">Spend approved before payment</div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Log Approved Expense</CardTitle>
-            <CardDescription>Enter approved cash/bank expenditure</CardDescription>
+            <CardTitle>Add Expense</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <form onSubmit={handleAddExpense} className="space-y-3 text-xs">
@@ -239,7 +233,7 @@ export default function ExpensesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Description / Purpose</label>
+                <label className="block font-medium text-stone-700 mb-1">Description</label>
                 <input
                   type="text"
                   value={description}
@@ -290,7 +284,7 @@ export default function ExpensesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Approved By (Profile) *</label>
+                <label className="block font-medium text-stone-700 mb-1">Approved By *</label>
                 <select
                   value={approvedById}
                   onChange={(e) => setApprovedById(e.target.value)}
@@ -307,7 +301,7 @@ export default function ExpensesPage() {
               </div>
 
               <Button type="submit" variant="amber" disabled={saving} className="w-full mt-2">
-                {saving ? 'Recording...' : 'Record Approved Expense'}
+                {saving ? 'Recording...' : 'Record Expense'}
               </Button>
             </form>
           </CardContent>
@@ -315,8 +309,7 @@ export default function ExpensesPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Expense Register for {businessDate}</CardTitle>
-            <CardDescription>Itemized breakdown with audit timestamps</CardDescription>
+            <CardTitle>Expense Register</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             {expenses.length === 0 ? (

@@ -227,7 +227,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* Central Store Balance */}
         <Card className={`relative overflow-hidden ${isLowStock ? 'border-rose-300 bg-rose-50/20' : ''}`}>
-          <CardDescription>Central Store Diesel Stock</CardDescription>
+          <CardDescription>Diesel Stock</CardDescription>
           <div className="flex items-baseline gap-2 mt-1">
             <span className={`text-2xl font-bold font-mono ${isLowStock ? 'text-rose-600' : 'text-stone-900'}`}>
               {storeStock.toFixed(1)} L
@@ -238,39 +238,27 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
               </Badge>
             )}
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Authoritative physical stock in Central Store
-          </div>
         </Card>
 
         {/* Minimum Reserve Alert */}
         <Card>
-          <CardDescription>Minimum Stock Reserve</CardDescription>
+          <CardDescription>Minimum Reserve</CardDescription>
           <div className="text-2xl font-bold text-amber-700 mt-1 font-mono">{minReserve.toFixed(0)} L</div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Admin configurable safety threshold
-          </div>
         </Card>
 
         {/* Current WAC Cost */}
         <Card>
-          <CardDescription>Weighted Average Cost (WAC)</CardDescription>
+          <CardDescription>Avg Cost</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1 font-mono">
             {currentWac > 0 ? `${formatINR(currentWac)} / L` : '—'}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">
-            Dynamic valuation applied on generator consumption
           </div>
         </Card>
 
         {/* Informational Generator Metadata */}
         <Card className="bg-stone-50/50">
-          <CardDescription>Generator Tank Capacity</CardDescription>
+          <CardDescription>Tank Capacity</CardDescription>
           <div className="text-2xl font-bold text-stone-700 mt-1 font-mono">
             {GENERATOR_TANK_CAPACITY_L} L
-          </div>
-          <div className="text-[11px] text-stone-400 mt-1">
-            Informational facility specification (no fake tank balance)
           </div>
         </Card>
       </div>
@@ -295,7 +283,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Fuel className="h-4 w-4 text-amber-600" />
-                Record Fuel Action
+                Fuel Action
               </CardTitle>
             </div>
             {/* Mode Switch Tabs */}
@@ -342,7 +330,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Liters Transferred to Generator <span className="text-rose-500">*</span>
+                    Liters Transferred <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -378,7 +366,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Generator Running Hours (Optional Metadata)
+                    Running Hours (Optional)
                   </label>
                   <input
                     type="number"
@@ -389,11 +377,10 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                     placeholder="e.g. 2.5"
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
-                  <span className="text-[10px] text-stone-400">Used for tracking generator fuel efficiency.</span>
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes / Reason</label>
+                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
                   <input
                     type="text"
                     value={refillNotes}
@@ -415,7 +402,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                     </>
                   ) : (
                     <>
-                      <Flame className="h-4 w-4" /> Transfer to Generator (Consume)
+                      <Flame className="h-4 w-4" /> Transfer to Generator
                     </>
                   )}
                 </Button>
@@ -425,7 +412,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
               <form onSubmit={handlePurchaseSubmit} className="space-y-3 text-xs">
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Quantity Purchased (Liters) <span className="text-rose-500">*</span>
+                    Quantity Purchased <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -446,7 +433,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Actual Purchase Price per Liter (₹/L) <span className="text-rose-500">*</span>
+                    Purchase Price per Liter <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400 font-bold">
@@ -463,9 +450,6 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pl-8"
                     />
                   </div>
-                  <span className="text-[10px] text-stone-400">
-                    Must be entered each time based on actual fuel vendor pump receipt.
-                  </span>
                 </div>
 
                 {parseFloat(purchaseLiters) > 0 && parseFloat(purchaseRate) > 0 && (
@@ -478,7 +462,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                 )}
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Fuel Station / Vendor</label>
+                  <label className="block font-medium text-stone-700 mb-1">Vendor</label>
                   <select
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
@@ -494,7 +478,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Pump Receipt / Bill No.</label>
+                  <label className="block font-medium text-stone-700 mb-1">Bill / Invoice No.</label>
                   <input
                     type="text"
                     value={invoiceNo}
@@ -527,13 +511,10 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                     </>
                   ) : (
                     <>
-                      <Truck className="h-4 w-4" /> Record Purchase (Inward Stock)
+                      <Truck className="h-4 w-4" /> Record Purchase
                     </>
                   )}
                 </Button>
-                <p className="text-[10px] text-stone-400 text-center leading-tight">
-                  Purchase increases Central Store inventory &amp; updates WAC. It is NOT immediately a Daily P&amp;L expense.
-                </p>
               </form>
             )}
           </CardContent>
@@ -543,8 +524,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-base font-bold">Diesel Stock Movements Ledger</CardTitle>
-              <CardDescription>Authoritative purchase inwards &amp; generator consumption</CardDescription>
+              <CardTitle className="text-base font-bold">Diesel Movements</CardTitle>
             </div>
             {todayConsumptionLiters > 0 && (
               <Badge variant="warning">
