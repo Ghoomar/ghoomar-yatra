@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatPercent, getMonthDateRange } from '@/lib/utils';
 import { calculateDailyProfitability, calculateBreakEvenPacing, fetchMTDFinancialSummary } from '@/lib/finance-engine';
 import { MTDFinancialSummary } from '@/lib/types/database';
-import { TrendingUp, RefreshCw, Zap, Fuel, Flame } from 'lucide-react';
+import { TrendingUp, RefreshCw, Zap, Fuel, Flame, Receipt, UtensilsCrossed, IndianRupee, Building2 } from 'lucide-react';
 
 const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
 const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
@@ -291,134 +291,139 @@ export default function ProfitabilityPage() {
 
       {/* P&L Waterfall Breakdown */}
       <Card>
-        <CardHeader>
-          <CardTitle>Daily P&L</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="divide-y divide-stone-100 text-xs sm:text-sm">
-            {/* Revenue */}
-            <div className="py-3 flex items-center justify-between font-bold text-stone-900 bg-stone-50/50 px-2 rounded-lg">
+        <div className="divide-y divide-stone-100 text-xs sm:text-sm">
+          {/* Revenue */}
+          <div className="py-3 flex items-center justify-between font-bold text-stone-900 bg-stone-50/50 px-2 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-emerald-600" />
+              <span>Net Sales</span>
+              <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ACTUAL</span>
+            </div>
+            <span className="text-emerald-700 text-base font-extrabold">{formatINR(pnl.revenue)}</span>
+          </div>
+
+          {/* Direct Material Consumption */}
+          <div className="py-3.5 space-y-2 px-2">
+            <div className="flex items-center justify-between font-semibold text-stone-800">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span>Net Sales</span>
-                <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ACTUAL</span>
-              </div>
-              <span className="text-emerald-700 text-base font-extrabold">{formatINR(pnl.revenue)}</span>
-            </div>
-
-            {/* Direct Material Consumption */}
-            <div className="py-3.5 space-y-2 px-2">
-              <div className="flex items-center justify-between font-semibold text-stone-800">
+                <UtensilsCrossed className="h-4 w-4 text-amber-600" />
                 <span>Food & Materials</span>
-                <span className="text-rose-600">− {formatINR(pnl.totalDirectConsumption)}</span>
               </div>
-              <div className="pl-4 space-y-1 text-xs text-stone-500">
-                <div className="flex items-center justify-between">
-                  <span>• Customer Food Production</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.customerFoodConsumption)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Complimentary Food (Guest Relations)</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.complimentaryFoodConsumption)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Sampling / Recipe Testing</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.samplingConsumption)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Staff Food (Duty Meals)</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.staffFoodConsumption)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Kitchen Wastage &amp; Storage Spoilage</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.wastageCost)}</span>
-                </div>
-                {pnl.otherConsumption > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span>• Other Operational Consumption</span>
-                    <span className="font-mono text-stone-700">{formatINR(pnl.otherConsumption)}</span>
-                  </div>
-                )}
-              </div>
+              <span className="text-rose-600">− {formatINR(pnl.totalDirectConsumption)}</span>
             </div>
-
-            {/* Operational Utilities & Fuel Costs */}
-            <div className="py-3.5 space-y-2 px-2">
-              <div className="flex items-center justify-between font-semibold text-stone-800">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-amber-600" />
-                  <span>Utilities & Fuel</span>
-                </div>
-                <span className="text-rose-600">− {formatINR(pnl.operationalUtilities.totalOperationalUtilities)}</span>
+            <div className="pl-4 space-y-1 text-xs text-stone-500">
+              <div className="flex items-center justify-between">
+                <span>• Customer Food Production</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.customerFoodConsumption)}</span>
               </div>
-              <div className="pl-4 space-y-1 text-xs text-stone-500">
-                <div className="flex items-center justify-between">
-                  <span>• Electricity ({operationalUtilities.electricityKvah.toFixed(1)} KVAH × {formatINR(operationalUtilities.electricityRate)}/KVAH)</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.electricityCost)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Generator Diesel ({operationalUtilities.generatorDieselLiters.toFixed(1)} L consumed @ WAC)</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.generatorDieselCost)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Commercial LPG ({operationalUtilities.commercialLpgCylinders} Cyl issued @ WAC)</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.commercialLpgCost)}</span>
-                </div>
+              <div className="flex items-center justify-between">
+                <span>• Complimentary Food (Guest Relations)</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.complimentaryFoodConsumption)}</span>
               </div>
-            </div>
-
-            {/* Variable Expenses */}
-            <div className="py-3.5 space-y-2 px-2">
-              <div className="flex items-center justify-between font-semibold text-stone-800">
-                <span>Operating Expenses</span>
-                <span className="text-rose-600">− {formatINR(pnl.totalVariableExpenses)}</span>
+              <div className="flex items-center justify-between">
+                <span>• Sampling / Recipe Testing</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.samplingConsumption)}</span>
               </div>
-              <div className="pl-4 space-y-1 text-xs text-stone-500">
-                <div className="flex items-center justify-between">
-                  <span>• Property Rent ({(rentRate * 100).toFixed(0)}% of Revenue)</span>
-                  <span>{formatINR(pnl.revenue * rentRate)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Investor Share ({(investorRate * 100).toFixed(0)}% of Revenue)</span>
-                  <span>{formatINR(pnl.revenue * investorRate)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>• Direct Logged Expenses (Vouchers)</span>
-                  <span>{formatINR(variableExpenses)}</span>
-                </div>
+              <div className="flex items-center justify-between">
+                <span>• Staff Food (Duty Meals)</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.staffFoodConsumption)}</span>
               </div>
-            </div>
-
-            {/* Allocated Monthly Overheads */}
-            <div className="py-3.5 space-y-2 px-2">
-              <div className="flex items-center justify-between font-semibold text-stone-800">
-                <div className="flex items-center gap-2">
-                  <span>Monthly Overheads</span>
-                  <span className="text-[10px] text-amber-800 font-normal bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">ALLOCATED ESTIMATE</span>
-                </div>
-                <span className="text-rose-600">− {formatINR(pnl.dailyAllocatedFixedCosts)}</span>
+              <div className="flex items-center justify-between">
+                <span>• Kitchen Wastage &amp; Storage Spoilage</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.wastageCost)}</span>
               </div>
-              <div className="pl-4 space-y-1 text-xs text-stone-500">
+              {pnl.otherConsumption > 0 && (
                 <div className="flex items-center justify-between">
-                  <span>• Staff Salaries ({formatINR(totalSalaries)} ÷ {daysInMonth} days)</span>
-                  <span>{formatINR(totalSalaries / daysInMonth)}</span>
+                  <span>• Other Operational Consumption</span>
+                  <span className="font-mono text-stone-700">{formatINR(pnl.otherConsumption)}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>• Fixed Internet &amp; Telecom ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
-                  <span>{formatINR(monthlyOtherFixed / daysInMonth)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Final Bottom Line */}
-            <div className="py-4 flex items-center justify-between font-extrabold text-base bg-stone-100 px-3 rounded-xl">
-              <span className="text-stone-900">Net Profit</span>
-              <span className={pnl.estimatedNetProfit >= 0 ? 'text-emerald-700 text-lg' : 'text-rose-600 text-lg'}>
-                {formatINR(pnl.estimatedNetProfit)}
-              </span>
+              )}
             </div>
           </div>
-        </CardContent>
+
+          {/* Operational Utilities & Fuel Costs */}
+          <div className="py-3.5 space-y-2 px-2">
+            <div className="flex items-center justify-between font-semibold text-stone-800">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-600" />
+                <span>Utilities & Fuel</span>
+              </div>
+              <span className="text-rose-600">− {formatINR(pnl.operationalUtilities.totalOperationalUtilities)}</span>
+            </div>
+            <div className="pl-4 space-y-1 text-xs text-stone-500">
+              <div className="flex items-center justify-between">
+                <span>• Electricity ({operationalUtilities.electricityKvah.toFixed(1)} KVAH × {formatINR(operationalUtilities.electricityRate)}/KVAH)</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.electricityCost)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• Generator Diesel ({operationalUtilities.generatorDieselLiters.toFixed(1)} L consumed @ WAC)</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.generatorDieselCost)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• Commercial LPG ({operationalUtilities.commercialLpgCylinders} Cyl issued @ WAC)</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.commercialLpgCost)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Variable Expenses */}
+          <div className="py-3.5 space-y-2 px-2">
+            <div className="flex items-center justify-between font-semibold text-stone-800">
+              <div className="flex items-center gap-2">
+                <IndianRupee className="h-4 w-4 text-amber-600" />
+                <span>Operating Expenses</span>
+              </div>
+              <span className="text-rose-600">− {formatINR(pnl.totalVariableExpenses)}</span>
+            </div>
+            <div className="pl-4 space-y-1 text-xs text-stone-500">
+              <div className="flex items-center justify-between">
+                <span>• Property Rent ({(rentRate * 100).toFixed(0)}% of Revenue)</span>
+                <span>{formatINR(pnl.revenue * rentRate)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• Investor Share ({(investorRate * 100).toFixed(0)}% of Revenue)</span>
+                <span>{formatINR(pnl.revenue * investorRate)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• Direct Logged Expenses (Vouchers)</span>
+                <span>{formatINR(variableExpenses)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Allocated Monthly Overheads */}
+          <div className="py-3.5 space-y-2 px-2">
+            <div className="flex items-center justify-between font-semibold text-stone-800">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-amber-600" />
+                <span>Monthly Overheads</span>
+                <span className="text-[10px] text-amber-800 font-normal bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">ALLOCATED ESTIMATE</span>
+              </div>
+              <span className="text-rose-600">− {formatINR(pnl.dailyAllocatedFixedCosts)}</span>
+            </div>
+            <div className="pl-4 space-y-1 text-xs text-stone-500">
+              <div className="flex items-center justify-between">
+                <span>• Staff Salaries ({formatINR(totalSalaries)} ÷ {daysInMonth} days)</span>
+                <span>{formatINR(totalSalaries / daysInMonth)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>• Fixed Internet &amp; Telecom ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
+                <span>{formatINR(monthlyOtherFixed / daysInMonth)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Final Bottom Line */}
+          <div className="py-4 flex items-center justify-between font-extrabold text-base bg-stone-100 px-3 rounded-xl">
+            <div className="flex items-center gap-2">
+              <TrendingUp className={`h-4 w-4 ${pnl.estimatedNetProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`} />
+              <span className="text-stone-900">Net Profit</span>
+            </div>
+            <span className={pnl.estimatedNetProfit >= 0 ? 'text-emerald-700 text-lg' : 'text-rose-600 text-lg'}>
+              {formatINR(pnl.estimatedNetProfit)}
+            </span>
+          </div>
+        </div>
       </Card>
 
       {/* Break Even Comparison */}
