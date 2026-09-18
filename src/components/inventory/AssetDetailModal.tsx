@@ -289,19 +289,19 @@ export function AssetDetailModal({
         {/* KPI Metrics Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Total Owned</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Total</div>
             <div className="text-base font-bold text-stone-900 mt-0.5">
               {totalOwned} <span className="text-[10px] text-stone-500 font-normal">{asset.unit?.symbol || 'pcs'}</span>
             </div>
           </div>
           <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-200">
-            <div className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold">In-Service (Active)</div>
+            <div className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold">In Service</div>
             <div className="text-base font-bold text-emerald-900 mt-0.5">
               {totalInService} <span className="text-[10px] text-emerald-600 font-normal">{asset.unit?.symbol || 'pcs'}</span>
             </div>
           </div>
           <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-200">
-            <div className="text-[10px] text-amber-700 uppercase tracking-wider font-semibold">Broken / Repairs</div>
+            <div className="text-[10px] text-amber-700 uppercase tracking-wider font-semibold">Broken / Repair</div>
             <div className="text-base font-bold text-amber-900 mt-0.5">
               {brokenQty} <span className="text-[10px] text-amber-600 font-normal">{asset.unit?.symbol || 'pcs'}</span>
             </div>
@@ -324,7 +324,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <MapPin className="h-3.5 w-3.5" /> Location Allocation
+            <MapPin className="h-3.5 w-3.5" /> Locations
           </button>
           <button
             onClick={() => setActiveTab('transfer')}
@@ -334,7 +334,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <ArrowRightLeft className="h-3.5 w-3.5" /> Inter-Location Transfer
+            <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer
           </button>
           <button
             onClick={() => setActiveTab('breakage')}
@@ -344,7 +344,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <AlertTriangle className="h-3.5 w-3.5" /> Log Damage / Restoration
+            <AlertTriangle className="h-3.5 w-3.5" /> Damage / Repair
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -354,11 +354,11 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <History className="h-3.5 w-3.5" /> Movement Ledger
+            <History className="h-3.5 w-3.5" /> Movements
           </button>
         </div>
 
-        {/* Tab 1: Location Allocation */}
+        {/* Tab 1: Locations */}
         {activeTab === 'overview' && (
           <div className="space-y-3">
             <div className="border border-stone-200 rounded-lg overflow-hidden">
@@ -367,7 +367,7 @@ export function AssetDetailModal({
                   <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-semibold">
                     <th className="py-2.5 px-3">Location</th>
                     <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3 text-right">In-Service Quantity</th>
+                    <th className="py-2.5 px-3 text-right">In Service</th>
                     <th className="py-2.5 px-3 text-right">Action</th>
                   </tr>
                 </thead>
@@ -415,32 +415,29 @@ export function AssetDetailModal({
                 onClick={() => setActiveTab('transfer')}
                 className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
               >
-                <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer Between Locations
+                <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer
               </Button>
             </div>
           </div>
         )}
 
-        {/* Tab 2: Inter-Location Transfer */}
+        {/* Tab 2: Transfer */}
         {activeTab === 'transfer' && (
           <form onSubmit={handleExecuteTransfer} className="space-y-3 bg-stone-50/50 p-4 rounded-lg border border-stone-200">
             <h3 className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
-              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> Move Asset Between Locations
+              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> Transfer Asset
             </h3>
-            <p className="text-[11px] text-stone-500">
-              Moving assets between rooms does not change total business inventory. It updates room allocations with full ledger tracking.
-            </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">From Location <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">From <span className="text-rose-500">*</span></label>
                 <select
                   value={transferFromLoc}
                   onChange={(e) => setTransferFromLoc(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
                 >
-                  <option value="">Select Source Location...</option>
+                  <option value="">Select Location...</option>
                   {locations.map((loc) => {
                     const avail = asset.location_stocks?.find((ls: any) => ls.location_id === loc.id)?.quantity || 0;
                     return (
@@ -453,14 +450,14 @@ export function AssetDetailModal({
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">To Location <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">To <span className="text-rose-500">*</span></label>
                 <select
                   value={transferToLoc}
                   onChange={(e) => setTransferToLoc(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
                 >
-                  <option value="">Select Destination Location...</option>
+                  <option value="">Select Location...</option>
                   {locations
                     .filter((l) => l.id !== transferFromLoc)
                     .map((loc) => (
@@ -474,7 +471,7 @@ export function AssetDetailModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Quantity ({asset.unit?.symbol || 'pcs'}) <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">Quantity <span className="text-rose-500">*</span></label>
                 <input
                   type="number"
                   min="1"
@@ -488,7 +485,7 @@ export function AssetDetailModal({
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Transfer Notes / Reason</label>
+                <label className="block font-medium text-stone-700 mb-1">Notes</label>
                 <input
                   type="text"
                   value={transferNotes}
@@ -504,21 +501,21 @@ export function AssetDetailModal({
                 Cancel
               </Button>
               <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                {saving ? 'Executing Transfer...' : 'Confirm Transfer'}
+                {saving ? 'Transferring...' : 'Transfer Asset'}
               </Button>
             </div>
           </form>
         )}
 
-        {/* Tab 3: Damage, Loss & Restoration */}
+        {/* Tab 3: Damage / Repair */}
         {activeTab === 'breakage' && (
           <form onSubmit={handleExecuteStatusAction} className="space-y-3 bg-stone-50/50 p-4 rounded-lg border border-stone-200">
             <h3 className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600" /> Log Damage, Loss, or Return to Service
+              <AlertTriangle className="h-4 w-4 text-amber-600" /> Damage / Repair
             </h3>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Event Type <span className="text-red-500">*</span></label>
+              <label className="block font-medium text-stone-700 mb-1">Type <span className="text-rose-500">*</span></label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -559,8 +556,7 @@ export function AssetDetailModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  {actionType === 'repair' ? 'Restore Into Location' : 'Affected Location'}{' '}
-                  <span className="text-red-500">*</span>
+                  Location <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={actionLoc}
@@ -581,7 +577,7 @@ export function AssetDetailModal({
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Quantity ({asset.unit?.symbol || 'pcs'}) <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">Quantity <span className="text-rose-500">*</span></label>
                 <input
                   type="number"
                   min="1"
@@ -595,7 +591,7 @@ export function AssetDetailModal({
             </div>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Incident Notes / Cause</label>
+              <label className="block font-medium text-stone-700 mb-1">Notes</label>
               <input
                 type="text"
                 value={actionNotes}
@@ -610,13 +606,13 @@ export function AssetDetailModal({
                 Cancel
               </Button>
               <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                {saving ? 'Saving...' : 'Record Incident'}
+                {saving ? 'Recording...' : 'Record'}
               </Button>
             </div>
           </form>
         )}
 
-        {/* Tab 4: Movement History Ledger */}
+        {/* Tab 4: Movements */}
         {activeTab === 'history' && (
           <div className="space-y-3">
             <div className="border border-stone-200 rounded-lg overflow-hidden">
@@ -626,7 +622,7 @@ export function AssetDetailModal({
                     <th className="py-2.5 px-3">Date</th>
                     <th className="py-2.5 px-3">Type</th>
                     <th className="py-2.5 px-3">Quantity</th>
-                    <th className="py-2.5 px-3">Route / Details</th>
+                    <th className="py-2.5 px-3">Route</th>
                     <th className="py-2.5 px-3">Notes</th>
                   </tr>
                 </thead>

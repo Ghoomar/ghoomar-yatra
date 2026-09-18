@@ -153,11 +153,8 @@ export default function PhysicalAssetsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Layers className="h-6 w-6 text-amber-600" />
-            Physical Assets & Equipment Ledger
+            Physical Assets
           </h1>
-          <p className="text-sm text-stone-500">
-            Cutlery, crockery, furniture, and equipment tracked by location, in-service status, breakage, and loss.
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -193,27 +190,23 @@ export default function PhysicalAssetsPage() {
       {/* KPI Highlights */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4 bg-white border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Total Registered</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Total Assets</div>
           <div className="text-xl font-bold text-stone-900 mt-1">{totalOwnedAll} <span className="text-xs font-normal text-stone-500">pcs</span></div>
-          <div className="text-[10px] text-stone-400 mt-0.5">{assets.length} distinct asset SKUs</div>
         </Card>
 
         <Card className="p-4 bg-emerald-50/50 border-emerald-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">In-Service (Active)</div>
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">In Service</div>
           <div className="text-xl font-bold text-emerald-900 mt-1">{totalInServiceAll} <span className="text-xs font-normal text-emerald-600">pcs</span></div>
-          <div className="text-[10px] text-emerald-600 mt-0.5">Deployed across operational rooms</div>
         </Card>
 
         <Card className="p-4 bg-amber-50/50 border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Broken / Damage</div>
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Broken / Repair</div>
           <div className="text-xl font-bold text-amber-900 mt-1">{totalBrokenAll} <span className="text-xs font-normal text-amber-600">pcs</span></div>
-          <div className="text-[10px] text-amber-600 mt-0.5">Out of service awaiting repair</div>
         </Card>
 
         <Card className="p-4 bg-red-50/50 border-red-200 shadow-sm">
           <div className="text-[11px] font-semibold text-red-700 uppercase tracking-wider">Missing / Lost</div>
           <div className="text-xl font-bold text-red-900 mt-1">{totalLostAll} <span className="text-xs font-normal text-red-600">pcs</span></div>
-          <div className="text-[10px] text-red-600 mt-0.5">Reported missing in facility</div>
         </Card>
       </div>
 
@@ -221,13 +214,13 @@ export default function PhysicalAssetsPage() {
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-stone-200 text-xs">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <MapPin className="h-4 w-4 text-stone-400 shrink-0" />
-          <span className="font-medium text-stone-700 whitespace-nowrap">Filter Location:</span>
+          <span className="font-medium text-stone-700 whitespace-nowrap">Location:</span>
           <select
             value={selectedLocationId}
             onChange={(e) => setSelectedLocationId(e.target.value)}
             className="w-full sm:w-64 rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white font-medium"
           >
-            <option value="ALL">All Operational Locations (Consolidated)</option>
+            <option value="ALL">All Locations</option>
             {locations.map((loc) => (
               <option key={loc.id} value={loc.id}>
                 {loc.name}
@@ -242,7 +235,7 @@ export default function PhysicalAssetsPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search asset name or code..."
+            placeholder="Search assets..."
             className="w-full pl-8 pr-3 py-1.5 rounded-md border border-stone-300 text-stone-900 focus:outline-none"
           />
         </div>
@@ -253,10 +246,7 @@ export default function PhysicalAssetsPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Physical Asset Register</CardTitle>
-              <CardDescription>
-                Click any asset row to view location allocations, transfer between rooms, or log damage.
-              </CardDescription>
+              <CardTitle>Assets</CardTitle>
             </div>
             <div className="text-xs text-stone-500">
               Showing {filteredAssets.length} of {assets.length} assets
@@ -273,14 +263,14 @@ export default function PhysicalAssetsPage() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                    <th className="py-2.5 px-3">Asset Code</th>
-                    <th className="py-2.5 px-3">Item Name</th>
+                    <th className="py-2.5 px-3">Code</th>
+                    <th className="py-2.5 px-3">Asset</th>
                     <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3">Location Allocations</th>
-                    <th className="py-2.5 px-3 text-right">In-Service</th>
+                    <th className="py-2.5 px-3">Locations</th>
+                    <th className="py-2.5 px-3 text-right">In Service</th>
                     <th className="py-2.5 px-3 text-right">Broken</th>
                     <th className="py-2.5 px-3 text-right">Lost</th>
-                    <th className="py-2.5 px-3 text-right">Total Owned</th>
+                    <th className="py-2.5 px-3 text-right">Total</th>
                     <th className="py-2.5 px-3 text-center">Action</th>
                   </tr>
                 </thead>
