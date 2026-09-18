@@ -60,17 +60,17 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       items: [
         { href: '/finance/sales', label: 'Daily Sales', icon: Receipt, permission: 'finance.sales' },
         { href: '/finance/purchases', label: 'Purchases & Bills', icon: ShoppingBag, permission: 'finance.purchases' },
-        { href: '/finance/vendors', label: 'Vendors Master', icon: Building2, permission: 'finance.vendors' },
+        { href: '/finance/vendors', label: 'Vendors', icon: Building2, permission: 'finance.vendors' },
         { href: '/finance/expenses', label: 'Expenses', icon: IndianRupee, permission: 'finance.expenses' },
         { href: '/finance/utilities', label: 'Utilities & Fuel', icon: Zap, permission: 'finance.utilities' },
-        { href: '/finance/profitability', label: 'Profitability P&L', icon: TrendingUp, permission: 'finance.profitability' },
+        { href: '/finance/profitability', label: 'Daily P&L', icon: TrendingUp, permission: 'finance.profitability' },
       ]
     },
     {
       title: 'Inventory & Store',
       items: [
         { href: '/inventory', label: 'Stock & Items', icon: Package, permission: 'inventory.stock' },
-        { href: '/inventory/issues', label: 'Store Issues / Chef', icon: ArrowRightLeft, permission: 'inventory.issues' },
+        { href: '/inventory/issues', label: 'Store Issues & Transfers', icon: ArrowRightLeft, permission: 'inventory.issues' },
         { href: '/inventory/assets', label: 'Physical Assets', icon: Layers, permission: 'inventory.assets' },
         { href: '/inventory/count', label: 'Physical Count', icon: ClipboardCheck, permission: 'inventory.count' },
       ]
@@ -87,19 +87,19 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
     {
       title: 'Uniforms',
       items: [
-        { href: '/uniforms', label: 'Uniform Ledger', icon: Shirt, permission: 'uniforms.ledger' },
+        { href: '/uniforms', label: 'Uniforms', icon: Shirt, permission: 'uniforms.ledger' },
       ]
     },
     {
       title: 'Intelligence & Reports',
       items: [
-        { href: '/reports', label: 'Management Reports', icon: BarChart3, permission: 'reports.view' },
+        { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
       ]
     },
     {
       title: 'System',
       items: [
-        { href: '/admin', label: 'Master Settings', icon: Settings, permission: 'admin.manage' },
+        { href: '/admin', label: 'Settings', icon: Settings, permission: 'admin.manage' },
       ]
     }
   ];

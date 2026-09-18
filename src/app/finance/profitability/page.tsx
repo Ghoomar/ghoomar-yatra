@@ -237,7 +237,7 @@ export default function ProfitabilityPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <TrendingUp className="h-6 w-6 text-amber-600" />
-            Profitability & P&L
+            Daily P&L
           </h1>
         </div>
 

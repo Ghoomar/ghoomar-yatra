@@ -132,19 +132,19 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
         {/* Stock Snapshot Cards */}
         <div className="p-6 border-b border-stone-200 bg-stone-50/50 grid grid-cols-3 gap-3">
           <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Current Balance</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Stock</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
               {currentQty.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">{item.unit_symbol || item.unit?.symbol || 'units'}</span>
             </div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Weighted Cost</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">WAC</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
               {formatINR(wacCost)}
             </div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Total Stock Value</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Stock Value</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
               {formatINR(totalValue)}
             </div>
@@ -155,7 +155,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
           <div className="flex items-center justify-between pb-1">
             <h3 className="font-bold text-stone-900 flex items-center gap-2">
-              <History className="h-4 w-4 text-amber-600" /> Complete Movement History ({movements.length})
+              <History className="h-4 w-4 text-amber-600" /> Movement History ({movements.length})
             </h3>
             <Button variant="outline" size="sm" onClick={loadMovements} disabled={loading} className="h-7 text-xs">
               <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />

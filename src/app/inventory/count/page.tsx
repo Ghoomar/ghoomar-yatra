@@ -261,11 +261,8 @@ export default function StockCountPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ClipboardCheck className="h-6 w-6 text-amber-600" />
-            Physical Stock Verification & Count Reconciliation
+            Physical Count
           </h1>
-          <p className="text-sm text-stone-500">
-            Reconcile physical stock in Store, Fridges, and Halls against the inventory ledger.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -301,13 +298,12 @@ export default function StockCountPage() {
       {/* Variance Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4 bg-white border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Items in Verification</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Items</div>
           <div className="text-xl font-bold text-stone-900 mt-1">{filteredRows.length}</div>
-          <div className="text-[10px] text-stone-400 mt-0.5">Under selected filters</div>
         </Card>
 
         <Card className="p-4 bg-white border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Variances Detected</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Variances</div>
           <div className="text-xl font-bold text-amber-700 mt-1">{variances.length}</div>
           <div className="text-[10px] text-stone-400 mt-0.5">
             {shortagesCount} Shortages • {surplusCount} Excesses
@@ -315,11 +311,10 @@ export default function StockCountPage() {
         </Card>
 
         <Card className="p-4 bg-amber-50/50 border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Net Variance Value</div>
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Variance Value</div>
           <div className={`text-xl font-bold mt-1 ${totalVarianceCost < 0 ? 'text-red-700' : totalVarianceCost > 0 ? 'text-emerald-700' : 'text-stone-900'}`}>
             {formatINR(totalVarianceCost)}
           </div>
-          <div className="text-[10px] text-amber-600 mt-0.5">At weighted average cost</div>
         </Card>
 
         <Card className="p-4 bg-stone-50 border-stone-200 shadow-sm">
@@ -344,7 +339,7 @@ export default function StockCountPage() {
             onChange={(e) => setSelectedLocationId(e.target.value)}
             className="w-full rounded-md border border-stone-300 p-1.5 text-stone-900 bg-white font-medium focus:outline-none"
           >
-            <option value="ALL">All Operational Locations (Consolidated)</option>
+            <option value="ALL">All Locations</option>
             {locations.map((loc) => (
               <option key={loc.id} value={loc.id}>
                 {loc.name} ({loc.location_type})
@@ -377,7 +372,7 @@ export default function StockCountPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search SKU or item name..."
+            placeholder="Search items..."
             className="w-full pl-8 pr-3 py-1.5 rounded-md border border-stone-300 text-stone-900 focus:outline-none"
           />
         </div>
@@ -389,10 +384,7 @@ export default function StockCountPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Physical Verification Audit Sheet</CardTitle>
-                <CardDescription>
-                  Enter physically verified stock. Discrepancies between expected and physical counts are highlighted and reconciled.
-                </CardDescription>
+                <CardTitle>Physical Count</CardTitle>
               </div>
               <Button
                 type="submit"
@@ -400,7 +392,7 @@ export default function StockCountPage() {
                 disabled={saving || loading || filteredRows.length === 0}
                 className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
               >
-                <Save className="h-4 w-4" /> {saving ? 'Reconciling...' : 'Save & Reconcile Verification'}
+                <Save className="h-4 w-4" /> {saving ? 'Reconciling...' : 'Save & Reconcile'}
               </Button>
             </div>
           </CardHeader>
@@ -414,14 +406,14 @@ export default function StockCountPage() {
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Item SKU</th>
-                      <th className="py-2.5 px-3">Item Name</th>
+                      <th className="py-2.5 px-3">SKU</th>
+                      <th className="py-2.5 px-3">Item</th>
                       <th className="py-2.5 px-3">Class</th>
-                      <th className="py-2.5 px-3 text-right">Expected Stock</th>
-                      <th className="py-2.5 px-3 text-right">Physical Count</th>
+                      <th className="py-2.5 px-3 text-right">Expected</th>
+                      <th className="py-2.5 px-3 text-right">Count</th>
                       <th className="py-2.5 px-3 text-right">Variance</th>
-                      <th className="py-2.5 px-3 text-right">Variance Value</th>
-                      <th className="py-2.5 px-3">Reason / Audit Remarks</th>
+                      <th className="py-2.5 px-3 text-right">Value</th>
+                      <th className="py-2.5 px-3">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">

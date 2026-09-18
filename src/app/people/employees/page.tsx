@@ -134,11 +134,8 @@ export default function EmployeesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Users className="h-6 w-6 text-amber-600" />
-            Staff Directory & Hierarchy
+            Staff Directory
           </h1>
-          <p className="text-sm text-stone-500">
-            Departmental roster of operational personnel across Food & Beverage, Kitchen, Stores & Gate.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -184,7 +181,7 @@ export default function EmployeesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Total Active Employees</CardDescription>
+            <CardDescription>Employees</CardDescription>
             <div className="text-2xl font-bold text-stone-900 mt-1">
               {activeEmployees.length}{' '}
               {inactiveEmployees.length > 0 && (
@@ -201,7 +198,7 @@ export default function EmployeesPage() {
 
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Monthly Payroll Commitment</CardDescription>
+            <CardDescription>Monthly Payroll</CardDescription>
             <div className="text-2xl font-bold text-amber-600 mt-1">
               {formatINR(totalMonthlyPayroll)}
             </div>
@@ -213,7 +210,7 @@ export default function EmployeesPage() {
 
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Operational Hierarchy</CardDescription>
+            <CardDescription>Hierarchy</CardDescription>
             <div className="text-base font-semibold text-stone-800 mt-1">
               Department → Team → Role
             </div>
@@ -273,7 +270,7 @@ export default function EmployeesPage() {
 
           <input
             type="text"
-            placeholder="Search name, code, phone..."
+            placeholder="Search staff..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full sm:w-56 rounded-lg border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
@@ -284,8 +281,7 @@ export default function EmployeesPage() {
       {/* Employees Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Staff Members ({filteredEmployees.length})</CardTitle>
-          <CardDescription>Operational roles, departments, active status and compensation</CardDescription>
+          <CardTitle>Staff ({filteredEmployees.length})</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
@@ -302,7 +298,7 @@ export default function EmployeesPage() {
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                     <th className="py-2.5 px-3">Code</th>
-                    <th className="py-2.5 px-3">Employee Name</th>
+                    <th className="py-2.5 px-3">Employee</th>
                     <th className="py-2.5 px-3">Department / Team</th>
                     <th className="py-2.5 px-3">Role</th>
                     <th className="py-2.5 px-3">Phone</th>

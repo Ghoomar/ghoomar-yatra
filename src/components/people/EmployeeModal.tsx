@@ -200,11 +200,8 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
               </div>
               <div>
                 <h2 className="text-base font-bold text-stone-900">
-                  {isEdit ? `Edit Staff Member: ${employee?.name}` : 'Register New Staff Member'}
+                  {isEdit ? `Edit Employee: ${employee?.name}` : 'Add Employee'}
                 </h2>
-                <p className="text-xs text-stone-500">
-                  Maintain employee profiles, organizational roles, and compensation details
-                </p>
               </div>
             </div>
             <button
@@ -279,7 +276,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
             {/* Org Structure with Quick-Add */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
-              <h3 className="font-semibold text-stone-800">Operational Hierarchy &amp; Role</h3>
+              <h3 className="font-semibold text-stone-800">Department &amp; Role</h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
@@ -379,7 +376,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
             {/* Compensation & Status */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
-              <h3 className="font-semibold text-stone-800">Compensation &amp; Employment Status</h3>
+              <h3 className="font-semibold text-stone-800">Employment &amp; Pay</h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -414,8 +411,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
             {/* Bank Details */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-stone-800">Bank Disbursement Account</h3>
-                <span className="text-[11px] text-stone-400 font-normal">(Optional)</span>
+                <h3 className="font-semibold text-stone-800">Bank Details (Optional)</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -453,7 +449,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                 Cancel
               </Button>
               <Button type="submit" variant="amber" disabled={saving}>
-                {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Register Employee'}
+                {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Employee'}
               </Button>
             </div>
           </form>
