@@ -18,6 +18,7 @@ import {
   X,
   History,
   FileText,
+  Trash2,
 } from 'lucide-react';
 
 interface SalesImportSectionProps {
@@ -33,6 +34,9 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
     message: string;
     existingBatch?: any;
   }>({ isOpen: false, message: '' });
+
+  const [batchToDelete, setBatchToDelete] = useState<SalesImportBatch | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [batches, setBatches] = useState<SalesImportBatch[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(true);
@@ -59,29 +63,28 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const selected = e.dataTransfer.files[0];
-      setFile(selected);
-      setMessage(null);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
+    if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
-      setMessage(null);
     }
   };
 
-  const uploadFile = async (forceOverwrite = false) => {
+  const uploadFile = async (overwrite: boolean = false) => {
     if (!file) return;
+
     setUploading(true);
     setMessage(null);
+    setDuplicateModal({ isOpen: false, message: '' });
 
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (forceOverwrite) {
+      if (overwrite) {
         formData.append('overwrite', 'true');
       }
 
@@ -98,27 +101,63 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
           message: data.message,
           existingBatch: data.existingBatch,
         });
-        setUploading(false);
         return;
       }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to import report.');
+        throw new Error(data.error || 'Failed to import sales file.');
       }
 
       setMessage({
         type: 'success',
-        text: data.message || `Successfully imported ${data.reportType} for ${data.businessDate}.`,
+        text: `Successfully imported ${formatReportTypeLabel(data.batch.report_type)} for ${data.batch.business_date || 'Menu Master'} (${data.insertedRecords || data.batch.record_count} records).`,
       });
+
+      // Clear selection
       setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      setDuplicateModal({ isOpen: false, message: '' });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      // Refresh list
       loadBatches();
-      if (onImportSuccess) onImportSuccess();
+
+      // Notify parent to refresh analytics/reconciliation
+      if (onImportSuccess) {
+        onImportSuccess();
+      }
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Error uploading file.' });
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDeleteBatch = async () => {
+    if (!batchToDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/finance/sales/import?batch_id=${batchToDelete.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete import batch');
+      }
+
+      setMessage({
+        type: 'success',
+        text: `Successfully deleted ${formatReportTypeLabel(batchToDelete.report_type)} import for ${batchToDelete.business_date}.`,
+      });
+      setBatchToDelete(null);
+      await loadBatches();
+      if (onImportSuccess) {
+        onImportSuccess();
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Error deleting import batch.' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -139,14 +178,15 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
 
   return (
     <div className="space-y-6">
-      {/* Upload Dropzone Card */}
+      {/* Upload Zone Card */}
       <Card className="border-stone-200 shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-bold text-stone-900">
-            Import Petpooja Reports
+          <CardTitle className="text-base font-bold text-stone-900 flex items-center gap-2">
+            <UploadCloud className="h-5 w-5 text-amber-600" />
+            Upload Petpooja Sales Report
           </CardTitle>
           <CardDescription className="text-xs text-stone-500">
-            Upload raw Petpooja Excel (.xlsx, .xls) or CSV files. The importer automatically detects report type, extracts dates, and checks for duplicates.
+            Upload raw Petpooja exports directly (.xlsx, .xls, .csv). The system detects the report format and imports orders, hourly item sales, executive summaries, or menu masters.
           </CardDescription>
         </CardHeader>
 
@@ -156,14 +196,16 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
               className={`p-3 rounded-xl text-xs font-medium flex items-center justify-between gap-2 ${
                 message.type === 'success'
                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  : message.type === 'warning'
+                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
                   : 'bg-rose-50 text-rose-800 border border-rose-200'
               }`}
             >
               <div className="flex items-center gap-2">
                 {message.type === 'success' ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
                 ) : (
-                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
                 )}
                 <span>{message.text}</span>
               </div>
@@ -292,13 +334,14 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                     <th className="p-3 text-center">Records</th>
                     <th className="p-3 text-right">Net Sales</th>
                     <th className="p-3 text-right">Imported At</th>
+                    <th className="p-3 text-center w-16">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {batches.map((b) => (
                     <tr key={b.id} className="hover:bg-stone-50/50">
                       <td className="p-3 font-semibold text-stone-900 whitespace-nowrap">
-                        {b.business_date}
+                        {b.business_date || '—'}
                       </td>
                       <td className="p-3 whitespace-nowrap">
                         <Badge
@@ -332,6 +375,16 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                           hour: '2-digit',
                           minute: '2-digit',
                         })}
+                      </td>
+                      <td className="p-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setBatchToDelete(b)}
+                          className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete this import batch"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -392,6 +445,86 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
                 >
                   {uploading ? 'Overwriting...' : 'Overwrite & Replace'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {batchToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-stone-200 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-rose-50/60">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-rose-100 text-rose-800">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Remove Import Batch</h3>
+                  <p className="text-xs text-stone-500">Delete uploaded report and associated records</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBatchToDelete(null)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200/50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Are you sure you want to remove this import? This will delete the batch and all dependent records (orders, hourly items, or executive metrics) atomically from sales analytics and reconciliation.
+              </p>
+
+              <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs space-y-1.5">
+                <div className="flex justify-between items-center text-stone-500 text-[11px]">
+                  <span>Report Type:</span>
+                  <span className="font-semibold text-stone-800">{formatReportTypeLabel(batchToDelete.report_type)}</span>
+                </div>
+                <div className="flex justify-between items-center text-stone-500 text-[11px]">
+                  <span>Report Date:</span>
+                  <span className="font-semibold text-stone-800">{batchToDelete.business_date || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-center text-stone-500 text-[11px]">
+                  <span>File Name:</span>
+                  <span className="font-mono text-stone-700 truncate max-w-[220px]" title={batchToDelete.file_name}>{batchToDelete.file_name}</span>
+                </div>
+                <div className="flex justify-between items-center text-stone-500 text-[11px]">
+                  <span>Records:</span>
+                  <span className="font-semibold text-stone-800">{batchToDelete.record_count}</span>
+                </div>
+                <div className="flex justify-between items-center text-stone-500 text-[11px]">
+                  <span>Net Sales:</span>
+                  <span className="font-bold text-stone-900">{formatINR(batchToDelete.total_net_sales)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBatchToDelete(null)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleDeleteBatch}
+                  disabled={deleting}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                >
+                  {deleting ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Import'
+                  )}
                 </Button>
               </div>
             </div>

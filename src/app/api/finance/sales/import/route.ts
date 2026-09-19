@@ -260,3 +260,57 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: err.message || 'Failed to fetch import history' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const searchParams = request.nextUrl.searchParams;
+    let batchId = searchParams.get('batch_id');
+
+    if (!batchId) {
+      try {
+        const body = await request.json();
+        batchId = body.batchId || body.batch_id;
+      } catch (_) {}
+    }
+
+    if (!batchId) {
+      return NextResponse.json({ error: 'Missing batch_id parameter.' }, { status: 400 });
+    }
+
+    // Fetch batch details first
+    const { data: batch, error: fetchErr } = await supabase
+      .from('sales_import_batches')
+      .select('id, file_name, report_type, business_date, total_net_sales, record_count')
+      .eq('id', batchId)
+      .maybeSingle();
+
+    if (fetchErr || !batch) {
+      return NextResponse.json({ error: 'Import batch not found.' }, { status: 404 });
+    }
+
+    // Delete child records explicitly for safety, then delete parent batch
+    await supabase.from('sales_orders').delete().eq('batch_id', batchId);
+    await supabase.from('sales_hourly_items').delete().eq('batch_id', batchId);
+    await supabase.from('sales_executive_summaries').delete().eq('batch_id', batchId);
+
+    const { error: delErr } = await supabase
+      .from('sales_import_batches')
+      .delete()
+      .eq('id', batchId);
+
+    if (delErr) {
+      return NextResponse.json({ error: `Failed to delete batch: ${delErr.message}` }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully deleted ${batch.report_type} import for ${batch.business_date} (${batch.file_name}).`,
+      deletedBatch: batch,
+    });
+  } catch (err: any) {
+    console.error('Error deleting import batch:', err);
+    return NextResponse.json({ error: err.message || 'Internal error deleting import batch.' }, { status: 500 });
+  }
+}
+

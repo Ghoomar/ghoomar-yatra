@@ -21,36 +21,54 @@ export function calculateFileChecksum(buffer: Buffer): string {
 }
 
 /**
- * Parses a date string like "2026-09-18 to 2026-09-18" or "18 Sep 2026 To 18 Sep 2026"
- * or "18-09-2026 23:16" into standard "YYYY-MM-DD"
+ * Cleans string numbers containing HTML entities (like &#8377;), currency symbols, commas, or whitespace
+ */
+export function cleanNumericValue(val: any): number {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  const cleaned = String(val)
+    .replace(/&#\d+;/g, '') // decode/strip HTML entity codes like &#8377;
+    .replace(/&[a-zA-Z]+;/g, '') // decode/strip named HTML entities like &nbsp;
+    .replace(/[₹,$\s]/g, '') // remove currency symbol, dollar, commas, whitespace
+    .trim();
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Parses a date string like "2026-09-18 to 2026-09-18", "18 Sep 2026 To 18 Sep 2026",
+ * "18-09-2026 23:16", or "18-09-2026" into standard "YYYY-MM-DD".
+ * Returns empty string if no valid date is matched. NEVER defaults to today's date.
  */
 export function normalizeDateStringToIso(dateStr: string): string {
-  if (!dateStr) return new Date().toISOString().substring(0, 10);
+  if (!dateStr) return '';
 
-  const clean = dateStr.trim();
+  const clean = String(dateStr).trim();
 
-  // Pattern: "YYYY-MM-DD to YYYY-MM-DD"
-  const isoRangeMatch = clean.match(/(\d{4}-\d{2}-\d{2})/);
-  if (isoRangeMatch) {
-    return isoRangeMatch[1];
+  // Pattern: "YYYY-MM-DD to YYYY-MM-DD" or "YYYY-MM-DD"
+  const isoMatch = clean.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
   }
 
-  // Pattern: "18 Sep 2026 To 18 Sep 2026" or "18 Sep 2026"
-  const textMonthMatch = clean.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+  // Pattern: "18 Sep 2026 To 18 Sep 2026", "18 Sep 2026", "18 September 2026"
+  const textMonthMatch = clean.match(/(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})/i);
   if (textMonthMatch) {
     const day = textMonthMatch[1].padStart(2, '0');
-    const monStr = textMonthMatch[2].toLowerCase();
+    const monStr = textMonthMatch[2].substring(0, 3).toLowerCase();
     const year = textMonthMatch[3];
     const months: Record<string, string> = {
       jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
       jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
     };
-    const mon = months[monStr] || '01';
-    return `${year}-${mon}-${day}`;
+    const mon = months[monStr];
+    if (mon) {
+      return `${year}-${mon}-${day}`;
+    }
   }
 
-  // Pattern: "19-09-2026 00:21" or "19-09-2026"
-  const dmyMatch = clean.match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+  // Pattern: "19-09-2026" or "19/09/2026" or "19-09-2026 00:21"
+  const dmyMatch = clean.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
   if (dmyMatch) {
     const day = dmyMatch[1].padStart(2, '0');
     const mon = dmyMatch[2].padStart(2, '0');
@@ -58,7 +76,7 @@ export function normalizeDateStringToIso(dateStr: string): string {
     return `${year}-${mon}-${day}`;
   }
 
-  return new Date().toISOString().substring(0, 10);
+  return '';
 }
 
 /**
@@ -98,25 +116,32 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
 
   // Read workbook via SheetJS
   const workbook = XLSX.read(buffer, { type: 'buffer', raw: false, cellDates: false });
-  const firstSheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[firstSheetName];
 
-  // Convert to 2D array of strings
-  const sheetRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
-    header: 1,
-    defval: '',
-    blankrows: false,
-  });
+  // In multi-table HTML-based .xls files (e.g. Executive Summary), SheetJS puts each table into a separate sheet.
+  // Combine rows across all sheets sequentially to preserve all tables and sections.
+  const sheetRows: any[][] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) continue;
+    const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: '',
+      blankrows: false,
+    });
+    if (rows && rows.length > 0) {
+      sheetRows.push(...rows);
+    }
+  }
 
-  if (!sheetRows || sheetRows.length === 0) {
+  if (sheetRows.length === 0) {
     throw new Error('The uploaded file is empty or could not be parsed.');
   }
 
-  // Detect report type by scanning first 15 rows
+  // Detect report type by scanning rows
   let detectedType: PetpoojaReportType | null = null;
   let headerRowIndex = -1;
 
-  for (let i = 0; i < Math.min(15, sheetRows.length); i++) {
+  for (let i = 0; i < Math.min(25, sheetRows.length); i++) {
     const rowText = sheetRows[i].map((c) => String(c || '').trim()).join(' ');
 
     if (/Item Sale Report:\s*Hourly Wise/i.test(rowText) || /Hourly Wise/i.test(rowText)) {
@@ -133,7 +158,7 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
 
   // Secondary detection via column headers if header label was not found in top rows
   if (!detectedType) {
-    for (let i = 0; i < Math.min(10, sheetRows.length); i++) {
+    for (let i = 0; i < Math.min(20, sheetRows.length); i++) {
       const row = sheetRows[i].map((c) => String(c || '').trim().toLowerCase());
       if (row.includes('hour') && row.includes('item') && row.some((c) => c.includes('net sales'))) {
         detectedType = 'HOURLY_ITEM_SALES';
@@ -177,25 +202,40 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
 }
 
 /**
- * Parsers for each report type
+ * 1. HOURLY ITEM SALES REPORT
  */
-
 function parseHourlyItemSalesReport(sheetRows: any[][], fileName: string, fileChecksum: string): ParseResult {
   let businessDate = '';
   let headerIndex = -1;
 
-  // Extract Date from row 0..4
-  for (let i = 0; i < Math.min(6, sheetRows.length); i++) {
+  // Extract Date from rows 0..15
+  for (let i = 0; i < Math.min(15, sheetRows.length); i++) {
     const row = sheetRows[i].map((c) => String(c || '').trim());
-    if (row[0] && row[0].toLowerCase().startsWith('date:')) {
-      businessDate = normalizeDateStringToIso(row[1] || row[0]);
+    for (let c = 0; c < row.length; c++) {
+      if (/(?:period|date)\s*:/i.test(row[c])) {
+        const inlineVal = row[c].replace(/^(?:period|date)\s*:\s*/i, '').trim();
+        const nextCell = row[c + 1] ? String(row[c + 1]).trim() : '';
+        const candidate = nextCell || inlineVal;
+        if (candidate) {
+          const parsed = normalizeDateStringToIso(candidate);
+          if (parsed) {
+            businessDate = parsed;
+            break;
+          }
+        }
+      }
     }
     if (row.map((c) => c.toLowerCase()).includes('hour') && row.map((c) => c.toLowerCase()).includes('item')) {
       headerIndex = i;
     }
+    if (businessDate && headerIndex !== -1) break;
   }
 
-  if (headerIndex === -1) headerIndex = 5; // Default header index
+  if (!businessDate) {
+    throw new Error(`Unable to extract report/business date from inside Hourly Item Sales report (${fileName}).`);
+  }
+
+  if (headerIndex === -1) headerIndex = 5; // Default fallback header index
 
   const rawHeaders = sheetRows[headerIndex].map((h) => String(h || '').trim());
   const colIndex: Record<string, number> = {};
@@ -208,7 +248,7 @@ function parseHourlyItemSalesReport(sheetRows: any[][], fileName: string, fileCh
     if (clean.includes('net amount')) colIndex.netAmount = idx;
     if (clean.includes('discount')) colIndex.discount = idx;
     if (clean.includes('tax')) colIndex.tax = idx;
-    if (clean === 'total sales') colIndex.totalSales = idx;
+    if (clean.includes('total sales')) colIndex.totalSales = idx;
     if (clean.includes('net sales')) colIndex.netSales = idx;
   });
 
@@ -232,7 +272,7 @@ function parseHourlyItemSalesReport(sheetRows: any[][], fileName: string, fileCh
       continue;
     }
 
-    // Stop if we hit Executive summary or trailing metadata
+    // Stop if we hit trailing restaurant metadata
     if (firstCell.toLowerCase().startsWith('name:') || firstCell.toLowerCase().startsWith('restaurant name:')) {
       break;
     }
@@ -246,33 +286,30 @@ function parseHourlyItemSalesReport(sheetRows: any[][], fileName: string, fileCh
 
     const { hourOfDay, hourLabel } = parseHourString(currentHour);
 
-    const unitPrice = parseFloat(String(row[colIndex.price] || '0').replace(/,/g, '')) || 0;
-    const quantity = parseFloat(String(row[colIndex.quantity] || '0').replace(/,/g, '')) || 0;
-    const netAmount = parseFloat(String(row[colIndex.netAmount] || '0').replace(/,/g, '')) || 0;
-    const discount = parseFloat(String(row[colIndex.discount] || '0').replace(/,/g, '')) || 0;
-    const tax = parseFloat(String(row[colIndex.tax] || '0').replace(/,/g, '')) || 0;
-    const totalSales = parseFloat(String(row[colIndex.totalSales] || '0').replace(/,/g, '')) || 0;
-    const netSales = parseFloat(String(row[colIndex.netSales] || '0').replace(/,/g, '')) || netAmount - discount;
+    const unitPrice = cleanNumericValue(row[colIndex.price]);
+    const quantity = cleanNumericValue(row[colIndex.quantity]);
+    const netAmount = cleanNumericValue(row[colIndex.netAmount]);
+    const discountAmount = cleanNumericValue(row[colIndex.discount]);
+    const taxAmount = cleanNumericValue(row[colIndex.tax]);
+    const totalSales = cleanNumericValue(row[colIndex.totalSales]);
+    const netSales = cleanNumericValue(row[colIndex.netSales]) || netAmount;
 
     totalNetSales += netSales;
     totalGrossSales += totalSales;
 
     data.push({
+      business_date: businessDate,
       hour_of_day: hourOfDay,
       hour_label: hourLabel,
       item_name: itemCell,
-      unit_price: Math.round(unitPrice * 100) / 100,
-      quantity: Math.round(quantity * 100) / 100,
-      net_amount: Math.round(netAmount * 100) / 100,
-      discount_amount: Math.round(discount * 100) / 100,
-      tax_amount: Math.round(tax * 100) / 100,
-      total_sales: Math.round(totalSales * 100) / 100,
-      net_sales: Math.round(netSales * 100) / 100,
+      unit_price: unitPrice,
+      quantity,
+      net_amount: netAmount,
+      discount_amount: discountAmount,
+      tax_amount: taxAmount,
+      total_sales: totalSales,
+      net_sales: netSales,
     });
-  }
-
-  if (!businessDate) {
-    businessDate = new Date().toISOString().substring(0, 10);
   }
 
   return {
@@ -282,50 +319,77 @@ function parseHourlyItemSalesReport(sheetRows: any[][], fileName: string, fileCh
     recordCount: data.length,
     totalNetSales: Math.round(totalNetSales * 100) / 100,
     totalGrossSales: Math.round(totalGrossSales * 100) / 100,
-    metadata: { fileName, hourCount: new Set(data.map((d) => d.hour_of_day)).size },
+    metadata: { fileName, hourGroupsCount: new Set(data.map((d) => d.hour_of_day)).size },
     data,
   };
 }
 
+/**
+ * 2. ORDERS MASTER REPORT
+ */
 function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileChecksum: string): ParseResult {
   let businessDate = '';
   let headerIndex = -1;
 
-  for (let i = 0; i < Math.min(6, sheetRows.length); i++) {
+  // Scan top 15 rows for Date/Period and header row
+  for (let i = 0; i < Math.min(15, sheetRows.length); i++) {
     const row = sheetRows[i].map((c) => String(c || '').trim());
-    if (row[0] && row[0].toLowerCase().startsWith('date:')) {
-      businessDate = normalizeDateStringToIso(row[1] || row[0]);
+    for (let c = 0; c < row.length; c++) {
+      if (/(?:period|date)\s*:/i.test(row[c])) {
+        const inlineVal = row[c].replace(/^(?:period|date)\s*:\s*/i, '').trim();
+        const nextCell = row[c + 1] ? String(row[c + 1]).trim() : '';
+        const candidate = nextCell || inlineVal;
+        if (candidate) {
+          const parsed = normalizeDateStringToIso(candidate);
+          if (parsed) {
+            businessDate = parsed;
+            break;
+          }
+        }
+      }
     }
-    if (row.map((c) => c.toLowerCase()).includes('invoice no.') || row.map((c) => c.toLowerCase()).includes('biller')) {
+    if (row.map((c) => c.toLowerCase()).includes('invoice no.')) {
       headerIndex = i;
+    }
+    if (businessDate && headerIndex !== -1) break;
+  }
+
+  if (headerIndex === -1) {
+    for (let i = 0; i < Math.min(10, sheetRows.length); i++) {
+      if (sheetRows[i].some((c) => String(c).toLowerCase().includes('invoice no.'))) {
+        headerIndex = i;
+        break;
+      }
     }
   }
 
-  if (headerIndex === -1) headerIndex = 5;
+  if (headerIndex === -1) {
+    throw new Error('Could not find header row (Invoice No.) in Orders Master report.');
+  }
 
-  const rawHeaders = sheetRows[headerIndex].map((h) => String(h || '').trim().toLowerCase());
+  const rawHeaders = sheetRows[headerIndex].map((h) => String(h || '').trim());
   const col: Record<string, number> = {};
   rawHeaders.forEach((h, idx) => {
-    if (h.includes('invoice no')) col.invoiceNo = idx;
-    if (h === 'date') col.date = idx;
-    if (h === 'biller') col.biller = idx;
-    if (h.includes('kot no')) col.kotNo = idx;
-    if (h.includes('payment type')) col.paymentType = idx;
-    if (h.includes('payment description')) col.paymentDesc = idx;
-    if (h.includes('order type')) col.orderType = idx;
-    if (h === 'status') col.status = idx;
-    if (h === 'area') col.area = idx;
-    if (h.includes('assign to')) col.assignTo = idx;
-    if (h === 'phone') col.phone = idx;
-    if (h === 'name') col.name = idx;
-    if (h === 'persons') col.persons = idx;
-    if (h.includes('my amount')) col.grossAmount = idx;
-    if (h === 'discount') col.discount = idx;
-    if (h.includes('net sales')) col.netSales = idx;
-    if (h.includes('total tax')) col.tax = idx;
-    if (h.includes('round off')) col.roundOff = idx;
-    if (h.includes('waived off')) col.waivedOff = idx;
-    if (h === 'total') col.total = idx;
+    const clean = h.toLowerCase();
+    if (clean.includes('invoice no.')) col.invoiceNo = idx;
+    if (clean.includes('date') || clean.includes('timestamp')) col.timestamp = idx;
+    if (clean === 'biller') col.biller = idx;
+    if (clean.includes('kot no.')) col.kotNo = idx;
+    if (clean.includes('payment type')) col.paymentType = idx;
+    if (clean.includes('order type')) col.orderType = idx;
+    if (clean === 'status') col.status = idx;
+    if (clean === 'area') col.area = idx;
+    if (clean.includes('assign to') || clean.includes('captain')) col.assignTo = idx;
+    if (clean === 'name' || clean === 'customer name') col.name = idx;
+    if (clean === 'phone' || clean.includes('mobile')) col.phone = idx;
+    if (clean.includes('covers') || clean.includes('pax') || clean.includes('persons')) col.covers = idx;
+    if (clean.includes('gross amount') || clean.includes('my amount')) col.grossAmount = idx;
+    if (clean.includes('discount')) col.discount = idx;
+    if (clean.includes('net sales')) col.netSales = idx;
+    if (clean.includes('tax')) col.tax = idx;
+    if (clean.includes('round off')) col.roundOff = idx;
+    if (clean.includes('waived off')) col.waivedOff = idx;
+    if (clean.includes('grand total') || clean.includes('total (') || clean === 'total') col.grandTotal = idx;
   });
 
   const data: any[] = [];
@@ -336,46 +400,40 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     const row = sheetRows[i];
     if (!row || row.length === 0) continue;
 
-    const invoiceCell = String(row[col.invoiceNo !== undefined ? col.invoiceNo : 0] || '').trim();
-    if (!invoiceCell || ['total', 'min.', 'max.', 'avg.'].includes(invoiceCell.toLowerCase())) {
+    const invoiceNo = String(row[col.invoiceNo !== undefined ? col.invoiceNo : 0] || '').trim();
+    if (!invoiceNo) continue;
+    if (['total', 'grand total', 'sub total', 'min.', 'max.', 'avg.'].includes(invoiceNo.toLowerCase())) {
       continue;
     }
 
-    const rawDate = String(row[col.date] || '').trim();
-    if (!businessDate && rawDate) {
-      businessDate = normalizeDateStringToIso(rawDate);
-    }
-
-    // Extract hour of day from timestamp e.g. "18-09-2026 23:16"
+    const timestampStr = String(row[col.timestamp] || '').trim();
     let hourOfDay = 12;
-    let orderIsoTimestamp = new Date().toISOString();
-    const timeMatch = rawDate.match(/(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2})/);
-    if (timeMatch) {
-      const d = timeMatch[1].padStart(2, '0');
-      const m = timeMatch[2].padStart(2, '0');
-      const y = timeMatch[3];
-      const hr = parseInt(timeMatch[4], 10);
-      const min = timeMatch[5];
-      hourOfDay = hr;
-      orderIsoTimestamp = `${y}-${m}-${d}T${String(hr).padStart(2, '0')}:${min}:00+05:30`;
+    if (timestampStr) {
+      const timePartMatch = timestampStr.match(/(\d{1,2}):(\d{2})/);
+      if (timePartMatch) {
+        hourOfDay = parseInt(timePartMatch[1], 10) || 12;
+      }
+      if (!businessDate) {
+        businessDate = normalizeDateStringToIso(timestampStr);
+      }
     }
 
-    const grossAmount = parseFloat(String(row[col.grossAmount] || '0').replace(/,/g, '')) || 0;
-    const discountAmount = parseFloat(String(row[col.discount] || '0').replace(/,/g, '')) || 0;
-    const netSales = parseFloat(String(row[col.netSales] || '0').replace(/,/g, '')) || grossAmount - discountAmount;
-    const taxAmount = parseFloat(String(row[col.tax] || '0').replace(/,/g, '')) || 0;
-    const roundOff = parseFloat(String(row[col.roundOff] || '0').replace(/,/g, '')) || 0;
-    const waivedOff = parseFloat(String(row[col.waivedOff] || '0').replace(/,/g, '')) || 0;
-    const grandTotal = parseFloat(String(row[col.total] || '0').replace(/,/g, '')) || netSales + taxAmount + roundOff + waivedOff;
-
-    const covers = parseInt(String(row[col.persons] || '1'), 10) || 1;
+    const grossAmount = cleanNumericValue(row[col.grossAmount]);
+    const discountAmount = cleanNumericValue(row[col.discount]);
+    const netSales = cleanNumericValue(row[col.netSales]);
+    const taxAmount = cleanNumericValue(row[col.tax]);
+    const roundOff = cleanNumericValue(row[col.roundOff]);
+    const waivedOff = cleanNumericValue(row[col.waivedOff]);
+    const grandTotal = cleanNumericValue(row[col.grandTotal]);
+    const covers = parseInt(String(row[col.covers] || '0').replace(/,/g, ''), 10) || 0;
 
     totalNetSales += netSales;
     totalGrossSales += grandTotal;
 
     data.push({
-      invoice_no: invoiceCell,
-      order_timestamp: orderIsoTimestamp,
+      business_date: businessDate,
+      invoice_no: invoiceNo,
+      order_timestamp: timestampStr || null,
       hour_of_day: hourOfDay,
       biller: String(row[col.biller] || '').trim() || null,
       kot_numbers: String(row[col.kotNo] || '').trim() || null,
@@ -397,9 +455,18 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     });
   }
 
-  if (!businessDate) {
-    businessDate = new Date().toISOString().substring(0, 10);
+  if (!businessDate && data.length > 0 && data[0].order_timestamp) {
+    businessDate = normalizeDateStringToIso(data[0].order_timestamp);
   }
+
+  if (!businessDate) {
+    throw new Error(`Unable to extract report/business date from inside Orders Master report (${fileName}).`);
+  }
+
+  // Synchronize business_date across data rows
+  data.forEach((d) => {
+    d.business_date = businessDate;
+  });
 
   return {
     reportType: 'ORDERS_MASTER',
@@ -413,6 +480,9 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
   };
 }
 
+/**
+ * 3. EXECUTIVE SALES SUMMARY REPORT
+ */
 function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileChecksum: string): ParseResult {
   let businessDate = '';
   let successfulBillsCount = 0;
@@ -434,6 +504,36 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
   const orderTypeBreakdown: Record<string, { count: number; total: number; netSales: number }> = {};
   const paymentModeBreakdown: Record<string, number> = {};
 
+  // 1. Scan for Period/Date across all rows
+  for (let i = 0; i < sheetRows.length; i++) {
+    const row = sheetRows[i].map((c) => String(c || '').trim());
+    if (row.length === 0) continue;
+
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (/(?:period|date)\s*:/i.test(cell)) {
+        const inlineVal = cell.replace(/^(?:period|date)\s*:\s*/i, '').trim();
+        const nextCell = row[c + 1] ? String(row[c + 1]).trim() : '';
+        const candidate = nextCell || inlineVal;
+        if (candidate) {
+          const parsed = normalizeDateStringToIso(candidate);
+          if (parsed) {
+            businessDate = parsed;
+            break;
+          }
+        }
+      }
+    }
+    if (businessDate) break;
+  }
+
+  if (!businessDate) {
+    throw new Error(
+      `Unable to extract report/business date from inside Executive Sales Summary (${fileName}). Please check that the file includes a valid "Period:" or "Date:" field.`
+    );
+  }
+
+  // 2. Parse sections
   let currentSection = '';
 
   for (let i = 0; i < sheetRows.length; i++) {
@@ -442,10 +542,6 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
 
     const col0 = row[0].toLowerCase();
     const col1 = row[1] || '';
-
-    if (col0.startsWith('period:')) {
-      businessDate = normalizeDateStringToIso(col1 || row[0]);
-    }
 
     if (col0.includes('billing (success)')) {
       currentSection = 'BILLING_SUCCESS';
@@ -463,15 +559,25 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
       currentSection = 'PAYMENT_MODE';
       continue;
     }
-    if (col0.includes('complimentary') || col0.includes('sales return') || col0.includes('virtual wallet')) {
+    // Stop payment mode parsing when reaching subsequent sections
+    if (
+      col0.includes('complimentary') ||
+      col0.includes('sales return') ||
+      col0.includes('virtual wallet') ||
+      col0.includes('expense') ||
+      col0.includes('withdrawal') ||
+      col0.includes('cash top-up') ||
+      col0.includes('online orders') ||
+      col0.includes('advance order')
+    ) {
       currentSection = 'OTHER';
       continue;
     }
 
     // Section parsing
     if (currentSection === 'BILLING_SUCCESS') {
-      const val = parseFloat(col1.replace(/,/g, '')) || 0;
-      if (col0 === 'count') successfulBillsCount = parseInt(col1, 10) || 0;
+      const val = cleanNumericValue(col1);
+      if (col0 === 'count') successfulBillsCount = parseInt(String(col1).replace(/,/g, ''), 10) || 0;
       if (col0.includes('invoice nos')) invoiceRange = col1;
       if (col0 === 'sub total') subTotal = val;
       if (col0 === 'discount') discount = val;
@@ -485,29 +591,25 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
       if (col0 === 'grand total') grandTotal = val;
       if (col0 === 'net sales') netSales = val;
     } else if (currentSection === 'BILLING_CANCEL') {
-      if (col0 === 'count') cancelledCount = parseInt(col1, 10) || 0;
-      if (col0 === 'amount') cancelledAmount = parseFloat(col1.replace(/,/g, '')) || 0;
+      if (col0 === 'count') cancelledCount = parseInt(String(col1).replace(/,/g, ''), 10) || 0;
+      if (col0 === 'amount') cancelledAmount = cleanNumericValue(col1);
     } else if (currentSection === 'ORDER_TYPE') {
       if (['order', 'no record found'].includes(col0)) continue;
       const oType = row[0];
-      const count = parseInt(row[1] || '0', 10) || 0;
-      const total = parseFloat(String(row[2] || '0').replace(/,/g, '')) || 0;
-      const oNet = parseFloat(String(row[3] || '0').replace(/,/g, '')) || 0;
+      const count = parseInt(String(row[1] || '0').replace(/,/g, ''), 10) || 0;
+      const total = cleanNumericValue(row[2]);
+      const oNet = cleanNumericValue(row[3]);
       if (oType) {
         orderTypeBreakdown[oType] = { count, total, netSales: oNet };
       }
     } else if (currentSection === 'PAYMENT_MODE') {
       if (['payment type', 'no record found'].includes(col0)) continue;
       const pMode = row[0];
-      const pTotal = parseFloat(String(row[1] || '0').replace(/,/g, '')) || 0;
+      const pTotal = cleanNumericValue(row[1]);
       if (pMode) {
         paymentModeBreakdown[pMode] = pTotal;
       }
     }
-  }
-
-  if (!businessDate) {
-    businessDate = new Date().toISOString().substring(0, 10);
   }
 
   const summaryData = {
@@ -537,66 +639,68 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
     businessDate,
     fileChecksum,
     recordCount: 1,
-    totalNetSales: netSales,
-    totalGrossSales: grandTotal,
+    totalNetSales: Math.round(netSales * 100) / 100,
+    totalGrossSales: Math.round(grandTotal * 100) / 100,
     metadata: { fileName, invoiceRange, successfulBillsCount },
     data: [summaryData],
   };
 }
 
+/**
+ * 4. MENU MASTER EXPORT
+ */
 function parseMenuMasterReport(sheetRows: any[][], fileName: string, fileChecksum: string, headerIndex: number): ParseResult {
   const actualHeaderIndex = headerIndex >= 0 ? headerIndex : 0;
   const rawHeaders = sheetRows[actualHeaderIndex].map((h) => String(h || '').trim().toLowerCase());
 
   const col: Record<string, number> = {};
   rawHeaders.forEach((h, idx) => {
-    if (h === 'name') col.name = idx;
-    if (h.includes('online_name')) col.onlineName = idx;
-    if (h.includes('parent_category')) col.parentCategory = idx;
-    if (h === 'category') col.category = idx;
-    if (h.includes('online_display')) col.onlineDisplay = idx;
-    if (h === 'price') col.price = idx;
-    if (h.includes('gst')) col.gst = idx;
-    if (h.includes('type')) col.taxType = idx;
+    if (h.includes('parent_category') || h === 'parent category') col.parentCategory = idx;
+    if (h === 'category' || h.includes('sub_category')) col.category = idx;
+    if (h === 'item' || h === 'item name' || h.includes('item_name')) col.name = idx;
+    if (h === 'price' || h.includes('rate')) col.price = idx;
+    if (h.includes('gst%') || h.includes('gst_percent') || h.includes('tax%')) col.gstPercent = idx;
+    if (h.includes('description')) col.description = idx;
+    if (h.includes('item_type') || h === 'type') col.itemType = idx;
   });
 
   const data: any[] = [];
-  const currentDate = new Date().toISOString().substring(0, 10);
 
   for (let i = actualHeaderIndex + 1; i < sheetRows.length; i++) {
     const row = sheetRows[i];
     if (!row || row.length === 0) continue;
 
-    const itemName = String(row[col.name !== undefined ? col.name : 0] || '').trim();
-    if (!itemName) continue;
+    const name = String(row[col.name !== undefined ? col.name : 2] || '').trim();
+    if (!name) continue;
 
-    const parentCat = String(row[col.parentCategory] || 'Main Course').trim();
-    const category = String(row[col.category] || parentCat).trim();
-    const price = parseFloat(String(row[col.price] || '0').replace(/,/g, '')) || 0;
-    const gstPercent = parseFloat(String(row[col.gst] || '5').replace(/,/g, '')) || 5;
-    const taxType = String(row[col.taxType] || 'F').trim();
+    const parentCategory = String(row[col.parentCategory !== undefined ? col.parentCategory : 0] || 'Uncategorized').trim();
+    const category = String(row[col.category !== undefined ? col.category : 1] || 'General').trim();
+    const price = cleanNumericValue(row[col.price !== undefined ? col.price : 3]);
+    const gstPercent = cleanNumericValue(row[col.gstPercent !== undefined ? col.gstPercent : 4]);
+    const description = col.description !== undefined ? String(row[col.description] || '').trim() : null;
+    const itemType = col.itemType !== undefined ? String(row[col.itemType] || '').trim() : null;
 
     data.push({
-      name: itemName,
-      online_name: String(row[col.onlineName] || '').trim() || null,
-      parent_category: parentCat,
-      category,
-      category_online_display: String(row[col.onlineDisplay] || '').trim() || null,
-      price: Math.round(price * 100) / 100,
+      name,
+      parent_category: parentCategory || 'Uncategorized',
+      category: category || 'General',
+      price,
       gst_percent: gstPercent,
-      tax_type: taxType,
+      description: description || null,
+      item_type: itemType || null,
       is_active: true,
+      updated_at: new Date().toISOString(),
     });
   }
 
   return {
     reportType: 'MENU_MASTER',
-    businessDate: currentDate,
+    businessDate: '',
     fileChecksum,
     recordCount: data.length,
     totalNetSales: 0,
     totalGrossSales: 0,
-    metadata: { fileName, itemsCount: data.length },
+    metadata: { fileName },
     data,
   };
 }
