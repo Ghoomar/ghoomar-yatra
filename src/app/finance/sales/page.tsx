@@ -1,12 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatTimeAgo } from '@/lib/utils';
-import { Receipt, CheckCircle, AlertCircle, Clock, Save, RefreshCw } from 'lucide-react';
+import {
+  Receipt,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Save,
+  RefreshCw,
+  TrendingUp,
+  UploadCloud,
+} from 'lucide-react';
+import { SalesAnalyticsDashboard } from '@/components/sales/SalesAnalyticsDashboard';
+import { SalesImportSection } from '@/components/sales/SalesImportSection';
 
 interface PaymentModeState {
   id: string;
@@ -28,7 +40,7 @@ interface FocusItemState {
   revenue: number;
 }
 
-export default function SalesPage() {
+function DailySalesEntry() {
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [loading, setLoading] = useState(true);
@@ -251,11 +263,8 @@ export default function SalesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
-            <Receipt className="h-6 w-6 text-amber-600" />
-            Daily Sales
-          </h1>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-stone-700">Manual Register Entry</span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -543,5 +552,101 @@ export default function SalesPage() {
         </form>
       )}
     </div>
+  );
+}
+
+function SalesPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
+  const [activeTab, setActiveTab] = useState<'analytics' | 'import' | 'entry'>(
+    tabParam === 'import' ? 'import' : tabParam === 'entry' ? 'entry' : 'analytics'
+  );
+
+  useEffect(() => {
+    if (tabParam === 'import' || tabParam === 'entry' || tabParam === 'analytics') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: 'analytics' | 'import' | 'entry') => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    router.replace(url.pathname + url.search, { scroll: false });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Header & Navigation Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
+            <Receipt className="h-6 w-6 text-amber-600" />
+            Sales & Analytics
+          </h1>
+        </div>
+
+        <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/80 text-xs font-semibold shadow-2xs">
+          <button
+            type="button"
+            onClick={() => handleTabChange('analytics')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'analytics'
+                ? 'bg-white text-stone-900 shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <TrendingUp className={`h-3.5 w-3.5 ${activeTab === 'analytics' ? 'text-amber-600' : 'text-stone-400'}`} />
+            Analytics
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('import')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'import'
+                ? 'bg-white text-stone-900 shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <UploadCloud className={`h-3.5 w-3.5 ${activeTab === 'import' ? 'text-amber-600' : 'text-stone-400'}`} />
+            Import Reports
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('entry')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'entry'
+                ? 'bg-white text-stone-900 shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Receipt className={`h-3.5 w-3.5 ${activeTab === 'entry' ? 'text-amber-600' : 'text-stone-400'}`} />
+            Daily Entry
+          </button>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'analytics' && <SalesAnalyticsDashboard initialDate="2026-09-18" />}
+      {activeTab === 'import' && <SalesImportSection onImportSuccess={() => handleTabChange('analytics')} />}
+      {activeTab === 'entry' && <DailySalesEntry />}
+    </div>
+  );
+}
+
+export default function SalesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-16 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
+          <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
+          Loading sales module...
+        </div>
+      }
+    >
+      <SalesPageContent />
+    </Suspense>
   );
 }
