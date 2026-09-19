@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
-import { SalaryPayoutModal } from './SalaryPayoutModal';
+import { SalaryPaymentModal } from './SalaryPaymentModal';
+import { EmployeeSalarySummaryRow, EmployeeSalaryPayment } from '@/lib/types/database';
 import {
   X,
   Wallet,
@@ -16,13 +17,14 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
-  RotateCcw,
-  ShieldCheck,
-  ShieldAlert,
   Calendar,
   Phone,
   Building,
   UserCheck,
+  CreditCard,
+  History,
+  Lock,
+  ArrowDownRight,
 } from 'lucide-react';
 
 interface StaffLedgerDrawerProps {
@@ -41,20 +43,15 @@ export function StaffLedgerDrawer({
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'financial' | 'uniform'>('financial');
   const [employee, setEmployee] = useState<any | null>(null);
-  const [financialBalance, setFinancialBalance] = useState<any | null>(null);
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [payouts, setPayouts] = useState<any[]>([]);
+  const [salaryPeriods, setSalaryPeriods] = useState<EmployeeSalarySummaryRow[]>([]);
+  const [payments, setPayments] = useState<EmployeeSalaryPayment[]>([]);
   const [uniformItems, setUniformItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Modals & Action Forms
-  const [showPayoutModal, setShowPayoutModal] = useState(false);
-  const [showTxModal, setShowTxModal] = useState(false);
-  const [txType, setTxType] = useState('Advance');
-  const [txAmount, setTxAmount] = useState<number>(0);
-  const [txNotes, setTxNotes] = useState('');
-  const [txSaving, setTxSaving] = useState(false);
+  // Modal State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPeriodForPayment, setSelectedPeriodForPayment] = useState<EmployeeSalarySummaryRow | null>(null);
 
   const loadData = async () => {
     if (!employeeId) return;
@@ -76,30 +73,26 @@ export function StaffLedgerDrawer({
 
       if (empErr) throw empErr;
 
-      // 2. Derived balance
-      const { data: bal } = await supabase
-        .from('employee_financial_balance')
+      // 2. Salary summary / periods from authoritative view
+      const { data: periods, error: periodsErr } = await supabase
+        .from('employee_salary_summary')
         .select('*')
         .eq('employee_id', employeeId)
-        .maybeSingle();
+        .order('salary_month', { ascending: false });
 
-      // 3. Transactions
-      const { data: txs } = await supabase
-        .from('employee_financial_transactions')
+      if (periodsErr) throw periodsErr;
+
+      // 3. Payment history
+      const { data: payHistory, error: payErr } = await supabase
+        .from('employee_salary_payments')
         .select('*')
         .eq('employee_id', employeeId)
-        .order('business_date', { ascending: false })
+        .order('payment_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      // 4. Salary Payouts
-      const { data: salPayouts } = await supabase
-        .from('employee_salary_payouts')
-        .select('*, approver:profiles!employee_salary_payouts_approved_by_id_fkey(full_name)')
-        .eq('employee_id', employeeId)
-        .order('business_date', { ascending: false })
-        .order('created_at', { ascending: false });
+      if (payErr) throw payErr;
 
-      // 5. Uniform issues & custody
+      // 4. Uniform issues & custody
       const { data: uIssues } = await supabase
         .from('employee_uniform_issues')
         .select(`
@@ -113,7 +106,6 @@ export function StaffLedgerDrawer({
         .eq('employee_id', employeeId)
         .order('business_date', { ascending: false });
 
-      // Flatten uniform items with parent issue date
       const flatUniforms: any[] = [];
       (uIssues || []).forEach((iss: any) => {
         (iss.items || []).forEach((it: any) => {
@@ -126,9 +118,8 @@ export function StaffLedgerDrawer({
       });
 
       setEmployee(emp);
-      setFinancialBalance(bal);
-      setTransactions(txs || []);
-      setPayouts(salPayouts || []);
+      setSalaryPeriods(periods || []);
+      setPayments(payHistory || []);
       setUniformItems(flatUniforms);
     } catch (err: any) {
       console.error('Error loading employee ledger:', err);
@@ -144,49 +135,12 @@ export function StaffLedgerDrawer({
     }
   }, [isOpen, employeeId]);
 
-  const handleRecordTx = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!employeeId || txAmount <= 0) return;
-    setTxSaving(true);
-    try {
-      const today = getTodayBusinessDate();
-      const { error } = await supabase.from('employee_financial_transactions').insert({
-        employee_id: employeeId,
-        business_date: today,
-        transaction_type: txType,
-        amount: txAmount,
-        notes: txNotes,
-      });
-
-      if (error) throw error;
-
-      await logAuditAction({
-        action: 'CREATE',
-        entity: 'Staff Financial Transaction',
-        entityId: employeeId,
-        details: { type: txType, amount: txAmount, notes: txNotes },
-      });
-
-      setMessage({ type: 'success', text: `${txType} of ${formatINR(txAmount)} recorded.` });
-      setShowTxModal(false);
-      setTxAmount(0);
-      setTxNotes('');
-      loadData();
-      if (onUpdated) onUpdated();
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Error logging transaction.' });
-    } finally {
-      setTxSaving(false);
-    }
-  };
-
   const handleReturnUniformItem = async (issueItemId: string, itemId: string, qty: number) => {
     if (!confirm(`Mark ${qty} piece(s) as returned to central inventory?`)) return;
     setLoading(true);
     try {
       const today = getTodayBusinessDate();
 
-      // 1. Update issue item
       const { error: updErr } = await supabase
         .from('employee_uniform_issue_items')
         .update({
@@ -196,7 +150,6 @@ export function StaffLedgerDrawer({
         .eq('id', issueItemId);
       if (updErr) throw updErr;
 
-      // 2. Fetch destination location (Central Store)
       const { data: defLoc } = await supabase
         .from('inventory_locations')
         .select('id')
@@ -212,7 +165,6 @@ export function StaffLedgerDrawer({
 
       const unitCost = Number(itemData?.current_weighted_average_cost || 0);
 
-      // 3. Authoritative atomic inventory transaction
       const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
         p_item_id: itemId,
         p_movement_type: 'return',
@@ -245,11 +197,16 @@ export function StaffLedgerDrawer({
 
   if (!isOpen) return null;
 
+  const latestPeriod = salaryPeriods[0] || null;
+  const currentPending = latestPeriod ? Number(latestPeriod.pending_salary_balance) : 0;
   const totalIssuedUniforms = uniformItems
     .filter((u) => u.status === 'Issued')
     .reduce((sum, u) => sum + Number(u.quantity || 0), 0);
 
-  const outstandingAdv = Number(financialBalance?.outstanding_advance_balance || 0);
+  const openPaymentForPeriod = (period: EmployeeSalarySummaryRow) => {
+    setSelectedPeriodForPayment(period);
+    setShowPaymentModal(true);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity">
@@ -276,6 +233,7 @@ export function StaffLedgerDrawer({
                 <span>{employee?.department?.name || 'General Staff'}</span>
                 {employee?.team?.name && <span>• {employee.team.name}</span>}
                 {employee?.role?.name && <span>• {employee.role.name}</span>}
+                {employee?.contractor_name && <span>• Contractor: {employee.contractor_name}</span>}
                 {employee?.phone && (
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" /> {employee.phone}
@@ -310,10 +268,10 @@ export function StaffLedgerDrawer({
             }`}
           >
             <Wallet className="h-4 w-4" />
-            Financial Ledger &amp; Payroll
-            {outstandingAdv > 0 && (
+            Salary Payable Ledger
+            {currentPending > 0 && (
               <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                ₹{outstandingAdv} due
+                {formatINR(currentPending)} pending
               </span>
             )}
           </button>
@@ -351,354 +309,245 @@ export function StaffLedgerDrawer({
         )}
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* TAB 1: FINANCIAL LEDGER */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {/* TAB 1: SALARY PAYABLE LEDGER */}
           {activeTab === 'financial' && (
-            <div className="space-y-4">
-              {/* Financial KPI Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-stone-500 text-[11px] block">Monthly Base Salary</span>
-                  <span className="text-sm font-bold text-stone-900 mt-1 block">
-                    {formatINR(Number(employee?.monthly_salary || 0))}
-                  </span>
-                </div>
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-stone-500 text-[11px] block">Total Advances Taken</span>
-                  <span className="text-sm font-bold text-amber-700 mt-1 block">
-                    {formatINR(Number(financialBalance?.total_advances_taken || 0))}
-                  </span>
-                </div>
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-stone-500 text-[11px] block">Recovered / Deducted</span>
-                  <span className="text-sm font-bold text-emerald-700 mt-1 block">
-                    {formatINR(Number(financialBalance?.total_repayments || 0) + Number(financialBalance?.total_salary_deductions || 0))}
-                  </span>
-                </div>
-                <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200">
-                  <span className="text-amber-800 text-[11px] font-semibold block">Outstanding Advance</span>
-                  <span className="text-base font-extrabold text-amber-900 mt-1 block">
-                    {formatINR(outstandingAdv)}
-                  </span>
-                </div>
-              </div>
+            <div className="space-y-5">
+              {/* Latest Period Snapshot Card */}
+              {latestPeriod ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                        Current Period ({latestPeriod.salary_month})
+                      </span>
+                      <h4 className="text-sm font-semibold text-stone-900 mt-0.5">
+                        Base: {formatINR(latestPeriod.monthly_salary)} / mo • {latestPeriod.pay_days} Pay Days
+                      </h4>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => openPaymentForPeriod(latestPeriod)}
+                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
+                    >
+                      <Banknote className="h-3.5 w-3.5 mr-1.5" />
+                      Record Payment
+                    </Button>
+                  </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => setShowPayoutModal(true)}
-                  className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs"
-                >
-                  <Banknote className="h-3.5 w-3.5" /> Record Salary Payout
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowTxModal(true)}
-                  className="gap-1.5 text-xs"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Log Advance / Penalty / Deduction
-                </Button>
-              </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-amber-200/70 text-xs">
+                    <div>
+                      <span className="text-stone-500 block">Prev Pending</span>
+                      <span className="font-semibold text-stone-800">{formatINR(latestPeriod.previous_pending_salary)}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Net Earned</span>
+                      <span className="font-semibold text-stone-800">{formatINR(latestPeriod.net_earned_salary)}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Total Due</span>
+                      <span className="font-bold text-stone-900">{formatINR(latestPeriod.total_salary_due)}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 block">Total Given</span>
+                      <span className="font-semibold text-emerald-700">{formatINR(latestPeriod.total_salary_given)}</span>
+                    </div>
+                  </div>
 
-              {/* Salary Payout History */}
-              <div className="border border-stone-200 rounded-xl overflow-hidden bg-white">
-                <div className="bg-stone-50 p-3 border-b border-stone-200 flex items-center justify-between">
-                  <h3 className="font-bold text-stone-900 text-xs">Salary Disbursement History</h3>
-                  <span className="text-[11px] text-stone-500">{payouts.length} Payouts</span>
+                  <div className="flex items-center justify-between pt-2 border-t border-amber-200/70 bg-amber-100/60 -mx-4 -mb-4 px-4 py-2.5 rounded-b-xl">
+                    <span className="text-xs font-bold text-amber-900">Current Outstanding Payable:</span>
+                    <span className="text-base font-extrabold text-amber-800">
+                      {formatINR(latestPeriod.pending_salary_balance)}
+                    </span>
+                  </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                        <th className="py-2 px-3">Date</th>
-                        <th className="py-2 px-3">Month</th>
-                        <th className="py-2 px-3 text-right">Gross</th>
-                        <th className="py-2 px-3 text-right">Adv Deducted</th>
-                        <th className="py-2 px-3 text-right">Net Paid</th>
-                        <th className="py-2 px-3">Method / Ref</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {payouts.map((p) => (
-                        <tr key={p.id} className="hover:bg-stone-50/80">
-                          <td className="py-2 px-3 font-mono text-stone-600 whitespace-nowrap">{p.business_date}</td>
-                          <td className="py-2 px-3 font-bold text-stone-800">{p.salary_month}</td>
-                          <td className="py-2 px-3 text-right font-medium text-stone-700">{formatINR(p.base_salary)}</td>
-                          <td className="py-2 px-3 text-right font-bold text-amber-700">
-                            {p.advance_deduction > 0 ? `− ${formatINR(p.advance_deduction)}` : '—'}
-                          </td>
-                          <td className="py-2 px-3 text-right font-extrabold text-emerald-800 text-sm">
-                            {formatINR(p.net_amount)}
-                          </td>
-                          <td className="py-2 px-3 text-stone-600">
-                            <div>{p.payment_method}</div>
-                            {p.reference_number && (
-                              <span className="font-mono text-[10px] text-stone-400 block">{p.reference_number}</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {payouts.length === 0 && (
+              ) : (
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-center text-xs text-stone-500">
+                  No salary period records generated for this employee yet.
+                </div>
+              )}
+
+              {/* SECTION: Recent Salary Payments / Disbursements */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard className="h-4 w-4 text-stone-500" />
+                    Salary Disbursements ({payments.length})
+                  </h3>
+                </div>
+
+                {payments.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-stone-400 border border-dashed border-stone-200 rounded-xl">
+                    No disbursements recorded for this employee yet.
+                  </div>
+                ) : (
+                  <div className="border border-stone-200 rounded-xl overflow-hidden shadow-xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-stone-400 text-xs">
-                            No formal salary payouts recorded yet.
-                          </td>
+                          <th className="p-2.5">Date</th>
+                          <th className="p-2.5">Period</th>
+                          <th className="p-2.5">Type &amp; Method</th>
+                          <th className="p-2.5">Ref / UTR</th>
+                          <th className="p-2.5 text-right">Amount</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Transactions Ledger */}
-              <div className="border border-stone-200 rounded-xl overflow-hidden bg-white">
-                <div className="bg-stone-50 p-3 border-b border-stone-200 flex items-center justify-between">
-                  <h3 className="font-bold text-stone-900 text-xs">Complete Financial Transaction Ledger</h3>
-                  <span className="text-[11px] text-stone-500">{transactions.length} Entries</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                        <th className="py-2 px-3">Date</th>
-                        <th className="py-2 px-3">Type</th>
-                        <th className="py-2 px-3 text-right">Amount</th>
-                        <th className="py-2 px-3">Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {transactions.map((tx) => {
-                        const isDeduction =
-                          tx.transaction_type === 'Salary Deduction' ||
-                          tx.transaction_type === 'Repayment' ||
-                          tx.transaction_type === 'Uniform Recovery' ||
-                          tx.transaction_type === 'Damage Recovery';
-
-                        return (
-                          <tr key={tx.id} className="hover:bg-stone-50/80">
-                            <td className="py-2 px-3 font-mono text-stone-600 whitespace-nowrap">{tx.business_date}</td>
-                            <td className="py-2 px-3">
-                              <Badge
-                                variant={
-                                  tx.transaction_type === 'Advance'
-                                    ? 'warning'
-                                    : tx.transaction_type === 'Salary Payout'
-                                    ? 'success'
-                                    : tx.transaction_type === 'Salary Deduction'
-                                    ? 'info'
-                                    : 'outline'
-                                }
-                                className="text-[10px] py-0"
-                              >
-                                {tx.transaction_type}
-                              </Badge>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {payments.map((p) => (
+                          <tr key={p.id} className="hover:bg-stone-50/60">
+                            <td className="p-2.5 font-medium text-stone-900 whitespace-nowrap">
+                              {p.payment_date}
                             </td>
-                            <td
-                              className={`py-2 px-3 text-right font-bold ${
-                                isDeduction ? 'text-emerald-700' : 'text-stone-900'
-                              }`}
-                            >
-                              {isDeduction ? `− ${formatINR(tx.amount)}` : formatINR(tx.amount)}
+                            <td className="p-2.5 text-stone-600 whitespace-nowrap">
+                              {p.salary_month}
                             </td>
-                            <td className="py-2 px-3 text-stone-500 max-w-xs truncate">{tx.notes || '—'}</td>
+                            <td className="p-2.5">
+                              <span className="font-medium text-stone-800">{p.payment_type}</span>
+                              <span className="text-[11px] text-stone-500 block">{p.payment_method}</span>
+                            </td>
+                            <td className="p-2.5 font-mono text-[11px] text-stone-500">
+                              {p.reference_number || '—'}
+                            </td>
+                            <td className="p-2.5 text-right font-bold text-emerald-700 whitespace-nowrap">
+                              {formatINR(p.amount)}
+                            </td>
                           </tr>
-                        );
-                      })}
-                      {transactions.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="py-6 text-center text-stone-400 text-xs">
-                            No transactions logged for this employee.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION: Period Roll-Over History */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <History className="h-4 w-4 text-stone-500" />
+                    Period Carry-Forward History ({salaryPeriods.length})
+                  </h3>
+                </div>
+
+                <div className="space-y-2">
+                  {salaryPeriods.map((p) => (
+                    <div
+                      key={p.period_id}
+                      className="border border-stone-200 rounded-xl p-3 bg-white hover:border-stone-300 transition text-xs space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-stone-900">{p.salary_month}</span>
+                          <Badge variant={p.period_status === 'closed' ? 'default' : 'outline'} className="text-[10px]">
+                            {p.period_status === 'closed' ? (
+                              <span className="flex items-center gap-1">
+                                <Lock className="h-2.5 w-2.5" /> Closed
+                              </span>
+                            ) : (
+                              'Draft'
+                            )}
+                          </Badge>
+                          <span className="text-stone-400">•</span>
+                          <span className="text-stone-600">{p.pay_days} Pay Days</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[11px] text-stone-500 mr-1">Pending:</span>
+                          <span className="font-bold text-amber-800">{formatINR(p.pending_salary_balance)}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 pt-1.5 border-t border-stone-100 text-[11px]">
+                        <div>
+                          <span className="text-stone-400 block">Prev Pending</span>
+                          <span className="text-stone-700 font-medium">{formatINR(p.previous_pending_salary)}</span>
+                        </div>
+                        <div>
+                          <span className="text-stone-400 block">Net Earned</span>
+                          <span className="text-stone-700 font-medium">{formatINR(p.net_earned_salary)}</span>
+                        </div>
+                        <div>
+                          <span className="text-stone-400 block">Total Due</span>
+                          <span className="text-stone-900 font-semibold">{formatINR(p.total_salary_due)}</span>
+                        </div>
+                        <div>
+                          <span className="text-stone-400 block">Given</span>
+                          <span className="text-emerald-700 font-semibold">{formatINR(p.total_salary_given)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: UNIFORM LEDGER */}
+          {/* TAB 2: UNIFORM CUSTODY & EXIT CLEARANCE */}
           {activeTab === 'uniform' && (
             <div className="space-y-4">
-              {/* Uniform KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-stone-500 text-[11px] block">Currently Issued Sets</span>
-                  <span className="text-xl font-bold text-amber-700 mt-1 block">
-                    {totalIssuedUniforms} Pieces
-                  </span>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-stone-500 block text-[11px]">Total Issued Pieces in Custody</span>
+                  <span className="text-base font-bold text-stone-900 mt-0.5 block">{totalIssuedUniforms} Items</span>
                 </div>
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-stone-500 text-[11px] block">Returned Sets</span>
-                  <span className="text-xl font-bold text-emerald-700 mt-1 block">
-                    {uniformItems.filter((u) => u.status === 'Returned').reduce((s, u) => s + Number(u.quantity || 0), 0)} Pieces
-                  </span>
-                </div>
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
-                  <span className="text-stone-500 text-[11px] block">Exit Clearance Status</span>
-                  <div className="mt-1 flex items-center gap-1.5 font-bold">
-                    {totalIssuedUniforms === 0 ? (
-                      <span className="text-emerald-700 flex items-center gap-1 text-sm">
-                        <ShieldCheck className="h-4 w-4" /> Cleared
-                      </span>
-                    ) : (
-                      <span className="text-rose-700 flex items-center gap-1 text-sm">
-                        <ShieldAlert className="h-4 w-4" /> Pending Return ({totalIssuedUniforms} pcs)
-                      </span>
-                    )}
-                  </div>
-                </div>
+                <Badge variant={totalIssuedUniforms === 0 ? 'success' : 'default'}>
+                  {totalIssuedUniforms === 0 ? 'Clear for Exit' : 'Pending Return'}
+                </Badge>
               </div>
 
-              {/* Uniform Items Table */}
-              <div className="border border-stone-200 rounded-xl overflow-hidden bg-white">
-                <div className="bg-stone-50 p-3 border-b border-stone-200 flex items-center justify-between">
-                  <h3 className="font-bold text-stone-900 text-xs">Uniform Items Issued &amp; In Custody</h3>
-                  <span className="text-[11px] text-stone-500">{uniformItems.length} Issue Items</span>
+              {uniformItems.length === 0 ? (
+                <div className="text-center py-8 text-xs text-stone-400 border border-dashed border-stone-200 rounded-xl">
+                  No uniforms issued to this staff member.
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                        <th className="py-2 px-3">Date</th>
-                        <th className="py-2 px-3">Uniform Item</th>
-                        <th className="py-2 px-3 text-center">Qty</th>
-                        <th className="py-2 px-3 text-center">Status</th>
-                        <th className="py-2 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100">
-                      {uniformItems.map((u) => {
-                        const itemName = u.item?.name || u.legacy_uniform?.name || 'Uniform Item';
-                        const itemCode = u.item?.item_code || '';
-                        const targetId = u.item_id || u.uniform_item_id;
-
-                        return (
-                          <tr key={u.id} className="hover:bg-stone-50/80">
-                            <td className="py-2 px-3 font-mono text-stone-600 whitespace-nowrap">{u.issue_date}</td>
-                            <td className="py-2 px-3">
-                              <div className="font-semibold text-stone-900">{itemName}</div>
-                              {itemCode && (
-                                <span className="font-mono text-[10px] text-amber-700">{itemCode}</span>
-                              )}
-                              {u.notes && (
-                                <div className="text-[10px] text-stone-400 italic mt-0.5">{u.notes}</div>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-center font-bold text-stone-800">{u.quantity} pcs</td>
-                            <td className="py-2 px-3 text-center">
-                              <Badge variant={u.status === 'Issued' ? 'warning' : 'outline'} className="text-[10px]">
-                                {u.status}
-                              </Badge>
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              {u.status === 'Issued' && targetId ? (
-                                <button
-                                  onClick={() => handleReturnUniformItem(u.id, targetId, u.quantity)}
-                                  className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold underline flex items-center gap-1 ml-auto"
-                                >
-                                  <RotateCcw className="h-3 w-3" /> Mark Returned
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-stone-400">
-                                  {u.returned_at ? `Returned ${new Date(u.returned_at).toLocaleDateString('en-GB')}` : '—'}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {uniformItems.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="py-8 text-center text-stone-400 text-xs">
-                            No uniforms currently issued or logged for this employee.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+              ) : (
+                <div className="space-y-2">
+                  {uniformItems.map((u) => (
+                    <div
+                      key={u.id}
+                      className="p-3 bg-white border border-stone-200 rounded-xl flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="font-semibold text-stone-900">
+                          {u.item?.name || u.legacy_uniform?.name || 'Uniform Item'}
+                        </span>
+                        <div className="text-[11px] text-stone-500 mt-0.5">
+                          Issued: {u.issue_date} • Qty: {u.quantity}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={u.status === 'Issued' ? 'warning' : 'outline'} className="text-[10px]">
+                          {u.status}
+                        </Badge>
+                        {u.status === 'Issued' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleReturnUniformItem(u.id, u.item_id, u.quantity)}
+                            className="text-xs h-7"
+                          >
+                            Return
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
-
-        {/* Modal: Quick Advance/Deduction */}
-        {showTxModal && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-3 shadow-2xl text-xs border border-stone-200">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h4 className="font-bold text-stone-900">Record Advance / Deduction</h4>
-                <button onClick={() => setShowTxModal(false)} className="text-stone-400 hover:text-stone-700">✕</button>
-              </div>
-              <form onSubmit={handleRecordTx} className="space-y-2.5">
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">Transaction Type</label>
-                  <select
-                    value={txType}
-                    onChange={(e) => setTxType(e.target.value)}
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                  >
-                    <option value="Advance">Salary Advance</option>
-                    <option value="Loan">Emergency Loan</option>
-                    <option value="Penalty">Fine / Penalty</option>
-                    <option value="Repayment">Cash Repayment from Staff</option>
-                    <option value="Salary Deduction">Salary Deduction</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">Amount (₹)</label>
-                  <input
-                    type="number"
-                    value={txAmount || ''}
-                    onChange={(e) => setTxAmount(parseFloat(e.target.value) || 0)}
-                    placeholder="e.g. 2000"
-                    required
-                    className="w-full rounded-md border border-stone-300 p-2 font-bold text-stone-900 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes / Reason</label>
-                  <input
-                    type="text"
-                    value={txNotes}
-                    onChange={(e) => setTxNotes(e.target.value)}
-                    placeholder="e.g. Festival advance request"
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2 border-t">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setShowTxModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="sm" disabled={txSaving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                    {txSaving ? 'Saving...' : 'Save Transaction'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: Salary Payout */}
-        {showPayoutModal && employee && (
-          <SalaryPayoutModal
-            isOpen={showPayoutModal}
-            onClose={() => setShowPayoutModal(false)}
-            employee={employee}
-            outstandingAdvance={outstandingAdv}
-            onSuccess={() => {
-              setMessage({ type: 'success', text: 'Salary payout recorded successfully!' });
-              loadData();
-              if (onUpdated) onUpdated();
-            }}
-          />
-        )}
       </div>
+
+      {/* Salary Payment Modal */}
+      {showPaymentModal && selectedPeriodForPayment && (
+        <SalaryPaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          record={selectedPeriodForPayment}
+          onSuccess={() => {
+            loadData();
+            if (onUpdated) onUpdated();
+          }}
+        />
+      )}
     </div>
   );
 }

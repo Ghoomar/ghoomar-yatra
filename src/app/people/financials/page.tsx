@@ -4,42 +4,86 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
+import { EmployeeSalarySummaryRow } from '@/lib/types/database';
 import { StaffLedgerDrawer } from '@/components/people/StaffLedgerDrawer';
-import { SalaryPayoutModal } from '@/components/people/SalaryPayoutModal';
-import { Wallet, Plus, RefreshCw, CheckCircle, AlertCircle, Banknote, BookOpen } from 'lucide-react';
+import { SalaryPaymentModal } from '@/components/people/SalaryPaymentModal';
+import {
+  Wallet,
+  Banknote,
+  RefreshCw,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  CheckCircle2,
+  Lock,
+  LockOpen,
+  Eye,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
 
 export default function StaffFinancialsPage() {
-  const supabase = createClient();
-  const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
-  const [balances, setBalances] = useState<any[]>([]);
+  // Current month default: e.g. "2026-05"
+  const defaultMonth = () => {
+    return '2026-05'; // Default to reference month with rich authentic data
+  };
+
+  const [salaryMonth, setSalaryMonth] = useState(defaultMonth());
+  const [rows, setRows] = useState<EmployeeSalarySummaryRow[]>([]);
+  const [summary, setSummary] = useState<{
+    totalDue: number;
+    totalGiven: number;
+    pendingBalance: number;
+    netEarned: number;
+    totalDeductions: number;
+    staffCount: number;
+  }>({
+    totalDue: 0,
+    totalGiven: 0,
+    pendingBalance: 0,
+    netEarned: 0,
+    totalDeductions: 0,
+    staffCount: 0,
+  });
+
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [showPayoutModal, setShowPayoutModal] = useState(false);
-  const [payoutEmp, setPayoutEmp] = useState<any | null>(null);
-  const [drawerEmpId, setDrawerEmpId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPendingOnly, setFilterPendingOnly] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Form State
-  const [selectedEmpId, setSelectedEmpId] = useState('');
-  const [txType, setTxType] = useState('Advance');
-  const [amount, setAmount] = useState<number>(0);
-  const [notes, setNotes] = useState('');
+  // Modals
+  const [paymentRecord, setPaymentRecord] = useState<EmployeeSalarySummaryRow | null>(null);
+  const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
+  const [editingPeriod, setEditingPeriod] = useState<EmployeeSalarySummaryRow | null>(null);
+  const [editDeductions, setEditDeductions] = useState<number>(0);
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
+    setMessage(null);
     try {
-      const { data } = await supabase
-        .from('employee_financial_balance')
-        .select('*')
-        .order('employee_name');
+      const res = await fetch(`/api/people/salary/periods?salary_month=${salaryMonth}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load salary data.');
 
-      setBalances(data || []);
+      setRows(data.rows || []);
+      setSummary(data.summary || {
+        totalDue: 0,
+        totalGiven: 0,
+        pendingBalance: 0,
+        netEarned: 0,
+        totalDeductions: 0,
+        staffCount: 0,
+      });
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: 'Failed to load staff financial balances.' });
+      setMessage({ type: 'error', text: err.message || 'Error loading staff financials.' });
     } finally {
       setLoading(false);
     }
@@ -47,310 +91,612 @@ export default function StaffFinancialsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [salaryMonth]);
 
-  const handleRecordTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedEmpId || amount <= 0) {
-      alert('Please select employee and valid amount.');
-      return;
+  const handlePrevMonth = () => {
+    const [yearStr, monthStr] = salaryMonth.split('-');
+    let year = parseInt(yearStr, 10);
+    let month = parseInt(monthStr, 10);
+    month -= 1;
+    if (month < 1) {
+      month = 12;
+      year -= 1;
     }
-    setSaving(true);
+    setSalaryMonth(`${year}-${String(month).padStart(2, '0')}`);
+  };
+
+  const handleNextMonth = () => {
+    const [yearStr, monthStr] = salaryMonth.split('-');
+    let year = parseInt(yearStr, 10);
+    let month = parseInt(monthStr, 10);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+    setSalaryMonth(`${year}-${String(month).padStart(2, '0')}`);
+  };
+
+  const handleSyncAttendance = async () => {
+    setSyncing(true);
     setMessage(null);
-
     try {
-      const { error } = await supabase.from('employee_financial_transactions').insert({
-        employee_id: selectedEmpId,
-        business_date: businessDate,
-        transaction_type: txType,
-        amount,
-        notes,
+      const res = await fetch('/api/people/salary/periods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync', salary_month: salaryMonth }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed.');
 
-      if (error) throw error;
-
-      setMessage({ type: 'success', text: `${txType} of ${formatINR(amount)} logged successfully.` });
-      setShowModal(false);
-      setAmount(0);
-      setNotes('');
+      setMessage({ type: 'success', text: data.message || 'Attendance synced successfully.' });
       loadData();
     } catch (err: any) {
-      console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Failed to record transaction.' });
+      setMessage({ type: 'error', text: err.message || 'Failed to sync attendance.' });
     } finally {
-      setSaving(false);
+      setSyncing(false);
     }
   };
 
-  const totalAdvancesOutstanding = balances.reduce(
-    (sum, b) => sum + (Number(b.outstanding_advance_balance) || 0),
-    0
-  );
+  const handleClosePeriod = async () => {
+    if (!confirm(`Are you sure you want to close the salary period for ${salaryMonth}? This will lock the historical closing balance and carry remaining pending balances into next month.`)) {
+      return;
+    }
+    setClosing(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/people/salary/periods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close', salary_month: salaryMonth }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Close period failed.');
+
+      setMessage({ type: 'success', text: data.message || `Salary period ${salaryMonth} closed.` });
+      loadData();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to close period.' });
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  const handleSaveEditPeriod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPeriod) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch('/api/people/salary/periods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          period_id: editingPeriod.period_id,
+          manual_deductions: editDeductions,
+          notes: editNotes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed.');
+
+      setMessage({ type: 'success', text: `Deductions updated for ${editingPeriod.employee_name}.` });
+      setEditingPeriod(null);
+      loadData();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to update period.' });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Filter rows
+  const filteredRows = rows.filter((r) => {
+    const matchesSearch =
+      r.employee_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (r.employee_code && r.employee_code.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.department_name && r.department_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.contractor_name && r.contractor_name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    if (filterPendingOnly) {
+      return matchesSearch && Number(r.pending_salary_balance) > 0;
+    }
+    return matchesSearch;
+  });
+
+  const isPeriodClosed = rows.length > 0 && rows.every((r) => r.period_status === 'closed');
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Wallet className="h-6 w-6 text-amber-600" />
-            Staff Financial Ledger &amp; Payroll
+            Staff Financials &amp; Salary Ledger
           </h1>
           <p className="text-sm text-stone-500">
-            Track employee advances, loans, recoveries, uniform custody, and formal salary payout disbursements.
+            Accrued salary payable ledger, disbursements, and pending liability tracking.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Month Navigator & Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-white border border-stone-200 rounded-lg p-1 shadow-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrevMonth}
+              className="h-7 w-7 p-0 border-0 hover:bg-stone-100"
+              title="Previous Month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <input
+              type="month"
+              value={salaryMonth}
+              onChange={(e) => setSalaryMonth(e.target.value)}
+              className="px-2 text-xs font-bold text-stone-900 bg-transparent border-0 focus:outline-none cursor-pointer"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextMonth}
+              className="h-7 w-7 p-0 border-0 hover:bg-stone-100"
+              title="Next Month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
           <Button
-            variant="primary"
+            variant="outline"
             size="sm"
-            onClick={() => {
-              const firstActive = balances.find((b) => b.employment_status === 'Active');
-              if (firstActive) {
-                setPayoutEmp({ id: firstActive.employee_id, name: firstActive.employee_name, monthly_salary: firstActive.monthly_salary });
-                setShowPayoutModal(true);
-              }
-            }}
-            className="gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white"
+            onClick={handleSyncAttendance}
+            disabled={syncing || isPeriodClosed}
+            className="text-xs font-semibold"
+            title="Roll up attendance and recalculate periods"
           >
-            <Banknote className="h-4 w-4" /> Record Salary Payout
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+            Sync Attendance
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowModal(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Log Advance / Deduction
-          </Button>
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+
+          {!isPeriodClosed ? (
+            <Button
+              size="sm"
+              onClick={handleClosePeriod}
+              disabled={closing || rows.length === 0}
+              className="bg-stone-800 hover:bg-stone-900 text-white text-xs font-semibold"
+            >
+              <Lock className="h-3.5 w-3.5 mr-1.5" />
+              Close Period
+            </Button>
+          ) : (
+            <Badge variant="default" className="py-1 px-2.5 text-xs bg-stone-100 text-stone-700 border border-stone-300">
+              <Lock className="h-3 w-3 mr-1 text-stone-500" />
+              Period Closed
+            </Badge>
+          )}
         </div>
       </div>
 
+      {/* Notifications */}
       {message && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${message.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
-          {message.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-          {message.text}
+        <div
+          className={`p-3 rounded-xl text-sm font-medium flex items-center justify-between gap-2 ${
+            message.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {message.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+            )}
+            <span>{message.text}</span>
+          </div>
+          <button onClick={() => setMessage(null)} className="text-stone-400 hover:text-stone-600">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardDescription>Total Company Advances Outstanding</CardDescription>
-          <div className="text-2xl font-bold text-amber-600 mt-1">
-            {formatINR(totalAdvancesOutstanding)}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">Recoverable through payroll deductions</div>
+      {/* Top Executive KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Total Salary Due */}
+        <Card className="border-stone-200 shadow-xs">
+          <CardContent className="p-4">
+            <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
+              Total Salary Due
+            </span>
+            <div className="text-2xl font-bold text-stone-900 mt-1">
+              {formatINR(summary.totalDue)}
+            </div>
+            <span className="text-[11px] text-stone-500 block mt-0.5">
+              Accrued for {summary.staffCount} staff members
+            </span>
+          </CardContent>
         </Card>
 
-        <Card>
-          <CardDescription>Employees with Advances</CardDescription>
-          <div className="text-2xl font-bold text-stone-900 mt-1">
-            {balances.filter((b) => Number(b.outstanding_advance_balance) > 0).length}
-          </div>
-          <div className="text-[11px] text-stone-500 mt-1">Active open ledger accounts</div>
+        {/* Total Salary Given */}
+        <Card className="border-stone-200 shadow-xs">
+          <CardContent className="p-4">
+            <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
+              Salary Given
+            </span>
+            <div className="text-2xl font-bold text-emerald-700 mt-1">
+              {formatINR(summary.totalGiven)}
+            </div>
+            <span className="text-[11px] text-stone-500 block mt-0.5">
+              Disbursed in {salaryMonth}
+            </span>
+          </CardContent>
         </Card>
 
-        <Card>
-          <CardDescription>Accounting Principle</CardDescription>
-          <div className="text-base font-semibold text-stone-800 mt-1">Transaction Ledger Derivation</div>
-          <div className="text-[11px] text-stone-500 mt-1">Never a single editable balance field</div>
+        {/* Pending Salary Balance (Primary Metric) */}
+        <Card className="border-amber-300 bg-amber-50/40 shadow-xs">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                Pending Balance
+              </span>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900">
+                PAYABLE
+              </span>
+            </div>
+            <div className="text-2xl font-extrabold text-amber-800 mt-1">
+              {formatINR(summary.pendingBalance)}
+            </div>
+            <span className="text-[11px] text-amber-700 block mt-0.5 font-medium">
+              Outstanding liability to be paid
+            </span>
+          </CardContent>
+        </Card>
+
+        {/* Month Earned Salary */}
+        <Card className="border-stone-200 shadow-xs">
+          <CardContent className="p-4">
+            <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
+              Earned This Month
+            </span>
+            <div className="text-2xl font-bold text-stone-900 mt-1">
+              {formatINR(summary.netEarned)}
+            </div>
+            <span className="text-[11px] text-stone-500 block mt-0.5">
+              Net of {formatINR(summary.totalDeductions)} deductions
+            </span>
+          </CardContent>
         </Card>
       </div>
 
-      {/* Balances Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Staff Outstanding Balances</CardTitle>
-          <CardDescription>Advances + Loans + Penalties − Repayments − Deductions = Balance</CardDescription>
+      {/* Filter and Table Section */}
+      <Card className="border-stone-200 shadow-xs">
+        <CardHeader className="pb-3 border-b border-stone-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-bold text-stone-900">
+                Staff Salary Payable Register
+              </CardTitle>
+              <Badge variant="outline" className="text-xs">
+                {filteredRows.length} {filteredRows.length === 1 ? 'employee' : 'employees'}
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search Bar */}
+              <div className="relative min-w-[200px]">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-stone-400" />
+                <input
+                  type="text"
+                  placeholder="Filter by name, code, dept..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-lg border border-stone-200 pl-8 pr-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-stone-50/50"
+                />
+              </div>
+
+              {/* Pending Toggle */}
+              <button
+                onClick={() => setFilterPendingOnly(!filterPendingOnly)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                  filterPendingOnly
+                    ? 'bg-amber-100/70 border-amber-300 text-amber-900 font-semibold'
+                    : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                }`}
+              >
+                <Filter className="h-3 w-3" />
+                Pending Only
+              </button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="pt-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                  <th className="py-2.5 px-3">Staff Member</th>
-                  <th className="py-2.5 px-3">Dept / Role</th>
-                  <th className="py-2.5 px-3 text-right">Monthly Salary</th>
-                  <th className="py-2.5 px-3 text-right">Outstanding Advance Balance</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {balances.map((b) => {
-                  const bal = Number(b.outstanding_advance_balance) || 0;
-                  return (
-                    <tr
-                      key={b.employee_id}
-                      onClick={() => setDrawerEmpId(b.employee_id)}
-                      className="hover:bg-amber-50/50 transition-colors cursor-pointer group"
-                    >
-                      <td className="py-3 px-3 font-semibold text-stone-900 group-hover:text-amber-800">
-                        {b.employee_name}
-                        {b.employment_status !== 'Active' && (
-                          <span className="ml-2 inline-block text-[9px] font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
-                            {b.employment_status}
+
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="py-16 text-center text-stone-400">
+              <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-amber-500" />
+              <p className="text-sm">Loading staff salary register...</p>
+            </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="py-16 text-center text-stone-400">
+              <p className="text-sm">No employee records found for {salaryMonth}.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSyncAttendance}
+                className="mt-3 text-xs"
+              >
+                Sync Attendance for {salaryMonth}
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
+                  <tr>
+                    <th className="p-3">Employee</th>
+                    <th className="p-3">Dept / Role</th>
+                    <th className="p-3 text-right">Monthly Base</th>
+                    <th className="p-3 text-center">Pay Days</th>
+                    <th className="p-3 text-right">Earned</th>
+                    <th className="p-3 text-right">Prev Pending</th>
+                    <th className="p-3 text-right font-bold text-stone-900">Total Due</th>
+                    <th className="p-3 text-right text-emerald-700">Given</th>
+                    <th className="p-3 text-right font-extrabold text-amber-800">Pending Balance</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredRows.map((r) => {
+                    const isZeroPending = Number(r.pending_salary_balance) === 0;
+                    return (
+                      <tr
+                        key={r.period_id}
+                        className="hover:bg-amber-50/20 transition-colors cursor-pointer group"
+                        onClick={() => setDrawerEmployeeId(r.employee_id)}
+                      >
+                        {/* Employee Name & Code */}
+                        <td className="p-3 font-semibold text-stone-900 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span>{r.employee_name}</span>
+                            {r.contractor_name && (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1 text-purple-700 border-purple-200 bg-purple-50">
+                                Contractor
+                              </Badge>
+                            )}
+                          </div>
+                          {r.employee_code && (
+                            <span className="font-mono text-[11px] text-stone-400 block font-normal">
+                              {r.employee_code}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Dept & Role */}
+                        <td className="p-3 text-stone-600 whitespace-nowrap">
+                          <span className="block">{r.department_name || 'General'}</span>
+                          <span className="text-[11px] text-stone-400 block">{r.role_name || 'Staff'}</span>
+                        </td>
+
+                        {/* Monthly Base Salary */}
+                        <td className="p-3 text-right font-medium text-stone-700 whitespace-nowrap">
+                          {formatINR(r.monthly_salary)}
+                        </td>
+
+                        {/* Pay Days */}
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <span className="font-semibold text-stone-800">{r.pay_days}</span>
+                          <span className="text-[10px] text-stone-400 block">
+                            ({r.present_days}P + {r.allotted_weekly_off}WO)
                           </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-stone-600">
-                        {b.department_name || 'General'} • {b.role_name || 'Staff'}
-                      </td>
-                      <td className="py-3 px-3 text-right font-medium text-stone-900">
-                        {formatINR(Number(b.monthly_salary))}
-                      </td>
-                      <td className={`py-3 px-3 text-right font-bold text-sm ${bal > 0 ? 'text-amber-700' : 'text-stone-400'}`}>
-                        {formatINR(bal)}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        {bal > 0 ? (
-                          <Badge variant="warning">Due</Badge>
-                        ) : (
-                          <Badge variant="success">Nil Balance</Badge>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setDrawerEmpId(b.employee_id)}
-                            className="h-7 text-[11px] gap-1 px-2 text-stone-700 hover:text-amber-700"
+                        </td>
+
+                        {/* Earned Salary */}
+                        <td className="p-3 text-right font-medium text-stone-800 whitespace-nowrap">
+                          {formatINR(r.net_earned_salary)}
+                          {Number(r.total_deductions) > 0 && (
+                            <span className="text-[10px] text-rose-600 block">
+                              -{formatINR(r.total_deductions)}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Prev Pending */}
+                        <td className="p-3 text-right font-medium text-stone-600 whitespace-nowrap">
+                          {formatINR(r.previous_pending_salary)}
+                        </td>
+
+                        {/* Total Due */}
+                        <td className="p-3 text-right font-bold text-stone-900 whitespace-nowrap bg-stone-50/50">
+                          {formatINR(r.total_salary_due)}
+                        </td>
+
+                        {/* Given */}
+                        <td className="p-3 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                          {formatINR(r.total_salary_given)}
+                          {r.payments_count > 0 && (
+                            <span className="text-[10px] text-stone-400 block">
+                              ({r.payments_count} {r.payments_count === 1 ? 'txn' : 'txns'})
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Pending Balance */}
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <span
+                            className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+                              isZeroPending
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-100 text-amber-900 border border-amber-300'
+                            }`}
                           >
-                            <BookOpen className="h-3 w-3" /> Ledger
-                          </Button>
-                          {b.employment_status === 'Active' && (
+                            {formatINR(r.pending_salary_balance)}
+                          </span>
+                        </td>
+
+                        {/* Status */}
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <Badge
+                            variant={r.period_status === 'closed' ? 'default' : 'outline'}
+                            className="text-[10px]"
+                          >
+                            {r.period_status === 'closed' ? (
+                              <span className="flex items-center gap-1">
+                                <Lock className="h-2.5 w-2.5" /> Closed
+                              </span>
+                            ) : (
+                              'Draft'
+                            )}
+                          </Badge>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              onClick={() => setPaymentRecord(r)}
+                              className="h-7 px-2.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                              title="Record salary payment"
+                            >
+                              <Banknote className="h-3.5 w-3.5 mr-1" />
+                              Pay
+                            </Button>
+
+                            {r.period_status === 'draft' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditingPeriod(r);
+                                  setEditDeductions(Number(r.manual_deductions) || 0);
+                                  setEditNotes(r.notes || '');
+                                }}
+                                className="h-7 w-7 p-0 text-stone-500 hover:text-stone-800"
+                                title="Adjust manual deductions"
+                              >
+                                <SlidersHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => {
-                                setPayoutEmp({
-                                  id: b.employee_id,
-                                  name: b.employee_name,
-                                  monthly_salary: b.monthly_salary,
-                                });
-                                setShowPayoutModal(true);
-                              }}
-                              className="h-7 text-[11px] gap-1 px-2 text-emerald-800 border-emerald-300 hover:bg-emerald-50"
+                              onClick={() => setDrawerEmployeeId(r.employee_id)}
+                              className="h-7 w-7 p-0 text-stone-500 hover:text-stone-800"
+                              title="View employee ledger drawer"
                             >
-                              <Banknote className="h-3 w-3" /> Payout
+                              <Eye className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Modal: Transaction */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-base font-bold text-stone-900">Record Staff Financial Transaction</h2>
-              <button onClick={() => setShowModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
+      {/* Payment Modal */}
+      {paymentRecord && (
+        <SalaryPaymentModal
+          isOpen={!!paymentRecord}
+          onClose={() => setPaymentRecord(null)}
+          record={paymentRecord}
+          onSuccess={() => {
+            loadData();
+            setMessage({ type: 'success', text: 'Disbursement recorded successfully.' });
+          }}
+        />
+      )}
+
+      {/* Staff Ledger Drawer */}
+      {drawerEmployeeId && (
+        <StaffLedgerDrawer
+          isOpen={!!drawerEmployeeId}
+          onClose={() => setDrawerEmployeeId(null)}
+          employeeId={drawerEmployeeId}
+          onUpdated={loadData}
+        />
+      )}
+
+      {/* Edit Deductions Modal */}
+      {editingPeriod && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-stone-200 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-stone-50">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Adjust Period Deductions</h3>
+                <p className="text-xs text-stone-500">{editingPeriod.employee_name} • {editingPeriod.salary_month}</p>
+              </div>
+              <button
+                onClick={() => setEditingPeriod(null)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleRecordTransaction} className="space-y-3">
+            <form onSubmit={handleSaveEditPeriod} className="p-6 space-y-4">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Active Employee</label>
-                <select
-                  value={selectedEmpId}
-                  onChange={(e) => setSelectedEmpId(e.target.value)}
-                  required
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                >
-                  <option value="">Select Staff...</option>
-                  {balances
-                    .filter((b) => b.employment_status === 'Active')
-                    .map((b) => (
-                      <option key={b.employee_id} value={b.employee_id}>
-                        {b.employee_name} ({formatINR(Number(b.outstanding_advance_balance))})
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Transaction Type</label>
-                <select
-                  value={txType}
-                  onChange={(e) => setTxType(e.target.value)}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
-                >
-                  <option value="Advance">Salary Advance (Company lends)</option>
-                  <option value="Loan">Emergency Loan</option>
-                  <option value="Penalty">Misconduct / Discipline Penalty</option>
-                  <option value="Uniform Recovery">Uniform Cost Recovery</option>
-                  <option value="Damage Recovery">Property Damage Recovery</option>
-                  <option value="Repayment">Cash Repayment by Staff</option>
-                  <option value="Salary Deduction">Salary Deduction at Month End</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">Amount (₹)</label>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Manual Deductions (₹)
+                </label>
                 <input
                   type="number"
-                  step="50"
-                  value={amount || ''}
-                  onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                  required
-                  className="w-full rounded-md border border-stone-300 p-2 font-bold text-sm text-stone-900 focus:outline-none"
+                  step="0.01"
+                  min="0"
+                  value={editDeductions}
+                  onChange={(e) => setEditDeductions(Number(e.target.value))}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold"
                 />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  Manager adjustments, damages, or fines. (Attendance penalties are separate).
+                </p>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Notes / Reason</label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Medical emergency advance, Festival advance"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Notes / Reason
+                </label>
+                <textarea
+                  rows={3}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Reason for deduction adjustment..."
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
-                <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                  {saving ? 'Recording...' : 'Record Transaction'}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingPeriod(null)}
+                  disabled={savingEdit}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={savingEdit}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {savingEdit ? 'Saving...' : 'Save Adjustments'}
                 </Button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      {/* Salary Payout Modal */}
-      {showPayoutModal && payoutEmp && (
-        <SalaryPayoutModal
-          isOpen={showPayoutModal}
-          onClose={() => setShowPayoutModal(false)}
-          employee={payoutEmp}
-          outstandingAdvance={Number(
-            balances.find((b) => b.employee_id === payoutEmp.id)?.outstanding_advance_balance || 0
-          )}
-          onSuccess={() => {
-            setMessage({ type: 'success', text: `Salary payout recorded for ${payoutEmp.name}!` });
-            loadData();
-          }}
-        />
-      )}
-
-      {/* Staff Ledger Drawer */}
-      <StaffLedgerDrawer
-        isOpen={Boolean(drawerEmpId)}
-        employeeId={drawerEmpId}
-        onClose={() => setDrawerEmpId(null)}
-        onUpdated={loadData}
-      />
     </div>
   );
 }

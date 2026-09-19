@@ -29,6 +29,8 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
   const [teamId, setTeamId] = useState('');
   const [roleId, setRoleId] = useState('');
   const [salary, setSalary] = useState<number>(18000);
+  const [allottedWeeklyOff, setAllottedWeeklyOff] = useState<number>(4);
+  const [contractorName, setContractorName] = useState<string>('');
   const [employmentStatus, setEmploymentStatus] = useState('Active');
   const [bankAccount, setBankAccount] = useState('');
   const [bankIfsc, setBankIfsc] = useState('');
@@ -78,6 +80,8 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
       setTeamId(employee.team_id || '');
       setRoleId(employee.role_id || '');
       setSalary(Number(employee.monthly_salary) || 0);
+      setAllottedWeeklyOff(employee.allotted_weekly_off !== undefined && employee.allotted_weekly_off !== null ? Number(employee.allotted_weekly_off) : 4);
+      setContractorName(employee.contractor_name || '');
       setEmploymentStatus(employee.employment_status || 'Active');
 
       const bank = employee.bank_details || {};
@@ -92,6 +96,8 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
       setTeamId('');
       setRoleId('');
       setSalary(18000);
+      setAllottedWeeklyOff(4);
+      setContractorName('');
       setEmploymentStatus('Active');
       setBankAccount('');
       setBankIfsc('');
@@ -145,6 +151,8 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
         team_id: teamId || null,
         role_id: roleId || null,
         monthly_salary: salary,
+        allotted_weekly_off: Number(allottedWeeklyOff) || 0,
+        contractor_name: contractorName.trim() || null,
         employment_status: employmentStatus,
         bank_details: {
           account_number: bankAccount.trim() || null,
@@ -404,6 +412,34 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    Allotted Weekly Off <span className="text-xs text-stone-400 font-normal">(Days/Mo)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={allottedWeeklyOff}
+                    onChange={(e) => setAllottedWeeklyOff(parseInt(e.target.value, 10) || 0)}
+                    placeholder="4"
+                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    Contractor / Agency <span className="text-xs text-stone-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={contractorName}
+                    onChange={(e) => setContractorName(e.target.value)}
+                    placeholder="e.g. Maghe Singh or Security Agency"
+                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
             </div>

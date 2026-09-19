@@ -328,7 +328,7 @@ async function checkUserDependencies(
   ] = await Promise.all([
     adminClient.from('expenses').select('id', { count: 'exact', head: true }).eq('approved_by_id', targetUserId),
     adminClient.from('expenses').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
-    adminClient.from('employee_salary_payouts').select('id', { count: 'exact', head: true }).eq('approved_by_id', targetUserId),
+    adminClient.from('employee_salary_payments').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
     adminClient.from('business_days').select('business_date', { count: 'exact', head: true }).eq('closed_by', targetUserId),
     adminClient.from('business_days').select('business_date', { count: 'exact', head: true }).eq('reopened_by', targetUserId),
     adminClient.from('attendance').select('id', { count: 'exact', head: true }).eq('marked_by', targetUserId),
@@ -358,7 +358,7 @@ async function checkUserDependencies(
   const expTotal = (expApproved.count || 0) + (expRecorded.count || 0);
   if (expTotal > 0) dependencies.push({ table: 'expenses', label: 'Expenses (Approved / Recorded)', count: expTotal });
 
-  if ((salApproved.count || 0) > 0) dependencies.push({ table: 'employee_salary_payouts', label: 'Salary Payout Approvals', count: salApproved.count! });
+  if ((salApproved.count || 0) > 0) dependencies.push({ table: 'employee_salary_payments', label: 'Salary Payments Recorded', count: salApproved.count! });
 
   const bdayTotal = (bdayClosed.count || 0) + (bdayReopened.count || 0);
   if (bdayTotal > 0) dependencies.push({ table: 'business_days', label: 'Business Day Closing / Reopenings', count: bdayTotal });

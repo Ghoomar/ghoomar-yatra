@@ -25,6 +25,8 @@ interface Employee {
   joining_date: string;
   employment_status: EmploymentStatus;
   monthly_salary: number;
+  allotted_weekly_off?: number;
+  contractor_name?: string;
   bank_details?: any;
 }
 
@@ -325,7 +327,12 @@ export default function EmployeesPage() {
                           onClick={() => setDrawerEmpId(e.id)}
                           title="Click to view staff ledger"
                         >
-                          {e.name}
+                          <div>{e.name}</div>
+                          {e.contractor_name && (
+                            <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-normal">
+                              Contractor: {e.contractor_name}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-stone-700">
                           {e.department_name || 'General'} {e.team_name && <span className="text-stone-400">• {e.team_name}</span>}
@@ -333,7 +340,10 @@ export default function EmployeesPage() {
                         <td className="py-3 px-3 text-stone-800 font-medium">{e.role_name || 'Staff'}</td>
                         <td className="py-3 px-3 text-stone-600">{e.phone || '—'}</td>
                         <td className="py-3 px-3 text-right font-medium text-stone-900">
-                          {formatINR(Number(e.monthly_salary))}
+                          <div>{formatINR(Number(e.monthly_salary))}</div>
+                          <span className="text-[10px] text-stone-400 font-normal">
+                            {e.allotted_weekly_off ?? 4} W/Off
+                          </span>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <select

@@ -208,6 +208,81 @@ export interface DailyTargetProgress {
   last_visitor_at?: string;
 }
 
+export type SalaryPeriodStatus = 'draft' | 'closed';
+export type SalaryPaymentType = 'Salary Payment' | 'Advance Salary' | 'Settlement';
+export type SalaryPaymentMethod = 'Bank Transfer' | 'Cash' | 'UPI' | 'Cheque';
+
+export interface EmployeeSalaryPeriod {
+  id: string;
+  employee_id: string;
+  salary_month: string; // 'YYYY-MM'
+  monthly_salary: number;
+  days_in_month: number;
+  present_days: number;
+  allotted_weekly_off: number;
+  pay_days: number;
+  per_day_salary: number;
+  gross_earned_salary: number;
+  attendance_penalties: number;
+  manual_deductions: number;
+  total_deductions: number;
+  net_earned_salary: number;
+  previous_pending_salary: number;
+  total_salary_due: number;
+  closing_pending_salary: number | null;
+  status: SalaryPeriodStatus;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EmployeeSalaryPayment {
+  id: string;
+  employee_id: string;
+  salary_period_id?: string | null;
+  salary_month: string;
+  payment_date: string;
+  amount: number;
+  payment_method: SalaryPaymentMethod;
+  reference_number?: string | null;
+  payment_type: SalaryPaymentType;
+  notes?: string | null;
+  recorded_by?: string | null;
+  created_at?: string;
+}
+
+export interface EmployeeSalarySummaryRow {
+  period_id: string;
+  employee_id: string;
+  employee_code?: string | null;
+  employee_name: string;
+  employment_status: string;
+  department_name?: string | null;
+  role_name?: string | null;
+  contractor_name?: string | null;
+  salary_month: string;
+  monthly_salary: number;
+  days_in_month: number;
+  present_days: number;
+  allotted_weekly_off: number;
+  pay_days: number;
+  per_day_salary: number;
+  gross_earned_salary: number;
+  attendance_penalties: number;
+  manual_deductions: number;
+  total_deductions: number;
+  net_earned_salary: number;
+  previous_pending_salary: number;
+  total_salary_due: number;
+  total_salary_given: number;
+  pending_salary_balance: number;
+  payments_count: number;
+  last_payment_date?: string | null;
+  period_status: SalaryPeriodStatus;
+  notes?: string | null;
+  updated_at?: string;
+}
+
 export interface EmployeeFinancialBalance {
   employee_id: string;
   employee_code?: string;

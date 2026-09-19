@@ -13,7 +13,8 @@ interface AttendanceRow {
   name: string;
   department_name?: string;
   role_name?: string;
-  status: 'Present' | 'Absent' | 'Weekly Off' | 'Leave' | 'Half Day';
+  status: 'Present' | 'Absent' | 'Weekly Off' | 'Leave' | 'Half Day' | 'Double Shift';
+  shift_multiplier: number;
   overtime_hours: number;
   penalty_amount: number;
   notes: string;
@@ -51,12 +52,25 @@ export default function AttendancePage() {
       setRows(
         (emps || []).map((emp: any) => {
           const existing = (attData || []).find((a) => a.employee_id === emp.id);
+          const st = existing ? existing.status : 'Present';
+          let defaultMult = 1.0;
+          if (existing && existing.shift_multiplier !== null && existing.shift_multiplier !== undefined) {
+            defaultMult = Number(existing.shift_multiplier);
+          } else if (st === 'Half Day') {
+            defaultMult = 0.5;
+          } else if (st === 'Double Shift') {
+            defaultMult = 2.0;
+          } else if (st === 'Absent' || st === 'Weekly Off' || st === 'Leave') {
+            defaultMult = 0;
+          }
+
           return {
             employee_id: emp.id,
             name: emp.name,
             department_name: emp.department?.name,
             role_name: emp.role?.name,
-            status: existing ? existing.status : 'Present',
+            status: st,
+            shift_multiplier: defaultMult,
             overtime_hours: existing ? Number(existing.overtime_hours) : 0,
             penalty_amount: existing ? Number(existing.penalty_amount) : 0,
             notes: existing?.notes || '',
@@ -76,7 +90,7 @@ export default function AttendancePage() {
   }, [businessDate]);
 
   const handleMarkAllPresent = () => {
-    setRows(rows.map((r) => ({ ...r, status: 'Present' })));
+    setRows(rows.map((r) => ({ ...r, status: 'Present', shift_multiplier: 1.0 })));
   };
 
   const handleSaveAttendance = async () => {
@@ -90,6 +104,7 @@ export default function AttendancePage() {
             employee_id: row.employee_id,
             business_date: businessDate,
             status: row.status,
+            shift_multiplier: row.shift_multiplier,
             overtime_hours: row.overtime_hours,
             penalty_amount: row.penalty_amount,
             notes: row.notes,
@@ -234,26 +249,32 @@ export default function AttendancePage() {
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="flex items-center justify-center gap-1">
-                          {(['Present', 'Absent', 'Weekly Off', 'Leave', 'Half Day'] as const).map((st) => (
+                          {(
+                            [
+                              { st: 'Present', label: 'P', mult: 1.0, color: 'bg-emerald-600 text-white' },
+                              { st: 'Absent', label: 'A', mult: 0, color: 'bg-rose-600 text-white' },
+                              { st: 'Weekly Off', label: 'WO', mult: 0, color: 'bg-stone-700 text-white' },
+                              { st: 'Half Day', label: 'HD', mult: 0.5, color: 'bg-amber-600 text-white' },
+                              { st: 'Double Shift', label: '2P', mult: 2.0, color: 'bg-indigo-600 text-white' },
+                            ] as const
+                          ).map(({ st, label, mult, color }) => (
                             <button
                               key={st}
                               type="button"
                               onClick={() => {
                                 const next = [...rows];
-                                next[idx].status = st;
+                                next[idx].status = st as any;
+                                next[idx].shift_multiplier = mult;
                                 setRows(next);
                               }}
                               className={`px-2 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ${
                                 row.status === st
-                                  ? st === 'Present'
-                                    ? 'bg-emerald-600 text-white'
-                                    : st === 'Absent'
-                                    ? 'bg-rose-600 text-white'
-                                    : 'bg-amber-600 text-white'
+                                  ? color
                                   : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                               }`}
+                              title={`${st} (${mult} shift unit)`}
                             >
-                              {st === 'Present' ? 'P' : st === 'Absent' ? 'A' : st === 'Weekly Off' ? 'WO' : st === 'Leave' ? 'L' : 'HD'}
+                              {label}
                             </button>
                           ))}
                         </div>
