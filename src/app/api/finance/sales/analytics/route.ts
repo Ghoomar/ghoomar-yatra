@@ -90,14 +90,31 @@ export async function GET(request: NextRequest) {
     let totalTax = 0;
     let totalDiscounts = 0;
     let totalItemsSold = 0;
-    const totalBills = orders.length;
+    let totalBills = orders.length;
 
-    if (orders.length > 0) {
+    const hasGranularFilters = Boolean(
+      parentCategoryFilter || categoryFilter || itemFilter || captainFilter || paymentTypeFilter || orderTypeFilter
+    );
+
+    if (!hasGranularFilters && reconciliation && reconciliation.exec_grand_total) {
+      // 1. Authoritative Executive Summary standard of truth
+      netSales = Number(reconciliation.exec_net_sales) || 0;
+      grossSales = Number(reconciliation.exec_grand_total) || 0;
+      totalBills = orders.length > 0 ? orders.length : Number(reconciliation.exec_bills_count) || 0;
+      totalTax = orders.length > 0
+        ? orders.reduce((sum, o) => sum + (Number(o.tax_amount) || 0), 0)
+        : hourlyItems.reduce((sum, h) => sum + (Number(h.tax_amount) || 0), 0);
+      totalDiscounts = orders.length > 0
+        ? orders.reduce((sum, o) => sum + (Number(o.discount_amount) || 0), 0)
+        : hourlyItems.reduce((sum, h) => sum + (Number(h.discount_amount) || 0), 0);
+    } else if (orders.length > 0) {
+      // 2. Authoritative Orders Master bills standard
       netSales = orders.reduce((sum, o) => sum + (Number(o.net_sales) || 0), 0);
       grossSales = orders.reduce((sum, o) => sum + (Number(o.grand_total) || 0), 0);
       totalTax = orders.reduce((sum, o) => sum + (Number(o.tax_amount) || 0), 0);
       totalDiscounts = orders.reduce((sum, o) => sum + (Number(o.discount_amount) || 0), 0);
     } else if (hourlyItems.length > 0) {
+      // 3. Fallback to hourly items only if neither Executive nor Orders Master exists
       netSales = hourlyItems.reduce((sum, h) => sum + (Number(h.net_sales) || 0), 0);
       grossSales = hourlyItems.reduce((sum, h) => sum + (Number(h.total_sales) || 0), 0);
       totalTax = hourlyItems.reduce((sum, h) => sum + (Number(h.tax_amount) || 0), 0);
