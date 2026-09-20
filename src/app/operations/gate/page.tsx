@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
-import { getTodayBusinessDate, formatNumber, formatTimeAgo } from '@/lib/utils';
+import { getTodayBusinessDate, formatNumber } from '@/lib/utils';
 import {
   recordVisitorEvent,
   recordVehicleEvent,
@@ -28,14 +27,13 @@ import {
   Car,
   Undo2,
   RefreshCw,
-  Clock,
-  Wifi,
   WifiOff,
   CheckCircle2,
   AlertTriangle,
   RotateCw,
   ShieldCheck,
   Smartphone,
+  Bike,
 } from 'lucide-react';
 
 interface VehicleLocation {
@@ -44,14 +42,20 @@ interface VehicleLocation {
   count: number;
 }
 
+const BIKE_LOCATION_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
+
 const DEFAULT_LOCATIONS: VehicleLocation[] = [
-  { id: 'delhi', name: 'DELHI', count: 0 },
-  { id: 'noida', name: 'NOIDA / GHAZIABAD', count: 0 },
-  { id: 'amroha', name: 'AMROHA', count: 0 },
-  { id: 'moradabad', name: 'MORADABAD', count: 0 },
-  { id: 'meerut', name: 'MEERUT', count: 0 },
-  { id: 'other', name: 'OTHER', count: 0 },
+  { id: 'd343fa14-72f7-49c1-bfbc-e8bffdd2ddd9', name: 'DL', count: 0 },
+  { id: 'c59f0429-9ed0-47f4-8cbb-8542ca4ec5d7', name: 'UP16', count: 0 },
+  { id: 'b1c52c0e-2d4c-4d3b-b3fd-0b62c1fa6c15', name: 'UP22', count: 0 },
+  { id: 'eec2b68d-7725-42a9-a0b8-91321a53b803', name: 'UP23', count: 0 },
+  { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'HR', count: 0 },
+  { id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', name: 'UK', count: 0 },
+  { id: 'ef6e8d6b-a68b-409f-a2e0-5794c6205833', name: 'Others', count: 0 },
+  { id: BIKE_LOCATION_ID, name: 'Bike', count: 0 },
 ];
+
+const PREFIX_ORDER = ['DL', 'UP16', 'UP22', 'UP23', 'HR', 'UK', 'Others'];
 
 export default function GateCounterPage() {
   const supabase = createClient();
@@ -202,12 +206,10 @@ export default function GateCounterPage() {
 
   // 3. Instant Touch Handlers (< 5ms local IndexedDB commit)
   const handleAddVisitors = async (increment: number) => {
-    // Immediate optimistic local UI update (0ms lag)
     setTotalVisitors((prev) => prev + increment);
     setLastAction(`+${increment} Visitors`);
     setLastUpdatedAt(new Date().toISOString());
 
-    // Commit to IndexedDB
     try {
       await recordVisitorEvent(
         increment,
@@ -215,7 +217,6 @@ export default function GateCounterPage() {
         enrollment?.userId || null,
         enrollment?.deviceId || null
       );
-      // Trigger background sync
       syncPendingEvents();
     } catch (err) {
       console.error('Failed to commit visitor event locally:', err);
@@ -223,15 +224,13 @@ export default function GateCounterPage() {
   };
 
   const handleAddVehicle = async (locationId: string, locationName: string) => {
-    // Immediate optimistic local UI update (0ms lag)
     setTotalCars((prev) => prev + 1);
     setLocations((prev) =>
       prev.map((l) => (l.id === locationId ? { ...l, count: l.count + 1 } : l))
     );
-    setLastAction(`+1 Car from ${locationName}`);
+    setLastAction(locationName === 'Bike' ? '+1 Bike' : `+1 ${locationName}`);
     setLastUpdatedAt(new Date().toISOString());
 
-    // Commit to IndexedDB
     try {
       await recordVehicleEvent(
         locationId,
@@ -240,7 +239,6 @@ export default function GateCounterPage() {
         enrollment?.userId || null,
         enrollment?.deviceId || null
       );
-      // Trigger background sync
       syncPendingEvents();
     } catch (err) {
       console.error('Failed to commit vehicle event locally:', err);
@@ -259,10 +257,13 @@ export default function GateCounterPage() {
           setLocations((prev) =>
             prev.map((l) => (l.id === undone.location_id ? { ...l, count: Math.max(0, l.count - 1) } : l))
           );
-          setLastAction(`Undone +1 Car from ${undone.location_name}`);
+          const isBike =
+            undone.location_id === BIKE_LOCATION_ID ||
+            undone.location_name?.toLowerCase() === 'bike';
+          setLastAction(isBike ? 'Undone +1 Bike' : `Undone +1 ${undone.location_name}`);
         }
       } else {
-        setLastAction('No recent local entries to undo');
+        setLastAction('No recent entries to undo');
       }
     } catch (err) {
       console.error('Error undoing event:', err);
@@ -270,135 +271,168 @@ export default function GateCounterPage() {
   };
 
   const handleManualSync = async () => {
+    setLoading(true);
     await syncPendingEvents();
     await loadData();
+    setLoading(false);
   };
 
+  // Derive the 7 car prefix locations in guaranteed order
+  const carLocations = useMemo(() => {
+    return PREFIX_ORDER.map((prefix) => {
+      const found = locations.find((l) => l.name.toUpperCase() === prefix.toUpperCase());
+      const fallback = DEFAULT_LOCATIONS.find((d) => d.name === prefix);
+      return (
+        found || {
+          id: fallback ? fallback.id : prefix.toLowerCase(),
+          name: prefix,
+          count: 0,
+        }
+      );
+    });
+  }, [locations]);
+
+  // Derive the Bike location
+  const bikeLocation = useMemo(() => {
+    return (
+      locations.find((l) => l.name.toUpperCase() === 'BIKE' || l.id === BIKE_LOCATION_ID) || {
+        id: BIKE_LOCATION_ID,
+        name: 'Bike',
+        count: 0,
+      }
+    );
+  }, [locations]);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-5 pb-12">
-      {/* Top Banner with Device & Sync Status */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-stone-900 text-white p-4 rounded-2xl shadow-md">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2">
-              Gate Counter
-            </h1>
-            {enrollment ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-stone-800 text-stone-300 px-2 py-0.5 rounded-full border border-stone-700">
-                <Smartphone className="h-3 w-3 text-amber-400" />
-                Enrolled Device
-              </span>
-            ) : (
-              <Link href="/login" className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 px-2 py-0.5 rounded-full border border-amber-500/40">
-                <ShieldCheck className="h-3 w-3" /> Enroll Guard Device
-              </Link>
-            )}
-          </div>
+    <div className="max-w-3xl mx-auto space-y-3 sm:space-y-4 pb-8">
+      {/* 1. COMPACT HEADER */}
+      <div className="bg-stone-900 text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base sm:text-lg font-black tracking-tight">
+            Gate Counter
+          </h1>
+          {enrollment ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-stone-800 text-stone-300 px-2 py-0.5 rounded-md border border-stone-700">
+              <Smartphone className="h-3 w-3 text-amber-400" />
+              Enrolled
+            </span>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 px-2 py-0.5 rounded-md border border-amber-500/40"
+            >
+              <ShieldCheck className="h-3 w-3" /> Enroll Guard Device
+            </Link>
+          )}
         </div>
 
         {/* Sync & Date Badges */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {/* Reactive Sync Indicator */}
+        <div className="flex items-center gap-1.5 text-[11px]">
+          {/* Sync Indicator */}
           {syncState.status === 'syncing' ? (
-            <div className="flex items-center gap-1.5 bg-sky-950/80 border border-sky-600/50 text-sky-300 px-2.5 py-1 rounded-lg font-medium shadow-xs">
-              <RotateCw className="h-3.5 w-3.5 animate-spin text-sky-400" />
-              <span>Syncing {syncState.pendingCount} entries...</span>
+            <div className="flex items-center gap-1 bg-sky-950/80 border border-sky-600/50 text-sky-300 px-2 py-0.5 rounded-md font-medium">
+              <RotateCw className="h-3 w-3 animate-spin text-sky-400" />
+              <span>Syncing ({syncState.pendingCount})</span>
             </div>
           ) : syncState.status === 'offline_pending' ? (
-            <div className="flex items-center gap-1.5 bg-amber-950/80 border border-amber-600/50 text-amber-300 px-2.5 py-1 rounded-lg font-medium shadow-xs">
-              <WifiOff className="h-3.5 w-3.5 text-amber-400" />
-              <span>Offline · {syncState.pendingCount} pending</span>
+            <div className="flex items-center gap-1 bg-amber-950/80 border border-amber-600/50 text-amber-300 px-2 py-0.5 rounded-md font-medium">
+              <WifiOff className="h-3 w-3 text-amber-400" />
+              <span>Offline ({syncState.pendingCount})</span>
             </div>
           ) : syncState.status === 'failed' ? (
             <button
               onClick={handleManualSync}
-              className="flex items-center gap-1.5 bg-rose-950/80 border border-rose-600/50 text-rose-300 px-2.5 py-1 rounded-lg font-medium shadow-xs hover:bg-rose-900 cursor-pointer"
+              className="flex items-center gap-1 bg-rose-950/80 border border-rose-600/50 text-rose-300 px-2 py-0.5 rounded-md font-medium hover:bg-rose-900 cursor-pointer"
             >
-              <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
-              <span>{syncState.pendingCount} failed · Sync Now</span>
+              <AlertTriangle className="h-3 w-3 text-rose-400" />
+              <span>Failed ({syncState.pendingCount})</span>
             </button>
           ) : (
-            <div className="flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-600/50 text-emerald-300 px-2.5 py-1 rounded-lg font-medium shadow-xs">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Online · Synced</span>
+            <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-600/50 text-emerald-300 px-2 py-0.5 rounded-md font-medium">
+              <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+              <span>Synced</span>
             </div>
           )}
 
           {/* Date Badge */}
-          <div className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-stone-300">
-            Date: <strong className="text-white">{businessDate}</strong>
+          <div className="bg-stone-800 border border-stone-700 rounded-md px-2 py-0.5 text-stone-300">
+            {businessDate}
           </div>
 
-          {/* Manual Refresh / Sync Action */}
+          {/* Refresh Action */}
           <button
             onClick={handleManualSync}
             title="Refresh and sync transactions"
-            className="p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 active:scale-95 transition-transform"
+            className="p-1 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-300 active:scale-95 transition-transform cursor-pointer"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <div className="bg-white border-2 border-stone-200/80 rounded-2xl p-4 sm:p-5 text-center shadow-xs">
-          <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-stone-500 uppercase tracking-wider">
-            <Users className="h-4 w-4 text-amber-600" /> Today's Visitors
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+        <div className="bg-white border border-stone-200 rounded-xl p-2.5 sm:p-3.5 text-center shadow-xs">
+          <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            <Users className="h-3.5 w-3.5 text-amber-600" /> Today's Visitors
           </div>
-          <div data-testid="visitors-count" className="text-4xl sm:text-5xl font-black text-stone-900 mt-2 tracking-tight">
+          <div
+            data-testid="visitors-count"
+            className="text-3xl sm:text-4xl font-black text-stone-900 mt-0.5 tracking-tight"
+          >
             {formatNumber(totalVisitors)}
           </div>
         </div>
 
-        <div className="bg-white border-2 border-stone-200/80 rounded-2xl p-4 sm:p-5 text-center shadow-xs">
-          <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-stone-500 uppercase tracking-wider">
-            <Car className="h-4 w-4 text-sky-600" /> Today's Vehicles
+        <div className="bg-white border border-stone-200 rounded-xl p-2.5 sm:p-3.5 text-center shadow-xs">
+          <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            <Car className="h-3.5 w-3.5 text-sky-600" /> Today's Vehicles
           </div>
-          <div data-testid="vehicles-count" className="text-4xl sm:text-5xl font-black text-stone-900 mt-2 tracking-tight">
+          <div
+            data-testid="vehicles-count"
+            className="text-3xl sm:text-4xl font-black text-stone-900 mt-0.5 tracking-tight"
+          >
             {formatNumber(totalCars)}
           </div>
         </div>
       </div>
 
-      {/* Undo Action Bar */}
-      <div className="flex items-center justify-between bg-stone-100 border border-stone-200 p-3 rounded-xl text-xs">
-        <span className="text-stone-600 truncate mr-2">
-          {lastAction ? (
-            <span>Last Action: <strong className="text-stone-900">{lastAction}</strong></span>
-          ) : (
-            'No recent action'
-          )}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          data-testid="btn-undo"
-          onClick={handleUndo}
-          className="gap-1 text-xs border-stone-300 hover:bg-stone-200 shrink-0 touch-manipulation active:scale-95"
-        >
-          <Undo2 className="h-3.5 w-3.5" /> Undo Last Tap
-        </Button>
-      </div>
-
-      {/* SECTION 1: VISITOR COUNTER BUTTONS */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+      {/* SECTION 1: VISITOR COUNTER BUTTONS + INTEGRATED COMPACT UNDO */}
+      <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
+          <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
             <Users className="h-4 w-4 text-amber-600" /> Visitors
           </h2>
+
+          {/* Integrated Compact Undo Action */}
+          <div className="flex items-center gap-2">
+            {lastAction && (
+              <span className="text-[11px] text-stone-500 truncate max-w-[120px] sm:max-w-[200px]">
+                Last: <strong className="text-stone-800">{lastAction}</strong>
+              </span>
+            )}
+            <button
+              type="button"
+              data-testid="btn-undo"
+              onClick={handleUndo}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 border border-stone-300 active:scale-95 transition-transform cursor-pointer shadow-2xs"
+            >
+              <Undo2 className="h-3.5 w-3.5 text-amber-600" />
+              <span>Undo Last Tap</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
           {[1, 2, 5, 10].map((inc) => (
             <button
               key={inc}
               data-testid={`btn-visitor-${inc}`}
               onClick={() => handleAddVisitors(inc)}
-              className="h-24 sm:h-28 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-3xl sm:text-4xl shadow-md shadow-amber-500/20 flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer touch-manipulation"
+              className="h-20 sm:h-24 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-2xl sm:text-3xl shadow-xs flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer touch-manipulation"
             >
               <span>+{inc}</span>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-950/70 mt-1">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-950/75 mt-0.5">
                 {inc === 1 ? 'Person' : 'Group'}
               </span>
             </button>
@@ -406,30 +440,50 @@ export default function GateCounterPage() {
         </div>
       </div>
 
-      {/* SECTION 2: VEHICLE ORIGIN COUNTER */}
-      <div className="bg-white border border-stone-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+      {/* SECTION 2: VEHICLE COUNTER BUTTONS */}
+      <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-2">
-            <Car className="h-4 w-4 text-sky-600" /> Vehicles by Origin
+          <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
+            <Car className="h-4 w-4 text-sky-600" /> Vehicles
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-          {locations.map((loc) => (
-            <button
-              key={loc.id}
-              data-testid={`btn-vehicle-${loc.id}`}
-              onClick={() => handleAddVehicle(loc.id, loc.name)}
-              className="h-20 sm:h-24 rounded-2xl bg-stone-900 hover:bg-stone-800 active:bg-stone-950 text-white p-2.5 sm:p-3 flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer shadow-sm touch-manipulation"
-            >
-              <div className="text-xs sm:text-sm font-bold tracking-tight text-amber-400 uppercase truncate max-w-full">
-                {loc.name}
-              </div>
-              <div className="text-base sm:text-xl font-extrabold text-white mt-0.5">+1 Car</div>
-              <div className="text-[10px] text-stone-400">Today: {loc.count}</div>
-            </button>
-          ))}
+        {/* 7 Registration-prefix buttons: DL, UP16, UP22, UP23 on row 1; HR, UK, Others on row 2 */}
+        <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
+          {carLocations.map((loc) => {
+            const isOthers = loc.name.toLowerCase() === 'others';
+            return (
+              <button
+                key={loc.id}
+                data-testid={`btn-vehicle-${loc.id}`}
+                onClick={() => handleAddVehicle(loc.id, loc.name)}
+                className={`h-16 sm:h-18 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer touch-manipulation shadow-xs ${
+                  isOthers ? 'col-span-2' : 'col-span-1'
+                }`}
+              >
+                <div
+                  className={`font-black tracking-tight leading-none ${
+                    isOthers ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
+                  }`}
+                >
+                  {loc.name}
+                </div>
+                <div className="text-[11px] font-bold text-amber-950/75 mt-1">+1</div>
+              </button>
+            );
+          })}
         </div>
+
+        {/* Separate +1 Bike Button */}
+        <button
+          type="button"
+          data-testid="btn-vehicle-bike"
+          onClick={() => handleAddVehicle(bikeLocation.id, 'Bike')}
+          className="w-full h-12 sm:h-13 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-base sm:text-lg shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer touch-manipulation"
+        >
+          <Bike className="h-5 w-5" />
+          <span>+1 Bike</span>
+        </button>
       </div>
     </div>
   );
