@@ -409,15 +409,27 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                   <span className="text-[11px] text-stone-400">Net Sales:</span>
                   <span className="font-bold text-white text-sm">{formatINR(hoveredPoint.netSales)}</span>
                 </div>
-                {hoveredPoint.billCount > 0 && (
-                  <div className="flex items-center justify-between text-[10px] text-stone-400 mt-0.5">
+                {hoveredPoint.grossSales > 0 && hoveredPoint.grossSales !== hoveredPoint.netSales && (
+                  <div className="flex items-baseline justify-between gap-2 text-[10px] text-stone-400">
+                    <span>Gross Sales:</span>
+                    <span className="text-stone-300">{formatINR(hoveredPoint.grossSales)}</span>
+                  </div>
+                )}
+                {hoveredPoint.discounts > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 text-[10px] text-rose-400">
+                    <span>Discounts:</span>
+                    <span>-{formatINR(hoveredPoint.discounts)}</span>
+                  </div>
+                )}
+                {(hoveredPoint.billCount > 0 || hoveredPoint.customerCount > 0) && (
+                  <div className="flex items-center justify-between text-[10px] text-stone-400 mt-0.5 pt-0.5 border-t border-stone-800">
                     <span>Bills: {hoveredPoint.billCount}</span>
-                    <span>Guests: {hoveredPoint.customerCount}</span>
+                    <span>Restaurant PAX: {hoveredPoint.customerCount}</span>
                   </div>
                 )}
                 {onSelectDate && (
                   <div className="text-[10px] text-amber-300/80 mt-1 pt-1 border-t border-stone-800 flex items-center gap-1">
-                    <ArrowUpRight className="h-3 w-3" /> Click to view flash report
+                    <ArrowUpRight className="h-3 w-3" /> Click to view details &amp; flash report
                   </div>
                 )}
               </div>

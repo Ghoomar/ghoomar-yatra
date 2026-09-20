@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { formatINR } from '@/lib/utils';
+import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { SalesAnalyticsResponse } from '@/lib/types/sales';
 import { HourlyCategoryStackedBarChart } from './HourlyCategoryStackedBarChart';
 import { SalesReconciliationBanner } from './SalesReconciliationBanner';
@@ -26,10 +26,22 @@ import {
 
 interface SalesAnalyticsDashboardProps {
   initialDate?: string;
+  onDateChange?: (date: string) => void;
+  hideDatePicker?: boolean;
 }
 
-export function SalesAnalyticsDashboard({ initialDate }: SalesAnalyticsDashboardProps) {
-  const [selectedDate, setSelectedDate] = useState<string>(initialDate || '2026-09-18');
+export function SalesAnalyticsDashboard({
+  initialDate,
+  onDateChange,
+  hideDatePicker = false,
+}: SalesAnalyticsDashboardProps) {
+  const [selectedDate, setSelectedDate] = useState<string>(initialDate || getTodayBusinessDate());
+
+  useEffect(() => {
+    if (initialDate && initialDate !== selectedDate) {
+      setSelectedDate(initialDate);
+    }
+  }, [initialDate]);
   const [parentCategory, setParentCategory] = useState<string>('');
   const [category, setCategory] = useState<string>('');
   const [itemSearch, setItemSearch] = useState<string>('');
@@ -107,7 +119,11 @@ export function SalesAnalyticsDashboard({ initialDate }: SalesAnalyticsDashboard
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                const newDate = e.target.value;
+                setSelectedDate(newDate);
+                onDateChange?.(newDate);
+              }}
               className="px-2 text-xs font-bold text-stone-900 bg-transparent border-0 focus:outline-none cursor-pointer"
             />
           </div>

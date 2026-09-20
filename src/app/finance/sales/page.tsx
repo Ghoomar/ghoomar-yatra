@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -17,7 +18,6 @@ import {
   TrendingUp,
   UploadCloud,
 } from 'lucide-react';
-import { SalesAnalyticsDashboard } from '@/components/sales/SalesAnalyticsDashboard';
 import { SalesImportSection } from '@/components/sales/SalesImportSection';
 
 interface PaymentModeState {
@@ -560,17 +560,17 @@ function SalesPageContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'import' | 'entry'>(
-    tabParam === 'import' ? 'import' : tabParam === 'entry' ? 'entry' : 'analytics'
+  const [activeTab, setActiveTab] = useState<'import' | 'manual'>(
+    tabParam === 'manual' ? 'manual' : 'import'
   );
 
   useEffect(() => {
-    if (tabParam === 'import' || tabParam === 'entry' || tabParam === 'analytics') {
+    if (tabParam === 'manual' || tabParam === 'import') {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
 
-  const handleTabChange = (tab: 'analytics' | 'import' | 'entry') => {
+  const handleTabChange = (tab: 'import' | 'manual') => {
     setActiveTab(tab);
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tab);
@@ -579,59 +579,69 @@ function SalesPageContent() {
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Navigation Tabs */}
+      {/* Top Header & Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Receipt className="h-6 w-6 text-amber-600" />
-            Sales & Analytics
+            Daily Sales Data Center
           </h1>
+          <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
+            Upload official Petpooja POS reports (Hourly Items, Orders Master, Executive Summary) to ingest authoritative sales ledgers.
+          </p>
         </div>
 
-        <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/80 text-xs font-semibold shadow-2xs">
-          <button
-            type="button"
-            onClick={() => handleTabChange('analytics')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-              activeTab === 'analytics'
-                ? 'bg-white text-stone-900 shadow-2xs'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <TrendingUp className={`h-3.5 w-3.5 ${activeTab === 'analytics' ? 'text-amber-600' : 'text-stone-400'}`} />
-            Analytics
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange('import')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-              activeTab === 'import'
-                ? 'bg-white text-stone-900 shadow-2xs'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <UploadCloud className={`h-3.5 w-3.5 ${activeTab === 'import' ? 'text-amber-600' : 'text-stone-400'}`} />
-            Import Reports
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTabChange('entry')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
-              activeTab === 'entry'
-                ? 'bg-white text-stone-900 shadow-2xs'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            <Receipt className={`h-3.5 w-3.5 ${activeTab === 'entry' ? 'text-amber-600' : 'text-stone-400'}`} />
-            Daily Entry
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/reports">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs text-amber-900 border-amber-300 hover:bg-amber-50">
+              <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
+              <span>View Sales Analytics in Reports</span>
+            </Button>
+          </Link>
+
+          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/80 text-xs font-semibold shadow-2xs">
+            <button
+              type="button"
+              onClick={() => handleTabChange('import')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'import'
+                  ? 'bg-white text-stone-900 shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <UploadCloud className={`h-3.5 w-3.5 ${activeTab === 'import' ? 'text-amber-600' : 'text-stone-400'}`} />
+              Petpooja Import
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('manual')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'manual'
+                  ? 'bg-white text-stone-900 shadow-2xs'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              <Receipt className={`h-3.5 w-3.5 ${activeTab === 'manual' ? 'text-amber-600' : 'text-stone-400'}`} />
+              Manual Fallback
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'analytics' && <SalesAnalyticsDashboard initialDate="2026-09-18" />}
-      {activeTab === 'import' && <SalesImportSection onImportSuccess={() => handleTabChange('analytics')} />}
-      {activeTab === 'entry' && <DailySalesEntry />}
+      {activeTab === 'import' && <SalesImportSection />}
+      {activeTab === 'manual' && (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="font-semibold block">Emergency Fallback Only</strong>
+              Petpooja import is the authoritative source for all restaurant sales, taxes, discounts, and PAX. Use this manual register form only for dates when the POS was completely offline or for non-POS revenues.
+            </div>
+          </div>
+          <DailySalesEntry />
+        </div>
+      )}
     </div>
   );
 }
