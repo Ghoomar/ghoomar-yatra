@@ -30,6 +30,7 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<'sales' | 'gate' | 'inventory' | 'vendors'>('sales');
 
   const [dailyData, setDailyData] = useState<any>(null);
+  const [salesSummary, setSalesSummary] = useState<any>(null);
   const [gateSummary, setGateSummary] = useState<any>(null);
   const [inventoryMovements, setInventoryMovements] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
@@ -38,9 +39,14 @@ export default function ReportsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [dFinRes, vSumRes, movsRes, gateRes] = await Promise.all([
+      const [dFinRes, sSumRes, vSumRes, movsRes, gateRes] = await Promise.all([
         supabase
           .from('daily_financial_summary')
+          .select('*')
+          .eq('business_date', businessDate)
+          .maybeSingle(),
+        supabase
+          .from('daily_sales_summary')
           .select('*')
           .eq('business_date', businessDate)
           .maybeSingle(),
@@ -62,6 +68,7 @@ export default function ReportsPage() {
       ]);
 
       setDailyData(dFinRes.data || null);
+      setSalesSummary(sSumRes.data || null);
       setVendors(vSumRes.data || []);
       setInventoryMovements(movsRes.data || []);
 
@@ -105,9 +112,9 @@ export default function ReportsPage() {
 
   // Gate vs Restaurant Conversions
   const gatePax = gateSummary?.total_visitors || 0;
-  const restaurantPax = dailyData?.total_covers || 0;
-  const netSales = Number(dailyData?.revenue || 0);
-  const totalBills = dailyData?.total_bills || 0;
+  const restaurantPax = salesSummary?.customer_count || 0;
+  const netSales = Number(salesSummary?.net_sales ?? dailyData?.revenue ?? 0);
+  const totalBills = salesSummary?.bill_count || 0;
   const conversionRate = gatePax > 0 ? (restaurantPax / gatePax) * 100 : 0;
   const revPerGateVisitor = gatePax > 0 ? netSales / gatePax : 0;
   const revPerDiner = restaurantPax > 0 ? netSales / restaurantPax : 0;
