@@ -148,7 +148,11 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
       detectedType = 'HOURLY_ITEM_SALES';
     } else if (/Orders:\s*Master Report/i.test(rowText) || /Orders Master/i.test(rowText)) {
       detectedType = 'ORDERS_MASTER';
-    } else if (/Executive Sales Report Summary/i.test(rowText) || /Billing \(Success\)/i.test(rowText)) {
+    } else if (
+      /Executive Sales Report Summary/i.test(rowText) ||
+      /Billing \(Success\)/i.test(rowText) ||
+      /Success Orders/i.test(rowText)
+    ) {
       detectedType = 'EXECUTIVE_SUMMARY';
     } else if (/Parent_Category/i.test(rowText) && /GST%/i.test(rowText)) {
       detectedType = 'MENU_MASTER';
@@ -170,7 +174,12 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
         headerRowIndex = i;
         break;
       }
-      if (row.includes('billing (success)') || row.includes('executive sales report summary')) {
+      if (
+        row.includes('billing (success)') ||
+        row.includes('success orders') ||
+        row.includes('executive sales report summary') ||
+        row.some((c) => c.includes('executive sales') || c.includes('success orders'))
+      ) {
         detectedType = 'EXECUTIVE_SUMMARY';
         break;
       }
@@ -543,11 +552,20 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
     const col0 = row[0].toLowerCase();
     const col1 = row[1] || '';
 
-    if (col0.includes('billing (success)')) {
+    // Section headers detection (supports both Excel "Billing (Success)" and HTML table "Success Orders")
+    if (
+      (col0.includes('billing') && col0.includes('success')) ||
+      col0.includes('success order') ||
+      col0.includes('success bill')
+    ) {
       currentSection = 'BILLING_SUCCESS';
       continue;
     }
-    if (col0.includes('billing (cancel)')) {
+    if (
+      (col0.includes('billing') && col0.includes('cancel')) ||
+      col0.includes('cancelled order') ||
+      col0.includes('canceled order')
+    ) {
       currentSection = 'BILLING_CANCEL';
       continue;
     }
@@ -555,12 +573,13 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
       currentSection = 'ORDER_TYPE';
       continue;
     }
-    if (col0.includes('payment mode')) {
+    if (col0.includes('payment mode') || col0.includes('payment type')) {
       currentSection = 'PAYMENT_MODE';
       continue;
     }
-    // Stop payment mode parsing when reaching subsequent sections
+    // Stop billing or payment mode parsing when reaching subsequent sections
     if (
+      col0.includes('performance indicator') ||
       col0.includes('complimentary') ||
       col0.includes('sales return') ||
       col0.includes('virtual wallet') ||
@@ -577,22 +596,22 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
     // Section parsing
     if (currentSection === 'BILLING_SUCCESS') {
       const val = cleanNumericValue(col1);
-      if (col0 === 'count') successfulBillsCount = parseInt(String(col1).replace(/,/g, ''), 10) || 0;
-      if (col0.includes('invoice nos')) invoiceRange = col1;
-      if (col0 === 'sub total') subTotal = val;
-      if (col0 === 'discount') discount = val;
+      if (col0 === 'count' || col0.startsWith('count')) successfulBillsCount = parseInt(String(col1).replace(/,/g, ''), 10) || 0;
+      if (col0.includes('invoice nos') || col0.includes('invoice no')) invoiceRange = col1;
+      if (col0 === 'sub total' || col0.startsWith('sub total')) subTotal = val;
+      if (col0 === 'discount' || col0.startsWith('discount')) discount = val;
       if (col0.includes('delivery charge')) deliveryCharges = val;
       if (col0.includes('container charge')) containerCharges = val;
       if (col0.includes('service charge')) serviceCharges = val;
-      if (col0 === 'cgst') cgst = val;
-      if (col0 === 'sgst') sgst = val;
+      if (col0 === 'cgst' || col0.includes('cgst')) cgst = val;
+      if (col0 === 'sgst' || col0.includes('sgst')) sgst = val;
       if (col0.includes('round off')) roundOff = val;
       if (col0.includes('waived off')) waivedOff = val;
-      if (col0 === 'grand total') grandTotal = val;
-      if (col0 === 'net sales') netSales = val;
+      if (col0 === 'grand total' || col0.startsWith('grand total')) grandTotal = val;
+      if (col0 === 'net sales' || col0.startsWith('net sales')) netSales = val;
     } else if (currentSection === 'BILLING_CANCEL') {
-      if (col0 === 'count') cancelledCount = parseInt(String(col1).replace(/,/g, ''), 10) || 0;
-      if (col0 === 'amount') cancelledAmount = cleanNumericValue(col1);
+      if (col0 === 'count' || col0.startsWith('count')) cancelledCount = parseInt(String(col1).replace(/,/g, ''), 10) || 0;
+      if (col0 === 'amount' || col0.includes('amount')) cancelledAmount = cleanNumericValue(col1);
     } else if (currentSection === 'ORDER_TYPE') {
       if (['order', 'no record found'].includes(col0)) continue;
       const oType = row[0];
@@ -610,6 +629,11 @@ function parseExecutiveSummaryReport(sheetRows: any[][], fileName: string, fileC
         paymentModeBreakdown[pMode] = pTotal;
       }
     }
+  }
+
+  // Defensive fallback: if Net Sales is 0 but Sub Total was reported, compute Net Sales = Sub Total - Discount
+  if (netSales === 0 && subTotal > 0) {
+    netSales = Math.round((subTotal - discount) * 100) / 100;
   }
 
   const summaryData = {
