@@ -154,6 +154,7 @@ export interface SalesAnalyticsResponse {
     byOrderType: { name: string; count: number; netSales: number; sharePercent: number }[];
   };
   reconciliation: DailySalesReconciliationRow | null;
+  allBills?: SalesOrder[];
   activeFilterOptions: {
     parentCategories: string[];
     categories: string[];

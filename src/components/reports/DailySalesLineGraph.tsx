@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -9,21 +9,21 @@ import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import {
   TrendingUp,
   Calendar,
-  Filter,
   RefreshCw,
   ArrowUpRight,
-  CheckCircle2,
-  CalendarDays,
-  Sparkles,
+  Receipt,
+  Layers,
 } from 'lucide-react';
 
-interface DailySalesDataPoint {
+export interface DailySalesDataPoint {
   date: string;
   displayDate: string;
   dayNumber: number;
+  dayOfWeek: string;
   netSales: number;
   grossSales: number;
   discounts: number;
+  taxAmount: number;
   isReported: boolean;
   billCount: number;
   customerCount: number;
@@ -58,6 +58,13 @@ function formatAxisDate(dateStr: string): string {
   return `${d} ${monthNames[m - 1]}`;
 }
 
+function getDayOfWeek(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return days[date.getUTCDay()];
+}
+
 function getMonthBoundaries(yearMonth: string) {
   const [year, month] = yearMonth.split('-').map(Number);
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -81,6 +88,19 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
   const [dailyPoints, setDailyPoints] = useState<DailySalesDataPoint[]>([]);
   const [hoveredPoint, setHoveredPoint] = useState<DailySalesDataPoint | null>(null);
 
+  // Responsive state for screen width (to rotate labels on mobile)
+  const [isMobile, setIsMobile] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Determine current active date range
   const { activeStartDate, activeEndDate } = useMemo(() => {
     if (filterMode === 'month') {
@@ -93,7 +113,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
     };
   }, [filterMode, selectedMonth, customStartDate, customEndDate]);
 
-  // Available Month options (last 6 months and next 3 months around current)
+  // Available Month options
   const monthOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const [currY, currM] = currentYearMonth.split('-').map(Number);
@@ -102,21 +122,30 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
 
-    for (let offset = -4; offset <= 2; offset++) {
-      const d = new Date(currY, currM - 1 + offset, 1);
-      const y = d.getFullYear();
-      const m = d.getMonth() + 1;
+    for (let offset = -5; offset <= 2; offset++) {
+      let m = currM + offset;
+      let y = currY;
+      while (m < 1) {
+        m += 12;
+        y -= 1;
+      }
+      while (m > 12) {
+        m -= 12;
+        y += 1;
+      }
       const val = `${y}-${String(m).padStart(2, '0')}`;
-      const label = `${monthNames[m - 1]} ${y}`;
-      options.push({ value: val, label });
+      options.push({
+        value: val,
+        label: `${monthNames[m - 1]} ${y}`,
+      });
     }
     return options;
   }, [currentYearMonth]);
 
-  const fetchSalesData = async () => {
+  const fetchSalesData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch sales reports for the range using the single authoritative sales source
+      // 1. Fetch Authoritative Daily Sales Summaries
       const { data: salesRows, error } = await supabase
         .from('daily_sales_summary')
         .select('*')
@@ -143,9 +172,11 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           date: dateStr,
           displayDate: formatAxisDate(dateStr),
           dayNumber: dayNum,
+          dayOfWeek: getDayOfWeek(dateStr),
           netSales: Number(row?.net_sales || 0),
           grossSales: Number(row?.gross_sales || 0),
           discounts: Number(row?.discounts || 0),
+          taxAmount: Number(row?.tax_amount || 0),
           isReported: Boolean(row?.is_reported),
           billCount: Number(row?.bill_count || 0),
           customerCount: Number(row?.customer_count || 0),
@@ -158,45 +189,52 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeStartDate, activeEndDate, supabase]);
 
   useEffect(() => {
     fetchSalesData();
-  }, [activeStartDate, activeEndDate]);
+  }, [fetchSalesData]);
 
-  // Aggregate Metrics for Selected Period
-  const totalSales = useMemo(() => {
+  // Aggregate Metrics for Selected Period (Primary: Gross Sales)
+  const totalGrossSales = useMemo(() => {
+    return dailyPoints.reduce((sum, p) => sum + p.grossSales, 0);
+  }, [dailyPoints]);
+
+  const totalNetSales = useMemo(() => {
     return dailyPoints.reduce((sum, p) => sum + p.netSales, 0);
   }, [dailyPoints]);
 
   const activeSalesDays = useMemo(() => {
-    return dailyPoints.filter((p) => p.netSales > 0).length;
+    return dailyPoints.filter((p) => p.grossSales > 0).length;
   }, [dailyPoints]);
 
-  const dailyAverage = useMemo(() => {
+  const dailyAverageGross = useMemo(() => {
     if (dailyPoints.length === 0) return 0;
-    return totalSales / dailyPoints.length;
-  }, [totalSales, dailyPoints.length]);
+    return totalGrossSales / dailyPoints.length;
+  }, [totalGrossSales, dailyPoints.length]);
 
-  const peakDay = useMemo(() => {
+  const peakGrossDay = useMemo(() => {
     if (dailyPoints.length === 0) return null;
-    return dailyPoints.reduce((max, p) => (p.netSales > max.netSales ? p : max), dailyPoints[0]);
+    return dailyPoints.reduce((max, p) => (p.grossSales > max.grossSales ? p : max), dailyPoints[0]);
   }, [dailyPoints]);
 
-  // SVG Chart Geometry
-  const svgWidth = 800;
-  const svgHeight = 240;
-  const padLeft = 70;
-  const padRight = 30;
+  // SVG Chart Geometry & Responsiveness
+  // If dense/mobile, compute an expanded SVG width so touch slices are wide enough to tap cleanly
+  const minPointSpacing = isMobile ? 32 : 24;
+  const computedSvgWidth = Math.max(800, dailyPoints.length * minPointSpacing + 100);
+  const svgWidth = computedSvgWidth;
+  const svgHeight = isMobile ? 270 : 250;
+  const padLeft = 75;
+  const padRight = 35;
   const padTop = 25;
-  const padBottom = 35;
+  const padBottom = isMobile ? 55 : 35;
   const graphW = svgWidth - padLeft - padRight;
   const graphH = svgHeight - padTop - padBottom;
 
+  // Maximum value for primary metric: Gross Sales
   const maxVal = useMemo(() => {
-    const maxData = Math.max(...dailyPoints.map((p) => p.netSales), 0);
+    const maxData = Math.max(...dailyPoints.map((p) => p.grossSales), 0);
     if (maxData === 0) return 10000;
-    // Round up nicely
     const magnitude = Math.pow(10, Math.floor(Math.log10(maxData)));
     return Math.ceil((maxData * 1.15) / magnitude) * magnitude;
   }, [dailyPoints]);
@@ -219,33 +257,58 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
     if (N === 0) return [];
     return dailyPoints.map((p, idx) => {
       const x = N === 1 ? padLeft + graphW / 2 : padLeft + (idx / (N - 1)) * graphW;
-      const y = padTop + graphH - (p.netSales / maxVal) * graphH;
-      return { ...p, x, y };
+      const grossY = padTop + graphH - (p.grossSales / maxVal) * graphH;
+      const netY = padTop + graphH - (p.netSales / maxVal) * graphH;
+      return { ...p, x, grossY, netY };
     });
   }, [dailyPoints, graphW, graphH, padLeft, padTop, maxVal]);
 
-  // Generate SVG Line and Area path
-  const linePath = useMemo(() => {
+  // Path for Primary Metric: Gross Sales
+  const grossLinePath = useMemo(() => {
     if (pointCoords.length === 0) return '';
-    return pointCoords.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+    return pointCoords
+      .map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.grossY.toFixed(1)}`)
+      .join(' ');
   }, [pointCoords]);
 
-  const areaPath = useMemo(() => {
+  const grossAreaPath = useMemo(() => {
     if (pointCoords.length === 0) return '';
     const firstX = pointCoords[0].x.toFixed(1);
     const lastX = pointCoords[pointCoords.length - 1].x.toFixed(1);
     const bottomY = (padTop + graphH).toFixed(1);
-    return `${linePath} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
-  }, [linePath, pointCoords, padTop, graphH]);
+    return `${grossLinePath} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
+  }, [grossLinePath, pointCoords, padTop, graphH]);
 
-  // X-axis label step (show fewer labels on dense ranges)
-  const xLabelInterval = useMemo(() => {
-    const count = dailyPoints.length;
-    if (count <= 10) return 1;
-    if (count <= 20) return 2;
-    if (count <= 31) return 3;
-    return Math.ceil(count / 10);
-  }, [dailyPoints.length]);
+  // Secondary dashed path for Net Sales
+  const netLinePath = useMemo(() => {
+    if (pointCoords.length === 0) return '';
+    return pointCoords
+      .map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.netY.toFixed(1)}`)
+      .join(' ');
+  }, [pointCoords]);
+
+  // Handle touch / drag interaction across the chart
+  const handlePointerInteraction = (clientX: number) => {
+    if (!containerRef.current || pointCoords.length === 0) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const scrollLeft = containerRef.current.scrollLeft;
+    const relX = clientX - rect.left + scrollLeft;
+
+    // Find closest point by x coordinate
+    let closest = pointCoords[0];
+    let minDist = Infinity;
+    for (const pt of pointCoords) {
+      const dist = Math.abs(pt.x - relX);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = pt;
+      }
+    }
+    setHoveredPoint(closest);
+    if (onSelectDate && closest.date !== selectedDate) {
+      onSelectDate(closest.date);
+    }
+  };
 
   return (
     <Card className="overflow-hidden border-stone-200/80 shadow-xs">
@@ -254,10 +317,10 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           <div>
             <CardTitle className="text-base font-bold flex items-center gap-2 text-stone-900">
               <TrendingUp className="h-5 w-5 text-amber-600" />
-              Daily Sales Trend &amp; Performance
+              Consolidated Daily Gross Sales Trend
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Official sales ledger curve for {activeStartDate} through {activeEndDate} (IST)
+              Authoritative total Gross Sales across all operational channels for {activeStartDate} through {activeEndDate} (IST)
             </CardDescription>
           </div>
 
@@ -343,26 +406,28 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
         {/* Summary Metrics Bar for the Selected Period */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 mt-3 border-t border-stone-200/60">
           <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Period Total Sales</span>
-            <span className="text-base sm:text-lg font-bold text-stone-900 block mt-0.5">
-              {formatINR(totalSales)}
+            <span className="text-[11px] font-medium text-stone-500 block">Period Total Gross Sales</span>
+            <span className="text-base sm:text-lg font-bold text-amber-900 block mt-0.5">
+              {formatINR(totalGrossSales)}
             </span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">Net: {formatINR(totalNetSales)}</span>
           </div>
 
           <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Daily Average</span>
+            <span className="text-[11px] font-medium text-stone-500 block">Daily Average Gross</span>
             <span className="text-base sm:text-lg font-bold text-amber-700 block mt-0.5">
-              {formatINR(dailyAverage)}
+              {formatINR(dailyAverageGross)}
             </span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">Over {dailyPoints.length} days</span>
           </div>
 
           <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Peak Day Sales</span>
+            <span className="text-[11px] font-medium text-stone-500 block">Peak Day Gross</span>
             <span className="text-base sm:text-lg font-bold text-emerald-700 block mt-0.5">
-              {peakDay && peakDay.netSales > 0 ? formatINR(peakDay.netSales) : '—'}
+              {peakGrossDay && peakGrossDay.grossSales > 0 ? formatINR(peakGrossDay.grossSales) : '—'}
             </span>
-            {peakDay && peakDay.netSales > 0 && (
-              <span className="text-[10px] text-stone-400 block truncate">{peakDay.displayDate}</span>
+            {peakGrossDay && peakGrossDay.grossSales > 0 && (
+              <span className="text-[10px] text-stone-400 block truncate">{peakGrossDay.displayDate} ({peakGrossDay.dayOfWeek})</span>
             )}
           </div>
 
@@ -372,6 +437,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
               {activeSalesDays}{' '}
               <span className="text-xs font-normal text-stone-500">/ {dailyPoints.length} days</span>
             </span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">Reported revenue</span>
           </div>
         </div>
       </CardHeader>
@@ -380,21 +446,26 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
         {loading && dailyPoints.length === 0 ? (
           <div className="h-60 flex flex-col items-center justify-center gap-2 text-stone-400 text-xs">
             <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
-            <span>Loading daily sales performance curve...</span>
+            <span>Loading daily gross sales performance curve...</span>
           </div>
         ) : (
-          <div className="relative w-full overflow-x-auto">
+          <div
+            ref={containerRef}
+            className="relative w-full overflow-x-auto overflow-y-hidden touch-pan-x select-none scrollbar-thin pb-2"
+          >
             {/* Interactive Tooltip Card */}
             {hoveredPoint && (
               <div
-                className="absolute z-20 pointer-events-none bg-stone-900/95 text-white rounded-lg p-2.5 shadow-xl text-xs backdrop-blur-xs border border-stone-700 min-w-[170px]"
+                className="absolute z-20 pointer-events-none bg-stone-900/95 text-white rounded-lg p-2.5 shadow-xl text-xs backdrop-blur-xs border border-stone-700 min-w-[190px]"
                 style={{
-                  left: `${Math.min(Math.max(10, (hoveredPoint as any).x - 85), svgWidth - 180)}px`,
-                  top: `${Math.max(5, (hoveredPoint as any).y - 75)}px`,
+                  left: `${Math.min(Math.max(10, (hoveredPoint as any).x - 95), svgWidth - 200)}px`,
+                  top: `${Math.max(5, Math.min((hoveredPoint as any).grossY - 80, svgHeight - 120))}px`,
                 }}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-stone-700/80 pb-1 mb-1">
-                  <span className="font-bold text-amber-400">{hoveredPoint.displayDate}</span>
+                  <span className="font-bold text-amber-400">
+                    {hoveredPoint.displayDate} ({hoveredPoint.dayOfWeek})
+                  </span>
                   {hoveredPoint.isReported ? (
                     <span className="text-[9px] bg-emerald-950 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-800">
                       Reported
@@ -406,46 +477,61 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                   )}
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] text-stone-400">Net Sales:</span>
-                  <span className="font-bold text-white text-sm">{formatINR(hoveredPoint.netSales)}</span>
+                  <span className="text-[11px] text-amber-300 font-semibold">Gross Sales:</span>
+                  <span className="font-bold text-white text-sm">{formatINR(hoveredPoint.grossSales)}</span>
                 </div>
-                {hoveredPoint.grossSales > 0 && hoveredPoint.grossSales !== hoveredPoint.netSales && (
-                  <div className="flex items-baseline justify-between gap-2 text-[10px] text-stone-400">
-                    <span>Gross Sales:</span>
-                    <span className="text-stone-300">{formatINR(hoveredPoint.grossSales)}</span>
-                  </div>
-                )}
+                <div className="flex items-baseline justify-between gap-2 text-[10px] text-stone-300">
+                  <span>Net Sales:</span>
+                  <span>{formatINR(hoveredPoint.netSales)}</span>
+                </div>
                 {hoveredPoint.discounts > 0 && (
                   <div className="flex items-baseline justify-between gap-2 text-[10px] text-rose-400">
                     <span>Discounts:</span>
                     <span>-{formatINR(hoveredPoint.discounts)}</span>
                   </div>
                 )}
+                {hoveredPoint.taxAmount > 0 && (
+                  <div className="flex items-baseline justify-between gap-2 text-[10px] text-stone-400">
+                    <span>GST Tax:</span>
+                    <span>{formatINR(hoveredPoint.taxAmount)}</span>
+                  </div>
+                )}
                 {(hoveredPoint.billCount > 0 || hoveredPoint.customerCount > 0) && (
-                  <div className="flex items-center justify-between text-[10px] text-stone-400 mt-0.5 pt-0.5 border-t border-stone-800">
+                  <div className="flex items-center justify-between text-[10px] text-stone-400 mt-1 pt-1 border-t border-stone-800">
                     <span>Bills: {hoveredPoint.billCount}</span>
                     <span>Restaurant PAX: {hoveredPoint.customerCount}</span>
                   </div>
                 )}
                 {onSelectDate && (
-                  <div className="text-[10px] text-amber-300/80 mt-1 pt-1 border-t border-stone-800 flex items-center gap-1">
-                    <ArrowUpRight className="h-3 w-3" /> Click to view details &amp; flash report
+                  <div className="text-[10px] text-amber-400 mt-1 pt-1 border-t border-stone-800 flex items-center gap-1 font-medium">
+                    <ArrowUpRight className="h-3 w-3" /> Selected date synced
                   </div>
                 )}
               </div>
             )}
 
-            {/* SVG Chart */}
+            {/* SVG Chart with Touch & Click Interaction */}
             <svg
               viewBox={`0 0 ${svgWidth} ${svgHeight}`}
               className="w-full h-auto select-none overflow-visible"
-              style={{ minWidth: '600px', maxHeight: '280px' }}
+              style={{ minWidth: `${svgWidth}px`, height: `${svgHeight}px` }}
+              onPointerDown={(e) => handlePointerInteraction(e.clientX)}
+              onPointerMove={(e) => {
+                if (e.buttons === 1) {
+                  handlePointerInteraction(e.clientX);
+                }
+              }}
+              onTouchMove={(e) => {
+                if (e.touches.length > 0) {
+                  handlePointerInteraction(e.touches[0].clientX);
+                }
+              }}
             >
               <defs>
-                {/* Gradient for area fill under line */}
-                <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#d97706" stopOpacity="0.32" />
-                  <stop offset="80%" stopColor="#d97706" stopOpacity="0.04" />
+                {/* Gradient for area fill under Gross Sales line */}
+                <linearGradient id="grossSalesGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#d97706" stopOpacity="0.28" />
+                  <stop offset="75%" stopColor="#d97706" stopOpacity="0.04" />
                   <stop offset="100%" stopColor="#d97706" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
@@ -475,85 +561,122 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                 </g>
               ))}
 
-              {/* Area Fill */}
-              {areaPath && (
-                <path d={areaPath} fill="url(#salesGradient)" />
+              {/* Area Fill for Gross Sales */}
+              {grossAreaPath && (
+                <path d={grossAreaPath} fill="url(#grossSalesGradient)" />
               )}
 
-              {/* Sales Line Curve */}
-              {linePath && (
+              {/* Secondary Dashed Line for Net Sales */}
+              {netLinePath && (
                 <path
-                  d={linePath}
+                  d={netLinePath}
+                  fill="none"
+                  stroke="#78716c"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                  strokeOpacity="0.6"
+                />
+              )}
+
+              {/* Primary Line Curve for Gross Sales */}
+              {grossLinePath && (
+                <path
+                  d={grossLinePath}
                   fill="none"
                   stroke="#d97706"
-                  strokeWidth="2.5"
+                  strokeWidth="2.75"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               )}
 
-              {/* Data Points and Invisible Hover Columns */}
-              {pointCoords.map((pt, idx) => {
+              {/* Data Points, Selected Highlighting, and Full-Height Touch Slices */}
+              {pointCoords.map((pt) => {
                 const isSelected = selectedDate === pt.date;
                 const isHovered = hoveredPoint?.date === pt.date;
-                const hasSales = pt.netSales > 0;
-
-                // X-axis label visibility
-                const showLabel =
-                  idx === 0 ||
-                  idx === pointCoords.length - 1 ||
-                  idx % xLabelInterval === 0;
+                const hasSales = pt.grossSales > 0;
+                const colWidth = Math.max(16, graphW / Math.max(1, pointCoords.length - 1));
 
                 return (
                   <g key={pt.date}>
-                    {/* X-axis Tick Label */}
-                    {showLabel && (
-                      <text
-                        x={pt.x}
-                        y={padTop + graphH + 20}
-                        textAnchor="middle"
-                        fontSize="10"
-                        fill={isSelected ? '#d97706' : '#78716c'}
-                        fontWeight={isSelected ? 'bold' : 'normal'}
-                      >
-                        {pt.displayDate}
-                      </text>
+                    {/* Selected Day Vertical Glowing Column Band */}
+                    {isSelected && (
+                      <rect
+                        x={pt.x - colWidth / 2}
+                        y={padTop}
+                        width={colWidth}
+                        height={graphH}
+                        fill="#d97706"
+                        fillOpacity="0.1"
+                        stroke="#d97706"
+                        strokeWidth="1.25"
+                        strokeDasharray="3 2"
+                      />
                     )}
 
                     {/* Active/Hover Vertical Guideline */}
-                    {(isHovered || isSelected) && (
+                    {isHovered && !isSelected && (
                       <line
                         x1={pt.x}
                         y1={padTop}
                         x2={pt.x}
                         y2={padTop + graphH}
-                        stroke={isSelected ? '#d97706' : '#a8a29e'}
+                        stroke="#a8a29e"
                         strokeWidth={1}
                         strokeDasharray="2 2"
                       />
                     )}
 
+                    {/* X-axis Date Labels: Rotated 90° on mobile, horizontal on desktop */}
+                    {isMobile ? (
+                      <g transform={`translate(${pt.x}, ${padTop + graphH + 8})`}>
+                        <text
+                          transform="rotate(90)"
+                          x="0"
+                          y="3"
+                          textAnchor="start"
+                          fontSize="9"
+                          fontFamily="sans-serif"
+                          fill={isSelected ? '#b45309' : '#78716c'}
+                          fontWeight={isSelected ? 'bold' : 'normal'}
+                        >
+                          {pt.dayNumber} {pt.displayDate.split(' ')[1]}
+                        </text>
+                      </g>
+                    ) : (
+                      <text
+                        x={pt.x}
+                        y={padTop + graphH + 20}
+                        textAnchor="middle"
+                        fontSize="10"
+                        fill={isSelected ? '#b45309' : '#78716c'}
+                        fontWeight={isSelected ? 'bold' : 'normal'}
+                      >
+                        {pt.dayNumber}
+                      </text>
+                    )}
+
                     {/* Circle Dot for Data Point */}
                     <circle
                       cx={pt.x}
-                      cy={pt.y}
-                      r={isHovered || isSelected ? 5.5 : hasSales ? 3.5 : 2}
+                      cy={pt.grossY}
+                      r={isSelected ? 6 : isHovered ? 5.5 : hasSales ? 3.5 : 2}
                       fill={hasSales ? (isSelected ? '#b45309' : '#d97706') : '#d6d3d1'}
                       stroke="#ffffff"
-                      strokeWidth={isHovered || isSelected ? 2 : 1.5}
+                      strokeWidth={isSelected || isHovered ? 2.5 : 1.5}
                       className="transition-all duration-150"
                     />
 
-                    {/* Invisible 넓은 Hover Capture Zone */}
+                    {/* Full-Height Touch / Click Slice Hitbox */}
                     <rect
-                      x={pt.x - graphW / (pointCoords.length * 2)}
-                      y={padTop}
-                      width={graphW / pointCoords.length}
-                      height={graphH}
+                      x={pt.x - colWidth / 2}
+                      y={0}
+                      width={colWidth}
+                      height={svgHeight}
                       fill="transparent"
                       className="cursor-pointer"
-                      onMouseEnter={() => setHoveredPoint(pt)}
-                      onMouseLeave={() => setHoveredPoint(null)}
+                      onPointerEnter={() => setHoveredPoint(pt)}
+                      onPointerLeave={() => setHoveredPoint(null)}
                       onClick={() => onSelectDate && onSelectDate(pt.date)}
                     />
                   </g>
@@ -563,18 +686,25 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between text-[11px] text-stone-400 mt-2 px-2">
+        {/* Legend & Help Text */}
+        <div className="flex flex-wrap items-center justify-between text-[11px] text-stone-500 mt-2 px-1 border-t border-stone-100 pt-2 gap-2">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block" />
-              Reported Net Sales
+            <span className="flex items-center gap-1.5 font-medium text-stone-700">
+              <span className="w-3 h-1 bg-amber-600 rounded-full inline-block" />
+              Consolidated Gross Sales
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 font-medium text-stone-500">
+              <span className="w-3 h-0.5 bg-stone-400 border-b border-dashed border-stone-500 inline-block" />
+              Net Sales (POS)
+            </span>
+            <span className="flex items-center gap-1.5 text-stone-400">
               <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />
-              Zero Sales Day (Plotted at ₹0)
+              Zero Sales
             </span>
           </div>
-          <span>Tip: Hover or tap any point to view exact figures; click to sync flash report</span>
+          <span className="text-[10px] text-stone-400">
+            Swipe / drag horizontally to pan across dates. Tapping any day immediately selects that date.
+          </span>
         </div>
       </CardContent>
     </Card>

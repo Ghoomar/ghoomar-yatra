@@ -49,7 +49,9 @@ export function SalesAnalyticsDashboard({
   const [paymentType, setPaymentType] = useState<string>('');
   const [orderType, setOrderType] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<'categories' | 'items' | 'payments' | 'captains' | 'orders'>('categories');
+  const [activeTab, setActiveTab] = useState<'categories' | 'items' | 'payments' | 'captains' | 'orders' | 'bills'>('categories');
+  const [billSearchTerm, setBillSearchTerm] = useState<string>('');
+  const [billOrderTypeFilter, setBillOrderTypeFilter] = useState<string>('ALL');
 
   const [data, setData] = useState<SalesAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -442,6 +444,17 @@ export function SalesAnalyticsDashboard({
             <ShoppingBag className="h-4 w-4" />
             Order Types
           </button>
+          <button
+            onClick={() => setActiveTab('bills')}
+            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition ${
+              activeTab === 'bills'
+                ? 'border-amber-600 text-amber-700 bg-white'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Receipt className="h-4 w-4" />
+            All Bills ({data?.allBills?.length || 0})
+          </button>
         </div>
 
         <CardContent className="p-0">
@@ -636,6 +649,237 @@ export function SalesAnalyticsDashboard({
               </table>
             </div>
           )}
+
+          {/* TAB 6: ALL BILLS */}
+          {activeTab === 'bills' && (() => {
+            const allBills = data?.allBills || [];
+            const filteredBills = allBills.filter((bill) => {
+              const matchesSearch =
+                !billSearchTerm ||
+                bill.invoice_no?.toLowerCase().includes(billSearchTerm.toLowerCase()) ||
+                bill.customer_name?.toLowerCase().includes(billSearchTerm.toLowerCase()) ||
+                bill.customer_phone?.includes(billSearchTerm) ||
+                bill.captain_name?.toLowerCase().includes(billSearchTerm.toLowerCase()) ||
+                bill.biller?.toLowerCase().includes(billSearchTerm.toLowerCase()) ||
+                bill.area?.toLowerCase().includes(billSearchTerm.toLowerCase());
+
+              const matchesType =
+                billOrderTypeFilter === 'ALL' || bill.order_type === billOrderTypeFilter;
+
+              return matchesSearch && matchesType;
+            });
+
+            const totalFilteredNet = filteredBills.reduce((s, b) => s + (Number(b.net_sales) || 0), 0);
+            const totalFilteredGrand = filteredBills.reduce((s, b) => s + (Number(b.grand_total) || 0), 0);
+            const totalFilteredCovers = filteredBills.reduce((s, b) => s + (Number(b.covers_pax) || 0), 0);
+            const distinctOrderTypes = Array.from(new Set(allBills.map((b) => b.order_type).filter(Boolean)));
+
+            return (
+              <div className="space-y-3 p-3">
+                {/* Search & Order Type Filter */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-stone-400" />
+                      <input
+                        type="text"
+                        value={billSearchTerm}
+                        onChange={(e) => setBillSearchTerm(e.target.value)}
+                        placeholder="Search invoice #, customer, captain, area..."
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
+                      />
+                      {billSearchTerm && (
+                        <button
+                          onClick={() => setBillSearchTerm('')}
+                          className="absolute right-2 top-2 text-stone-400 hover:text-stone-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 overflow-x-auto text-[11px]">
+                      <button
+                        onClick={() => setBillOrderTypeFilter('ALL')}
+                        className={`px-2 py-1 rounded-md font-semibold transition cursor-pointer ${
+                          billOrderTypeFilter === 'ALL'
+                            ? 'bg-amber-600 text-white shadow-2xs'
+                            : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                        }`}
+                      >
+                        All ({allBills.length})
+                      </button>
+                      {distinctOrderTypes.map((ot) => {
+                        const count = allBills.filter((b) => b.order_type === ot).length;
+                        return (
+                          <button
+                            key={ot}
+                            onClick={() => setBillOrderTypeFilter(ot!)}
+                            className={`px-2 py-1 rounded-md font-semibold transition cursor-pointer whitespace-nowrap ${
+                              billOrderTypeFilter === ot
+                                ? 'bg-amber-600 text-white shadow-2xs'
+                                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                            }`}
+                          >
+                            {ot} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-stone-500 font-medium self-end sm:self-center">
+                    Showing <span className="font-bold text-stone-900">{filteredBills.length}</span> of {allBills.length} bills | Total: <span className="font-bold text-amber-800">{formatINR(totalFilteredGrand)}</span>
+                  </div>
+                </div>
+
+                {/* Bills Table */}
+                <div className="overflow-x-auto border border-stone-200 rounded-lg">
+                  <table className="w-full text-left text-[11px] border-collapse">
+                    <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
+                      <tr>
+                        <th className="p-2.5">Invoice #</th>
+                        <th className="p-2.5">Time</th>
+                        <th className="p-2.5">Type &amp; Area</th>
+                        <th className="p-2.5 text-center">PAX</th>
+                        <th className="p-2.5">Captain / Biller</th>
+                        <th className="p-2.5">Customer</th>
+                        <th className="p-2.5">Tender</th>
+                        <th className="p-2.5 text-right">Gross</th>
+                        <th className="p-2.5 text-right">Discount</th>
+                        <th className="p-2.5 text-right">Net Sales</th>
+                        <th className="p-2.5 text-right">Tax</th>
+                        <th className="p-2.5 text-right">Grand Total</th>
+                        <th className="p-2.5 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {filteredBills.length === 0 ? (
+                        <tr>
+                          <td colSpan={13} className="p-8 text-center text-stone-400">
+                            No bills match the search filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredBills.map((bill) => {
+                          const timeStr = bill.order_timestamp
+                            ? new Date(bill.order_timestamp).toLocaleTimeString('en-IN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true,
+                              })
+                            : '—';
+
+                          return (
+                            <tr key={bill.id} className="hover:bg-stone-50/70 transition-colors">
+                              <td className="p-2.5 font-bold text-stone-900 font-mono">
+                                #{bill.invoice_no}
+                              </td>
+                              <td className="p-2.5 text-stone-500 whitespace-nowrap">
+                                {timeStr}
+                              </td>
+                              <td className="p-2.5">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] font-semibold ${
+                                    bill.order_type === 'Dine In'
+                                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                                      : bill.order_type === 'Snacks Stall'
+                                      ? 'border-amber-300 bg-amber-50 text-amber-800'
+                                      : 'border-stone-300 bg-stone-50 text-stone-700'
+                                  }`}
+                                >
+                                  {bill.order_type || 'General'}
+                                </Badge>
+                                {bill.area && (
+                                  <span className="block text-[10px] text-stone-400 mt-0.5">
+                                    {bill.area}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-center font-semibold text-stone-700">
+                                {bill.covers_pax || 1}
+                              </td>
+                              <td className="p-2.5 text-stone-800 font-medium">
+                                <div>{bill.captain_name || bill.biller || '—'}</div>
+                                {bill.biller && bill.captain_name && (
+                                  <div className="text-[9px] text-stone-400">Biller: {bill.biller}</div>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-stone-700">
+                                {bill.customer_name ? (
+                                  <div>
+                                    <span className="font-medium text-stone-900">{bill.customer_name}</span>
+                                    {bill.customer_phone && (
+                                      <span className="block text-[9px] text-stone-400 font-mono">{bill.customer_phone}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-stone-300">—</span>
+                                )}
+                              </td>
+                              <td className="p-2.5">
+                                <Badge variant="outline" className="text-[10px] font-medium">
+                                  {bill.payment_type || 'Cash'}
+                                </Badge>
+                              </td>
+                              <td className="p-2.5 text-right font-mono text-stone-600">
+                                {formatINR(Number(bill.gross_amount) || 0)}
+                              </td>
+                              <td className="p-2.5 text-right font-mono text-stone-500">
+                                {Number(bill.discount_amount) > 0 ? (
+                                  <span className="text-amber-700">-{formatINR(Number(bill.discount_amount))}</span>
+                                ) : (
+                                  '₹0'
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right font-mono font-bold text-stone-900">
+                                {formatINR(Number(bill.net_sales) || 0)}
+                              </td>
+                              <td className="p-2.5 text-right font-mono text-stone-500">
+                                {formatINR(Number(bill.tax_amount) || 0)}
+                              </td>
+                              <td className="p-2.5 text-right font-mono font-bold text-amber-800">
+                                {formatINR(Number(bill.grand_total) || 0)}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <Badge
+                                  className={`text-[9px] font-bold ${
+                                    bill.status === 'Success'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : bill.status === 'Complimentary'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-rose-100 text-rose-800'
+                                  }`}
+                                >
+                                  {bill.status}
+                                </Badge>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                    {filteredBills.length > 0 && (
+                      <tfoot className="bg-stone-100/80 font-bold text-stone-900 border-t border-stone-200">
+                        <tr>
+                          <td colSpan={3} className="p-2.5">Total ({filteredBills.length} Bills)</td>
+                          <td className="p-2.5 text-center">{totalFilteredCovers}</td>
+                          <td colSpan={3}></td>
+                          <td className="p-2.5 text-right font-mono"></td>
+                          <td className="p-2.5 text-right font-mono"></td>
+                          <td className="p-2.5 text-right font-mono">{formatINR(totalFilteredNet)}</td>
+                          <td className="p-2.5 text-right font-mono"></td>
+                          <td className="p-2.5 text-right font-mono text-amber-800">{formatINR(totalFilteredGrand)}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
     </div>

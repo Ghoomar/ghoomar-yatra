@@ -53,7 +53,6 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       items: [
         { href: '/operations/daily', label: 'Daily Operations', icon: ClipboardList, permission: 'operations.closing' },
         { href: '/operations/gate', label: 'Gate Counter', icon: Car, permission: 'operations.gate' },
-        { href: '/operations/activities', label: 'Activities', icon: Sparkles, permission: 'operations.activities' },
         { href: '/operations/closing', label: 'Daily Closing', icon: Lock, permission: 'operations.closing' },
       ]
     },

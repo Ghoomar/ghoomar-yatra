@@ -328,6 +328,7 @@ export async function GET(request: NextRequest) {
         byOrderType,
       },
       reconciliation,
+      allBills: orders,
       activeFilterOptions: {
         parentCategories: parentCatOptions,
         categories: catOptions,

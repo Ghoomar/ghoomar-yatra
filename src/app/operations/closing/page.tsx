@@ -66,7 +66,7 @@ export default function DailyClosingPage() {
         supabase.from('expenses').select('id, amount').eq('business_date', businessDate),
         supabase.from('purchase_headers').select('id, net_amount').eq('business_date', businessDate),
         supabase.from('stock_movements').select('id').eq('business_date', businessDate).limit(1),
-        supabase.from('activity_daily_records').select('id, is_reported').eq('business_date', businessDate),
+        supabase.from('sales_hourly_items').select('id, quantity, total_sales').eq('business_date', businessDate).in('item_name', ['Camel Ride', 'Skill Games', 'Mehendi', 'Champi Maalish']),
         supabase.from('visitor_counter_events').select('increment').eq('business_date', businessDate),
         supabase.from('vehicle_counter_events').select('increment').eq('business_date', businessDate),
         supabase.from('meter_readings').select('id').eq('business_date', businessDate).limit(1),
@@ -131,9 +131,9 @@ export default function DailyClosingPage() {
         },
         {
           key: 'activities',
-          label: 'Activities',
+          label: 'Activities (Petpooja)',
           isComplete: Boolean(activities && activities.length > 0),
-          statusText: activities && activities.length > 0 ? 'Activities reported' : 'Not submitted',
+          statusText: activities && activities.length > 0 ? `${activities.length} activity items recorded` : 'None recorded today',
           isRequired: false,
         },
         {
