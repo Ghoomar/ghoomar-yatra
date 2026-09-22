@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -9,10 +9,10 @@ export function Card({ className, variant = 'default', ...props }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-xl border bg-white p-5 text-stone-900 transition-all shadow-sm',
-        variant === 'default' && 'border-stone-200/80 shadow-stone-100',
-        variant === 'outline' && 'border-stone-200 shadow-none',
-        variant === 'flat' && 'border-transparent bg-stone-50 shadow-none',
+        'rounded-xl border bg-white p-5 text-stone-900 transition-all shadow-xs',
+        variant === 'default' && 'border-[#E7E2D8]',
+        variant === 'outline' && 'border-[#E7E2D8] shadow-none',
+        variant === 'flat' && 'border-transparent bg-[#F8F5F0] shadow-none',
         className
       )}
       {...props}

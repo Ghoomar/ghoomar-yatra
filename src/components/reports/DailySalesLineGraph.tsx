@@ -311,12 +311,12 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
   };
 
   return (
-    <Card className="overflow-hidden border-stone-200/80 shadow-xs">
-      <CardHeader className="pb-3 border-b border-stone-100 bg-stone-50/40">
+    <Card className="overflow-hidden border-[#E7E2D8] shadow-xs bg-white rounded-xl">
+      <CardHeader className="pb-3 border-b border-[#E7E2D8] bg-[#FAF8F5]/60">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <CardTitle className="text-base font-bold flex items-center gap-2 text-stone-900">
-              <TrendingUp className="h-5 w-5 text-amber-600" />
+              <TrendingUp className="h-5 w-5 text-[#6B162E]" />
               Consolidated Daily Gross Sales Trend
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
@@ -327,7 +327,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           {/* Filtering Controls */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {/* Mode switch */}
-            <div className="flex items-center bg-stone-200/70 p-0.5 rounded-lg">
+            <div className="flex items-center bg-[#E7E2D8]/60 p-0.5 rounded-lg">
               <button
                 type="button"
                 onClick={() => setFilterMode('month')}
@@ -354,8 +354,8 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
 
             {/* Month selector dropdown */}
             {filterMode === 'month' && (
-              <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-2.5 py-1 shadow-xs">
-                <Calendar className="h-3.5 w-3.5 text-amber-600" />
+              <div className="flex items-center gap-1.5 bg-white border border-[#E7E2D8] rounded-lg px-2.5 py-1 shadow-xs">
+                <Calendar className="h-3.5 w-3.5 text-[#D97706]" />
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
@@ -372,7 +372,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
 
             {/* Custom range date pickers */}
             {filterMode === 'custom' && (
-              <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-2.5 py-1 shadow-xs">
+              <div className="flex items-center gap-1.5 bg-white border border-[#E7E2D8] rounded-lg px-2.5 py-1 shadow-xs">
                 <span className="text-stone-400 font-medium text-[11px]">From:</span>
                 <input
                   type="date"
@@ -395,35 +395,35 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
               size="sm"
               onClick={fetchSalesData}
               disabled={loading}
-              className="h-8 px-2.5 text-xs text-stone-600 hover:text-stone-900"
+              className="h-8 px-2.5 text-xs text-stone-600 hover:text-stone-900 rounded-lg border-[#E7E2D8]"
               title="Refresh sales trend data"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-amber-600' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#6B162E]' : ''}`} />
             </Button>
           </div>
         </div>
 
         {/* Summary Metrics Bar for the Selected Period */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 mt-3 border-t border-stone-200/60">
-          <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 mt-3 border-t border-[#E7E2D8]">
+          <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
             <span className="text-[11px] font-medium text-stone-500 block">Period Total Gross Sales</span>
-            <span className="text-base sm:text-lg font-bold text-amber-900 block mt-0.5">
+            <span className="text-base sm:text-lg font-bold text-[#6B162E] block mt-0.5 tabular-nums">
               {formatINR(totalGrossSales)}
             </span>
             <span className="text-[10px] text-stone-400 block mt-0.5">Net: {formatINR(totalNetSales)}</span>
           </div>
 
-          <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
+          <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
             <span className="text-[11px] font-medium text-stone-500 block">Daily Average Gross</span>
-            <span className="text-base sm:text-lg font-bold text-amber-700 block mt-0.5">
+            <span className="text-base sm:text-lg font-bold text-amber-700 block mt-0.5 tabular-nums">
               {formatINR(dailyAverageGross)}
             </span>
             <span className="text-[10px] text-stone-400 block mt-0.5">Over {dailyPoints.length} days</span>
           </div>
 
-          <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
+          <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
             <span className="text-[11px] font-medium text-stone-500 block">Peak Day Gross</span>
-            <span className="text-base sm:text-lg font-bold text-emerald-700 block mt-0.5">
+            <span className="text-base sm:text-lg font-bold text-emerald-700 block mt-0.5 tabular-nums">
               {peakGrossDay && peakGrossDay.grossSales > 0 ? formatINR(peakGrossDay.grossSales) : '—'}
             </span>
             {peakGrossDay && peakGrossDay.grossSales > 0 && (
@@ -431,9 +431,9 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
             )}
           </div>
 
-          <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
+          <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
             <span className="text-[11px] font-medium text-stone-500 block">Active Sales Days</span>
-            <span className="text-base sm:text-lg font-bold text-stone-900 block mt-0.5">
+            <span className="text-base sm:text-lg font-bold text-stone-900 block mt-0.5 tabular-nums">
               {activeSalesDays}{' '}
               <span className="text-xs font-normal text-stone-500">/ {dailyPoints.length} days</span>
             </span>

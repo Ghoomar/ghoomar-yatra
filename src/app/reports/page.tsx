@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { formatINR, getTodayBusinessDate, formatNumber } from '@/lib/utils';
+import { formatINR, getTodayBusinessDate, formatNumber, formatDisplayDate } from '@/lib/utils';
 import {
   BarChart3,
   Download,
@@ -550,17 +550,17 @@ export default function ReportsPage() {
       {/* PAGE HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-amber-600" />
+          <h1 className="text-2xl font-bold tracking-tight text-[#6B162E] flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 text-[#6B162E]" />
             Management Reports &amp; Intelligence
           </h1>
-          <p className="text-xs sm:text-sm text-stone-500">
+          <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
             Unified executive operational and revenue dashboard backed by single sources of truth.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-xs text-xs font-medium">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 bg-white border border-[#E7E2D8] rounded-xl px-3 py-1.5 shadow-xs text-xs font-medium">
             <span className="text-stone-500">Business Date:</span>
             <input
               type="date"
@@ -569,20 +569,20 @@ export default function ReportsPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadData} title="Refresh all reports">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} />
+          <Button variant="outline" size="sm" onClick={loadData} title="Refresh all reports" className="rounded-xl border-[#E7E2D8]">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-[#6B162E]' : 'text-stone-600'}`} />
           </Button>
         </div>
       </div>
 
       {/* TOP-LEVEL NAVIGATION TABS */}
-      <div className="flex border-b border-stone-200 gap-6 text-sm font-semibold overflow-x-auto">
+      <div className="flex border-b border-[#E7E2D8] gap-6 text-sm font-semibold overflow-x-auto">
         <button
           onClick={() => setActiveTab('sales')}
           className={`pb-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
             activeTab === 'sales'
-              ? 'border-amber-600 text-amber-600'
-              : 'border-transparent text-stone-500 hover:text-stone-700'
+              ? 'border-[#6B162E] text-[#6B162E]'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
           <TrendingUp className="h-4 w-4" />
@@ -592,8 +592,8 @@ export default function ReportsPage() {
           onClick={() => setActiveTab('inventory')}
           className={`pb-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
             activeTab === 'inventory'
-              ? 'border-amber-600 text-amber-600'
-              : 'border-transparent text-stone-500 hover:text-stone-700'
+              ? 'border-[#6B162E] text-[#6B162E]'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
           <Layers className="h-4 w-4" />
@@ -603,8 +603,8 @@ export default function ReportsPage() {
           onClick={() => setActiveTab('vendors')}
           className={`pb-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
             activeTab === 'vendors'
-              ? 'border-amber-600 text-amber-600'
-              : 'border-transparent text-stone-500 hover:text-stone-700'
+              ? 'border-[#6B162E] text-[#6B162E]'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
           <ArrowRightLeft className="h-4 w-4" />
@@ -626,14 +626,14 @@ export default function ReportsPage() {
           {/* Section 2: Internal Reconciliation Notice Banner */}
           <div>
             {isReconciled ? (
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200/80 rounded-lg p-2.5 text-xs text-emerald-900">
+              <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-900">
                 <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
                 <span>
-                  <strong className="font-semibold">Reconciled:</strong> Consolidated Gross Sales ({formatINR(consolidatedGross)}) matches Orders Master granular revenue streams across all channels for {businessDate}.
+                  <strong className="font-semibold">Reconciled:</strong> Consolidated Gross Sales ({formatINR(consolidatedGross)}) matches Orders Master granular revenue streams across all channels for {formatDisplayDate(businessDate, 'short')}.
                 </span>
               </div>
             ) : (
-              <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-900">
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900">
                 <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
                 <div>
                   <div className="font-bold text-amber-900">Petpooja Reconciliation Notice</div>
@@ -646,20 +646,20 @@ export default function ReportsPage() {
           </div>
 
           {/* Section 3: Dynamic Factual Executive Brief */}
-          <Card className="border-stone-200/80 shadow-xs bg-linear-to-r from-amber-50/40 to-stone-50/60">
+          <Card className="border-[#E7E2D8] shadow-xs bg-white">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-600" />
-                Daily Operations &amp; Revenue Executive Brief ({businessDate})
+                <Sparkles className="h-4 w-4 text-[#6B162E]" />
+                Daily Operations &amp; Revenue Executive Brief ({formatDisplayDate(businessDate, 'short')})
               </CardTitle>
-              <CardDescription className="text-xs">
+              <CardDescription className="text-xs text-stone-500">
                 Authoritative cross-system operational and financial summary
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-xs sm:text-sm text-stone-800 leading-relaxed font-normal">
+            <CardContent className="text-xs sm:text-sm text-stone-800 leading-relaxed font-normal pt-1">
               {loading ? (
                 <div className="py-4 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Generating executive brief...
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Generating executive brief...
                 </div>
               ) : (
                 <p className="whitespace-pre-line">{executiveBrief}</p>
@@ -668,78 +668,78 @@ export default function ReportsPage() {
           </Card>
 
           {/* Section 4: Compact Footfall vs Restaurant Dining Conversion Card Group */}
-          <Card className="border-stone-200/80 shadow-xs">
+          <Card className="border-[#E7E2D8] shadow-xs bg-white">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <div>
                 <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-amber-600" />
+                  <Users className="h-4 w-4 text-[#6B162E]" />
                   Footfall vs Restaurant Dining Conversion
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Resort gate entries correlated with POS dining covers for {businessDate}
+                <CardDescription className="text-xs text-stone-500">
+                  Resort gate entries correlated with POS dining covers for {formatDisplayDate(businessDate, 'short')}
                 </CardDescription>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowGateDetails(!showGateDetails)}
-                className="text-xs gap-1 cursor-pointer"
+                className="text-xs gap-1 cursor-pointer rounded-xl border-[#E7E2D8]"
               >
                 <Clock className="h-3.5 w-3.5 text-stone-500" />
                 <span>{showGateDetails ? 'Hide Hourly Gate Curve' : 'Show Hourly Gate Curve'}</span>
                 {showGateDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </Button>
             </CardHeader>
-            <CardContent className="pt-1">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-center">
-                <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200/60">
+            <CardContent className="pt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
+                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Gate Footfall</div>
-                  <div className="text-lg font-bold text-stone-900 mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
-                  <div className="text-[10px] text-stone-400">{gateFootfall > 0 ? 'Total persons' : 'No gate data'}</div>
+                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Total persons' : 'No gate data'}</div>
                 </div>
 
-                <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200/60">
-                  <div className="text-[10px] text-amber-800 font-semibold uppercase tracking-wider">Restaurant PAX</div>
-                  <div className="text-lg font-bold text-amber-700 mt-0.5">{dineInPax > 0 ? formatNumber(dineInPax) : '—'}</div>
-                  <div className="text-[10px] text-stone-400">{dineInPax > 0 ? 'Dine-In covers' : 'No covers'}</div>
+                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
+                  <div className="text-[10px] text-[#6B162E] font-semibold uppercase tracking-wider">Restaurant PAX</div>
+                  <div className="text-xl font-bold text-[#6B162E] tabular-nums mt-0.5">{dineInPax > 0 ? formatNumber(dineInPax) : '—'}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{dineInPax > 0 ? 'Dine-In covers' : 'No covers'}</div>
                 </div>
 
-                <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200/60">
+                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-emerald-800 font-semibold uppercase tracking-wider">Diner Conversion</div>
-                  <div className="text-lg font-bold text-emerald-700 mt-0.5">
+                  <div className="text-xl font-bold text-emerald-700 tabular-nums mt-0.5">
                     {dinerConversionRate !== null ? `${dinerConversionRate.toFixed(1)}%` : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400">{dinerConversionRate !== null ? 'PAX ÷ Footfall' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{dinerConversionRate !== null ? 'PAX ÷ Footfall' : 'No gate data'}</div>
                 </div>
 
-                <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200/60">
+                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Spend / Footfall</div>
-                  <div className="text-lg font-bold text-stone-900 mt-0.5">
+                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {spendPerGateVisitor !== null ? formatINR(spendPerGateVisitor) : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400">{gateFootfall > 0 ? 'Dine-In ÷ Footfall' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Dine-In ÷ Footfall' : 'No gate data'}</div>
                 </div>
 
-                <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200/60">
+                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Spend / Diner (APC)</div>
-                  <div className="text-lg font-bold text-stone-900 mt-0.5">
+                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400">{dineInPax > 0 ? 'Avg per cover' : 'No covers'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInPax > 0 ? 'Avg per cover' : 'No covers'}</div>
                 </div>
 
-                <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200/60">
+                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Party Size / Bill</div>
-                  <div className="text-lg font-bold text-stone-900 mt-0.5">
+                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {paxPerBill !== null ? `${paxPerBill.toFixed(1)}` : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400">{dineInBillsCount > 0 ? 'PAX/bill' : 'No bills'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInBillsCount > 0 ? 'PAX/bill' : 'No bills'}</div>
                 </div>
               </div>
 
               {/* Expandable Gate Counter Time Analytics Chart */}
               {showGateDetails && (
-                <div className="mt-4 pt-4 border-t border-stone-200">
+                <div className="mt-4 pt-4 border-t border-[#E7E2D8]">
                   <GateTimeAnalyticsChart
                     selectedDate={businessDate}
                     onDateChange={(date) => setBusinessDate(date)}
@@ -751,13 +751,13 @@ export default function ReportsPage() {
 
           {/* Section 5: Revenue KPI Cards Grid (All 7 Cards Clickable) */}
           <div>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2.5 flex items-center justify-between">
               <h2 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                <Receipt className="h-4 w-4 text-amber-600" />
-                Revenue Streams &amp; P&amp;L Expenses ({businessDate})
+                <Receipt className="h-4 w-4 text-[#6B162E]" />
+                Revenue Streams &amp; P&amp;L Expenses ({formatDisplayDate(businessDate, 'short')})
               </h2>
-              <span className="text-[11px] text-stone-400">
-                Click any card to expand granular Petpooja/hourly drill-downs
+              <span className="text-[11px] text-stone-500">
+                Click a card to view details
               </span>
             </div>
 
@@ -765,53 +765,71 @@ export default function ReportsPage() {
               {/* Card 1: Restaurant Net Sales (Strictly Dine-In) */}
               <div
                 onClick={() => toggleDrilldown('restaurant')}
-                className={`p-3 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer shadow-xs overflow-hidden ${
                   activeDrilldown === 'restaurant'
-                    ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20'
-                    : 'border-stone-200/80 bg-white hover:border-amber-300'
+                    ? 'border-amber-500 bg-[#FFFDF7] ring-2 ring-amber-500/20'
+                    : 'border-[#E7E2D8] bg-white hover:border-amber-300/80 hover:bg-[#FAF8F5]/50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Restaurant Dine-In</span>
-                  <Badge variant="outline" className="text-[9px] border-amber-300 bg-amber-50 text-amber-800">
-                    {activeDrilldown === 'restaurant' ? 'Open' : 'Drill-Down'}
+                {activeDrilldown === 'restaurant' && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+                )}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Restaurant Dine-In</span>
+                  <Badge
+                    variant={activeDrilldown === 'restaurant' ? 'warning' : 'outline'}
+                    className="text-[9px] px-1.5 py-0.5"
+                  >
+                    {activeDrilldown === 'restaurant' ? 'Active' : 'View Details'}
                   </Badge>
                 </div>
-                <div className="text-lg font-bold text-amber-800 mt-1">
-                  {formatINR(dineInNet)}
+                <div className="mt-2">
+                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Net Sales</div>
+                  <div className="text-xl font-bold tracking-tight text-[#6B162E] tabular-nums mt-0.5">
+                    {formatINR(dineInNet)}
+                  </div>
                 </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
+                <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
                   <span>Gross: {formatINR(dineInGross)}</span>
-                  <span>{dineInBillsCount} Dine-In Bills</span>
+                  <span className="font-medium text-stone-700">{dineInBillsCount} Dine-In Bills</span>
                 </div>
-                <div className="text-[10px] text-stone-400 mt-0.5">
-                  Covers: {dineInPax} PAX • APC: {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
+                <div className="text-[10px] text-stone-500 mt-0.5">
+                  {dineInPax} Covers • APC: {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
                 </div>
               </div>
 
               {/* Card 2: Snacks Stall */}
               <div
                 onClick={() => toggleDrilldown('snacks')}
-                className={`p-3 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer shadow-xs overflow-hidden ${
                   activeDrilldown === 'snacks'
-                    ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20'
-                    : 'border-stone-200/80 bg-white hover:border-amber-300'
+                    ? 'border-amber-500 bg-[#FFFDF7] ring-2 ring-amber-500/20'
+                    : 'border-[#E7E2D8] bg-white hover:border-amber-300/80 hover:bg-[#FAF8F5]/50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Snacks Stall</span>
-                  <Badge variant="outline" className="text-[9px] border-amber-300 bg-amber-50 text-amber-800">
-                    {activeDrilldown === 'snacks' ? 'Open' : 'Drill-Down'}
+                {activeDrilldown === 'snacks' && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+                )}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Snacks Stall</span>
+                  <Badge
+                    variant={activeDrilldown === 'snacks' ? 'warning' : 'outline'}
+                    className="text-[9px] px-1.5 py-0.5"
+                  >
+                    {activeDrilldown === 'snacks' ? 'Active' : 'View Details'}
                   </Badge>
                 </div>
-                <div className="text-lg font-bold text-stone-900 mt-1">
-                  {formatINR(snacksGross)}
+                <div className="mt-2">
+                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                  <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                    {formatINR(snacksGross)}
+                  </div>
                 </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
+                <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
                   <span>Net: {formatINR(snacksNet)}</span>
-                  <span>Orders: {snacksBillCount}</span>
+                  <span className="font-medium text-stone-700">{snacksBillCount} Orders</span>
                 </div>
-                <div className="text-[10px] text-stone-400 mt-0.5">
+                <div className="text-[10px] text-stone-500 mt-0.5">
                   ABV: {snacksAbv !== null ? formatINR(snacksAbv) : '—'} • Peak 8–10 PM
                 </div>
               </div>
@@ -819,126 +837,241 @@ export default function ReportsPage() {
               {/* Card 3: Camel Ride */}
               <div
                 onClick={() => toggleDrilldown('camel')}
-                className={`p-3 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer shadow-xs overflow-hidden ${
                   activeDrilldown === 'camel'
-                    ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20'
-                    : 'border-stone-200/80 bg-white hover:border-amber-300'
+                    ? 'border-amber-500 bg-[#FFFDF7] ring-2 ring-amber-500/20'
+                    : 'border-[#E7E2D8] bg-white hover:border-amber-300/80 hover:bg-[#FAF8F5]/50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Camel Ride</span>
-                  <Badge variant="outline" className="text-[9px] border-stone-200 bg-stone-50 text-stone-700">
-                    {activeDrilldown === 'camel' ? 'Open' : 'Hourly'}
+                {activeDrilldown === 'camel' && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+                )}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Camel Ride</span>
+                  <Badge
+                    variant={activeDrilldown === 'camel' ? 'warning' : 'outline'}
+                    className="text-[9px] px-1.5 py-0.5"
+                  >
+                    {activeDrilldown === 'camel' ? 'Active' : 'View Details'}
                   </Badge>
                 </div>
-                <div className="text-lg font-bold text-stone-900 mt-1">
-                  {formatINR(camelData.totalGross)}
-                </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
-                  <span>Rides: {camelData.totalQty}</span>
-                  <span>Price: {camelData.abv !== null ? formatINR(camelData.abv) : '—'}</span>
-                </div>
-                <div className="text-[10px] text-stone-400 mt-0.5">
-                  Petpooja POS activity sales
-                </div>
+                {camelData.totalQty > 0 ? (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                        {formatINR(camelData.totalGross)}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
+                      <span>Rides: {camelData.totalQty}</span>
+                      <span className="font-medium text-stone-700">Rate: {camelData.abv !== null ? formatINR(camelData.abv) : '—'}</span>
+                    </div>
+                    <div className="text-[10px] text-stone-500 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-lg font-semibold text-stone-400 mt-0.5">
+                        No Activity
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
+                      No transactions recorded
+                    </div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Card 4: Skill Games */}
               <div
                 onClick={() => toggleDrilldown('games')}
-                className={`p-3 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer shadow-xs overflow-hidden ${
                   activeDrilldown === 'games'
-                    ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20'
-                    : 'border-stone-200/80 bg-white hover:border-amber-300'
+                    ? 'border-amber-500 bg-[#FFFDF7] ring-2 ring-amber-500/20'
+                    : 'border-[#E7E2D8] bg-white hover:border-amber-300/80 hover:bg-[#FAF8F5]/50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Skill Games</span>
-                  <Badge variant="outline" className="text-[9px] border-stone-200 bg-stone-50 text-stone-700">
-                    {activeDrilldown === 'games' ? 'Open' : 'Hourly'}
+                {activeDrilldown === 'games' && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+                )}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Skill Games</span>
+                  <Badge
+                    variant={activeDrilldown === 'games' ? 'warning' : 'outline'}
+                    className="text-[9px] px-1.5 py-0.5"
+                  >
+                    {activeDrilldown === 'games' ? 'Active' : 'View Details'}
                   </Badge>
                 </div>
-                <div className="text-lg font-bold text-stone-900 mt-1">
-                  {formatINR(gamesData.totalGross)}
-                </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
-                  <span>Tickets: {gamesData.totalQty}</span>
-                  <span>Price: {gamesData.abv !== null ? formatINR(gamesData.abv) : '—'}</span>
-                </div>
-                <div className="text-[10px] text-stone-400 mt-0.5">
-                  Petpooja POS activity sales
-                </div>
+                {gamesData.totalQty > 0 ? (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                        {formatINR(gamesData.totalGross)}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
+                      <span>Tickets: {gamesData.totalQty}</span>
+                      <span className="font-medium text-stone-700">Rate: {gamesData.abv !== null ? formatINR(gamesData.abv) : '—'}</span>
+                    </div>
+                    <div className="text-[10px] text-stone-500 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-lg font-semibold text-stone-400 mt-0.5">
+                        No Activity
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
+                      No transactions recorded
+                    </div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Card 5: Mehendi */}
               <div
                 onClick={() => toggleDrilldown('mehendi')}
-                className={`p-3 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer shadow-xs overflow-hidden ${
                   activeDrilldown === 'mehendi'
-                    ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20'
-                    : 'border-stone-200/80 bg-white hover:border-amber-300'
+                    ? 'border-amber-500 bg-[#FFFDF7] ring-2 ring-amber-500/20'
+                    : 'border-[#E7E2D8] bg-white hover:border-amber-300/80 hover:bg-[#FAF8F5]/50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Mehendi</span>
-                  <Badge variant="outline" className="text-[9px] border-stone-200 bg-stone-50 text-stone-700">
-                    {activeDrilldown === 'mehendi' ? 'Open' : 'Hourly'}
+                {activeDrilldown === 'mehendi' && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+                )}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Mehendi</span>
+                  <Badge
+                    variant={activeDrilldown === 'mehendi' ? 'warning' : 'outline'}
+                    className="text-[9px] px-1.5 py-0.5"
+                  >
+                    {activeDrilldown === 'mehendi' ? 'Active' : 'View Details'}
                   </Badge>
                 </div>
-                <div className="text-lg font-bold text-stone-900 mt-1">
-                  {formatINR(mehendiData.totalGross)}
-                </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
-                  <span>Clients: {mehendiData.totalQty}</span>
-                  <span>Price: {mehendiData.abv !== null ? formatINR(mehendiData.abv) : '—'}</span>
-                </div>
-                <div className="text-[10px] text-stone-400 mt-0.5">
-                  Petpooja POS activity sales
-                </div>
+                {mehendiData.totalQty > 0 ? (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                        {formatINR(mehendiData.totalGross)}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
+                      <span>Clients: {mehendiData.totalQty}</span>
+                      <span className="font-medium text-stone-700">Rate: {mehendiData.abv !== null ? formatINR(mehendiData.abv) : '—'}</span>
+                    </div>
+                    <div className="text-[10px] text-stone-500 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-lg font-semibold text-stone-400 mt-0.5">
+                        No Activity
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
+                      No transactions recorded
+                    </div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Card 6: Champi Maalish */}
               <div
                 onClick={() => toggleDrilldown('champi')}
-                className={`p-3 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer shadow-xs overflow-hidden ${
                   activeDrilldown === 'champi'
-                    ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20'
-                    : 'border-stone-200/80 bg-white hover:border-amber-300'
+                    ? 'border-amber-500 bg-[#FFFDF7] ring-2 ring-amber-500/20'
+                    : 'border-[#E7E2D8] bg-white hover:border-amber-300/80 hover:bg-[#FAF8F5]/50'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Champi Maalish</span>
-                  <Badge variant="outline" className="text-[9px] border-stone-200 bg-stone-50 text-stone-700">
-                    {activeDrilldown === 'champi' ? 'Open' : 'Hourly'}
+                {activeDrilldown === 'champi' && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+                )}
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Champi Maalish</span>
+                  <Badge
+                    variant={activeDrilldown === 'champi' ? 'warning' : 'outline'}
+                    className="text-[9px] px-1.5 py-0.5"
+                  >
+                    {activeDrilldown === 'champi' ? 'Active' : 'View Details'}
                   </Badge>
                 </div>
-                <div className="text-lg font-bold text-stone-900 mt-1">
-                  {formatINR(champiData.totalGross)}
-                </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
-                  <span>Sessions: {champiData.totalQty}</span>
-                  <span>Price: {champiData.abv !== null ? formatINR(champiData.abv) : '—'}</span>
-                </div>
-                <div className="text-[10px] text-stone-400 mt-0.5">
-                  Petpooja POS activity sales
-                </div>
+                {champiData.totalQty > 0 ? (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                        {formatINR(champiData.totalGross)}
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
+                      <span>Sessions: {champiData.totalQty}</span>
+                      <span className="font-medium text-stone-700">Rate: {champiData.abv !== null ? formatINR(champiData.abv) : '—'}</span>
+                    </div>
+                    <div className="text-[10px] text-stone-500 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-2">
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-lg font-semibold text-stone-400 mt-0.5">
+                        No Activity
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
+                      No transactions recorded
+                    </div>
+                    <div className="text-[10px] text-stone-400 mt-0.5">
+                      Activity Sales
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Card 7: Total Expenses (Daily P&L) */}
               <Link
                 href={`/finance/profitability?date=${businessDate}`}
-                className="p-3 rounded-lg border border-stone-200/80 bg-white hover:border-amber-300 hover:bg-stone-50/60 transition-all cursor-pointer shadow-2xs block"
+                className="relative p-3.5 rounded-xl border border-[#E7E2D8] bg-white hover:border-amber-400/80 hover:bg-[#FAF8F5]/50 transition-all cursor-pointer shadow-xs block"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Daily Expenses</span>
-                  <span className="text-[9px] font-semibold text-amber-700 flex items-center gap-0.5">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">Daily Expenses</span>
+                  <span className="text-[10px] font-semibold text-[#6B162E] flex items-center gap-0.5">
                     Daily P&amp;L <ExternalLink className="h-2.5 w-2.5" />
                   </span>
                 </div>
-                <div className={`text-lg font-bold mt-1 ${hasExpensesLogged ? 'text-rose-700' : 'text-stone-400'}`}>
-                  {hasExpensesLogged ? formatINR(totalOperationalExpenses) : '—'}
+                <div className="mt-2">
+                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Total Expenses</div>
+                  <div className={`text-xl font-bold tracking-tight mt-0.5 tabular-nums ${hasExpensesLogged ? 'text-rose-700' : 'text-stone-400'}`}>
+                    {hasExpensesLogged ? formatINR(totalOperationalExpenses) : '—'}
+                  </div>
                 </div>
-                <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
+                <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
                   {hasExpensesLogged ? (
                     <>
                       <span>Direct: {formatINR(totalDirectVouchers)}</span>
@@ -948,7 +1081,7 @@ export default function ReportsPage() {
                     <span>No logged expenses</span>
                   )}
                 </div>
-                <div className="text-[10px] text-amber-700 font-medium mt-0.5 flex items-center gap-1">
+                <div className="text-[10px] text-[#6B162E] font-medium mt-0.5 flex items-center gap-1">
                   {hasExpensesLogged
                     ? `Utilities: ${formatINR(totalUtilities)} • View P&L →`
                     : 'Click to view full P&L Ledger →'}
@@ -959,8 +1092,8 @@ export default function ReportsPage() {
 
           {/* Section 6: Granular Drill-Down Views (Expandable per Clicked Card) */}
           {activeDrilldown && (
-            <div className="border border-stone-200 rounded-xl p-4 bg-stone-50/50 shadow-sm space-y-4 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+            <div className="border border-[#E7E2D8] rounded-xl p-4 bg-white shadow-xs space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-[#E7E2D8]">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-stone-900 text-sm">
                     {activeDrilldown === 'restaurant' && 'Restaurant Dine-In POS Analytics & All Bills'}
@@ -971,11 +1104,11 @@ export default function ReportsPage() {
                     {activeDrilldown === 'champi' && 'Champi Maalish Activity Hourly Breakdown'}
                   </span>
                   <Badge variant="outline" className="text-[10px]">
-                    {businessDate}
+                    {formatDisplayDate(businessDate, 'short')}
                   </Badge>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setActiveDrilldown(null)} className="h-7 text-xs">
-                  Close Drill-Down
+                  Close Details
                 </Button>
               </div>
 
@@ -995,9 +1128,9 @@ export default function ReportsPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Hourly timeline 5 PM - 11 PM */}
-                    <div className="bg-white p-3 rounded-lg border border-stone-200">
-                      <h4 className="text-xs font-bold text-stone-900 mb-2 flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                    <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#E7E2D8]">
+                      <h4 className="text-xs font-bold text-stone-900 mb-2.5 flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-[#D97706]" />
                         Hourly Sales Breakdown (5 PM – 11 PM)
                       </h4>
                       <div className="space-y-2">
@@ -1013,8 +1146,8 @@ export default function ReportsPage() {
                                   <span className="text-stone-400 font-normal">({h.count} orders)</span>
                                 </span>
                               </div>
-                              <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
-                                <div className="bg-amber-600 h-full rounded-full" style={{ width: `${pct}%` }} />
+                              <div className="w-full bg-[#E7E2D8] h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-[#D97706] h-full rounded-full" style={{ width: `${pct}%` }} />
                               </div>
                             </div>
                           );
@@ -1023,9 +1156,9 @@ export default function ReportsPage() {
                     </div>
 
                     {/* Top Snacks Items */}
-                    <div className="bg-white p-3 rounded-lg border border-stone-200">
-                      <h4 className="text-xs font-bold text-stone-900 mb-2 flex items-center gap-1.5">
-                        <UtensilsCrossed className="h-3.5 w-3.5 text-amber-600" />
+                    <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#E7E2D8]">
+                      <h4 className="text-xs font-bold text-stone-900 mb-2.5 flex items-center gap-1.5">
+                        <UtensilsCrossed className="h-3.5 w-3.5 text-[#D97706]" />
                         Top Street Food &amp; Snack Items
                       </h4>
                       {snacksTopItems.length === 0 ? (
@@ -1033,23 +1166,23 @@ export default function ReportsPage() {
                       ) : (
                         <table className="w-full text-left text-xs">
                           <thead>
-                            <tr className="border-b border-stone-200 text-stone-500 text-[10px]">
+                            <tr className="border-b border-[#E7E2D8] text-stone-500 text-[10px]">
                               <th className="pb-1.5">Item Name</th>
                               <th className="pb-1.5 text-center">Units Sold</th>
                               <th className="pb-1.5 text-right">Net Sales</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-stone-100">
+                          <tbody className="divide-y divide-[#F0ECE3]">
                             {snacksTopItems.map((item, idx) => (
-                              <tr key={item.name} className="hover:bg-stone-50/60">
+                              <tr key={item.name} className="hover:bg-white/80">
                                 <td className="py-1.5 font-medium text-stone-900 flex items-center gap-1.5">
-                                  <span className="w-4 h-4 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center text-[9px] font-bold">
+                                  <span className="w-4 h-4 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-[9px] font-bold">
                                     {idx + 1}
                                   </span>
                                   {item.name}
                                 </td>
                                 <td className="py-1.5 text-center font-bold text-stone-700">{item.qty}</td>
-                                <td className="py-1.5 text-right font-mono font-bold text-amber-800">{formatINR(item.net)}</td>
+                                <td className="py-1.5 text-right font-mono font-bold text-[#6B162E]">{formatINR(item.net)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1072,8 +1205,8 @@ export default function ReportsPage() {
                     : champiData;
 
                 return (
-                  <div className="bg-white p-4 rounded-lg border border-stone-200 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between text-xs pb-2 border-b border-stone-100 gap-3">
+                  <div className="bg-[#FAF8F5] p-4 rounded-xl border border-[#E7E2D8] space-y-3">
+                    <div className="flex flex-wrap items-center justify-between text-xs pb-2.5 border-b border-[#E7E2D8] gap-3">
                       <div>
                         <span className="text-stone-500">Total Units / Tickets:</span>{' '}
                         <strong className="text-stone-900 font-bold">{act.totalQty}</strong>
@@ -1084,7 +1217,7 @@ export default function ReportsPage() {
                       </div>
                       <div>
                         <span className="text-stone-500">Total Gross Revenue:</span>{' '}
-                        <strong className="text-amber-800 font-bold text-sm">{formatINR(act.totalGross)}</strong>
+                        <strong className="text-[#6B162E] font-bold text-sm">{formatINR(act.totalGross)}</strong>
                       </div>
                     </div>
 
@@ -1097,10 +1230,10 @@ export default function ReportsPage() {
                         <h5 className="text-xs font-semibold text-stone-700">Hourly Distribution (Petpooja Hourly Items)</h5>
                         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
                           {act.hourlyData.map((pt) => (
-                            <div key={pt.hour} className="p-2 bg-stone-50 rounded border border-stone-200 text-center">
+                            <div key={pt.hour} className="p-2.5 bg-white rounded-lg border border-[#E7E2D8] text-center">
                               <div className="text-[10px] text-stone-500 font-medium">{pt.label}</div>
                               <div className="text-sm font-bold text-stone-900 mt-0.5">{pt.qty} sold</div>
-                              <div className="text-[10px] text-amber-800 font-mono font-semibold">{formatINR(pt.amount)}</div>
+                              <div className="text-[10px] text-[#6B162E] font-mono font-semibold">{formatINR(pt.amount)}</div>
                             </div>
                           ))}
                         </div>
@@ -1113,21 +1246,21 @@ export default function ReportsPage() {
           )}
 
           {/* Section 7: Daily Operating Surplus Flash Report */}
-          <Card className="border-stone-200/80 shadow-xs">
+          <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
                 <CardTitle className="text-sm font-bold text-stone-900">
                   Daily Operating Surplus Flash Report
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Financial reconciliation of revenue against store consumption and operating expenses for {businessDate}
+                <CardDescription className="text-xs text-stone-500">
+                  Financial reconciliation of revenue against store consumption and operating expenses for {formatDisplayDate(businessDate, 'short')}
                 </CardDescription>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => exportCSV([dailyData || {}], 'daily-operations-report')}
-                className="gap-1.5 text-xs"
+                className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
               >
                 <Download className="h-3.5 w-3.5" /> Export CSV
               </Button>
@@ -1135,31 +1268,31 @@ export default function ReportsPage() {
             <CardContent className="pt-0 text-xs sm:text-sm space-y-3">
               {loading ? (
                 <div className="py-10 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading financial surplus...
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading financial surplus...
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/60">
-                    <div className="text-[11px] text-stone-500 font-medium">Net Sales (POS)</div>
-                    <div className="text-lg font-bold text-stone-900 mt-0.5">
+                  <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
+                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">Net Sales (POS)</div>
+                    <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {formatINR(consolidatedNet)}
                     </div>
                   </div>
-                  <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/60">
-                    <div className="text-[11px] text-stone-500 font-medium">Store Consumption</div>
-                    <div className="text-lg font-bold text-stone-900 mt-0.5">
+                  <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
+                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">Store Consumption</div>
+                    <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {totalStoreConsumption > 0 ? formatINR(totalStoreConsumption) : '—'}
                     </div>
                   </div>
-                  <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/60">
-                    <div className="text-[11px] text-stone-500 font-medium">Direct &amp; Utilities</div>
-                    <div className="text-lg font-bold text-stone-900 mt-0.5">
+                  <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
+                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">Direct &amp; Utilities</div>
+                    <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {(totalDirectVouchers + totalUtilities) > 0 ? formatINR(totalDirectVouchers + totalUtilities) : '—'}
                     </div>
                   </div>
-                  <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200/80">
-                    <div className="text-[11px] text-amber-800 font-bold">Gross Operating Surplus</div>
-                    <div className="text-lg font-bold text-amber-900 mt-0.5">
+                  <div className="p-3.5 bg-emerald-50/80 rounded-xl border border-emerald-200/80">
+                    <div className="text-[11px] text-emerald-900 font-bold uppercase tracking-wider">Gross Operating Surplus</div>
+                    <div className="text-xl font-bold text-emerald-800 tabular-nums mt-0.5">
                       {hasExpensesLogged || consolidatedNet > 0
                         ? formatINR(consolidatedNet - totalOperationalExpenses)
                         : '—'}
@@ -1176,17 +1309,17 @@ export default function ReportsPage() {
       {/* TAB 2: STORE CONSUMPTION LEDGER                                           */}
       {/* ========================================================================= */}
       {activeTab === 'inventory' && (
-        <Card>
+        <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Kitchen Store Issue Movements ({businessDate})</CardTitle>
-              <CardDescription>Line-by-line consumption attributed to kitchen &amp; chef</CardDescription>
+              <CardTitle>Kitchen Store Issue Movements ({formatDisplayDate(businessDate, 'short')})</CardTitle>
+              <CardDescription className="text-stone-500">Line-by-line consumption attributed to kitchen &amp; chef</CardDescription>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => exportCSV(inventoryMovements, 'store-consumption')}
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
             >
               <Download className="h-3.5 w-3.5" /> Export CSV
             </Button>
@@ -1194,15 +1327,15 @@ export default function ReportsPage() {
           <CardContent className="pt-0">
             {loading ? (
               <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading store consumption...
+                <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading store consumption...
               </div>
             ) : inventoryMovements.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">No inventory movements logged for {businessDate}.</div>
+              <div className="py-12 text-center text-stone-400 text-xs">No inventory movements logged for {formatDisplayDate(businessDate, 'short')}.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                    <tr className="border-b border-[#E7E2D8] text-stone-600 font-semibold bg-[#FAF8F5]">
                       <th className="py-2.5 px-3">Time</th>
                       <th className="py-2.5 px-3">Item SKU</th>
                       <th className="py-2.5 px-3">Kitchen / Section</th>
@@ -1213,9 +1346,9 @@ export default function ReportsPage() {
                       <th className="py-2.5 px-3 text-right">Valuation</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-[#F0ECE3]">
                     {inventoryMovements.map((m) => (
-                      <tr key={m.id} className="hover:bg-stone-50/80">
+                      <tr key={m.id} className="hover:bg-[#FAF8F5]/80">
                         <td className="py-2 px-3 text-stone-500 font-mono">
                           {new Date(m.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}
                         </td>
@@ -1246,17 +1379,17 @@ export default function ReportsPage() {
       {/* TAB 3: VENDOR OUTSTANDING LEDGER                                          */}
       {/* ========================================================================= */}
       {activeTab === 'vendors' && (
-        <Card>
+        <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Vendor Accounts Summary</CardTitle>
-              <CardDescription>Authoritative balances derived from invoices and payment allocations</CardDescription>
+              <CardDescription className="text-stone-500">Authoritative balances derived from invoices and payment allocations</CardDescription>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => exportCSV(vendors, 'vendor-ledger')}
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
             >
               <Download className="h-3.5 w-3.5" /> Export CSV
             </Button>
@@ -1264,13 +1397,13 @@ export default function ReportsPage() {
           <CardContent className="pt-0">
             {loading ? (
               <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading vendor accounts...
+                <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading vendor accounts...
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                    <tr className="border-b border-[#E7E2D8] text-stone-600 font-semibold bg-[#FAF8F5]">
                       <th className="py-2.5 px-3">Supplier</th>
                       <th className="py-2.5 px-3">Contact</th>
                       <th className="py-2.5 px-3 text-right">Total Invoiced</th>
@@ -1279,11 +1412,11 @@ export default function ReportsPage() {
                       <th className="py-2.5 px-3 text-center">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-stone-100">
+                  <tbody className="divide-y divide-[#F0ECE3]">
                     {vendors.map((v) => {
                       const out = Number(v.outstanding_balance) || 0;
                       return (
-                        <tr key={v.vendor_id} className="hover:bg-stone-50/80">
+                        <tr key={v.vendor_id} className="hover:bg-[#FAF8F5]/80">
                           <td className="py-3 px-3 font-semibold text-stone-900">{v.vendor_name}</td>
                           <td className="py-3 px-3 text-stone-600">
                             {v.contact_person} {v.phone && `(${v.phone})`}

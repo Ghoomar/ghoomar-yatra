@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'amber';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'amber' | 'maroon';
   size?: 'sm' | 'md' | 'lg' | 'icon';
 }
 
@@ -16,11 +16,12 @@ export function Button({
 }: ButtonProps) {
   const variants = {
     primary: 'bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-950 shadow-sm',
-    secondary: 'bg-stone-100 text-stone-900 hover:bg-stone-200 active:bg-stone-300',
-    outline: 'border border-stone-300 bg-white text-stone-700 hover:bg-stone-50 active:bg-stone-100',
-    ghost: 'text-stone-600 hover:bg-stone-100 active:bg-stone-200',
+    secondary: 'bg-[#F8F5F0] text-stone-900 hover:bg-[#F0ECE3] active:bg-[#E8E2D5]',
+    outline: 'border border-[#E7E2D8] bg-white text-stone-700 hover:bg-[#F8F5F0] active:bg-[#F0ECE3]',
+    ghost: 'text-stone-600 hover:bg-[#F8F5F0] active:bg-[#F0ECE3]',
     danger: 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800',
     amber: 'bg-amber-600 text-white hover:bg-amber-700 active:bg-amber-800 shadow-sm shadow-amber-600/20',
+    maroon: 'bg-[#6B162E] text-white hover:bg-[#541124] active:bg-[#3E0C1A] shadow-xs',
   };
 
   const sizes = {

@@ -1,18 +1,20 @@
-﻿import React from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'outline';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'purple' | 'maroon' | 'outline';
 }
 
 export function Badge({ className, variant = 'default', ...props }: BadgeProps) {
   const variants = {
-    default: 'bg-stone-100 text-stone-700 border-stone-200',
-    success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    warning: 'bg-amber-50 text-amber-800 border-amber-200',
-    danger: 'bg-rose-50 text-rose-700 border-rose-200',
-    info: 'bg-sky-50 text-sky-700 border-sky-200',
-    outline: 'border-stone-300 text-stone-600 bg-transparent',
+    default: 'bg-[#F8F5F0] text-stone-700 border-[#E7E2D8]',
+    success: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+    warning: 'bg-amber-50 text-amber-900 border-amber-200/80',
+    danger: 'bg-rose-50 text-rose-800 border-rose-200/80',
+    info: 'bg-sky-50 text-sky-800 border-sky-200/80',
+    purple: 'bg-purple-50 text-[#190F24] border-purple-200/80',
+    maroon: 'bg-rose-50/70 text-[#6B162E] border-rose-200/80',
+    outline: 'border-[#E7E2D8] text-stone-600 bg-transparent',
   };
 
   return (

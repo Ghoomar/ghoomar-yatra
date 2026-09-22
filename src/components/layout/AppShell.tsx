@@ -318,7 +318,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
       >
         <ServiceWorkerRegister />
-        <main className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col justify-center">
+        <main className="min-h-screen bg-[#FAF7F2] text-[#1C1917] flex flex-col justify-center">
           {children}
         </main>
       </RoleContext.Provider>
@@ -361,7 +361,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }}
     >
       <ServiceWorkerRegister />
-      <div className="min-h-screen bg-stone-100/70 text-stone-900">
+      <div className="min-h-screen bg-[#FAF7F2] text-[#1C1917]">
         <Sidebar
           currentRole={activeRole}
           onRoleChange={handleRoleChange}

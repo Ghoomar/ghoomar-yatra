@@ -104,3 +104,29 @@ export function formatTimeAgo(dateInput: string | Date | null | undefined): stri
     hour12: true,
   });
 }
+
+export function formatDisplayDate(dateStr: string | null | undefined, format: 'short' | 'medium' | 'long' = 'medium'): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts.map(Number);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return dateStr;
+  const dateObj = new Date(Date.UTC(y, m - 1, d));
+  if (isNaN(dateObj.getTime())) return dateStr;
+
+  if (format === 'long') {
+    return dateObj.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+  return dateObj.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+

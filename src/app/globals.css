@@ -1,29 +1,65 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #FAF7F2;
+  --foreground: #1C1917;
+  --yatra-cream: #FAF7F2;
+  --yatra-surface: #FFFFFF;
+  --yatra-border: #E7E2D8;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  --color-page-bg: #FAF7F2;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F7F4EE;
+  --color-border-subtle: #E7E2D8;
+  --color-border-medium: #D6CFBF;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Brand Deep Purple */
+  --color-brand-purple: #190F24;
+  --color-brand-purple-dark: #12091B;
+  --color-brand-purple-surface: #241436;
+  --color-brand-purple-border: #351F4E;
+  --color-brand-purple-muted: #A393B7;
+
+  /* Active Yellow */
+  --color-brand-yellow: #F59E0B;
+  --color-brand-yellow-hover: #D97706;
+  --color-brand-yellow-subtle: #FEF3C7;
+
+  /* Financial Maroon */
+  --color-brand-maroon: #6B162E;
+  --color-brand-maroon-dark: #4A0E1F;
+  --color-brand-maroon-subtle: #FDF2F4;
+
+  /* Revenue Orange */
+  --color-brand-orange: #C2410C;
+  --color-brand-orange-subtle: #FFF7ED;
+
+  /* Semantic State Tokens */
+  --color-state-success: #059669;
+  --color-state-success-subtle: #ECFDF5;
+  --color-state-warning: #D97706;
+  --color-state-warning-subtle: #FFFBEB;
+  --color-state-danger: #DC2626;
+  --color-state-danger-subtle: #FEF2F2;
+  --color-state-info: #2563EB;
+  --color-state-info-subtle: #EFF6FF;
+
+  /* Typography / Text */
+  --color-text-primary: #1C1917;
+  --color-text-secondary: #57534E;
+  --color-text-muted: #8C867F;
+
+  --font-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
 }
 
 html,
 body {
   max-width: 100%;
   overflow-x: hidden;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #FAF7F2;
+  color: #1C1917;
+  font-family: var(--font-sans);
 }

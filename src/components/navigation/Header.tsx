@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Menu, Calendar, ShieldCheck, Car, LogOut } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
-import { getTodayBusinessDate } from '@/lib/utils';
+import { getTodayBusinessDate, formatDisplayDate } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 
 interface HeaderProps {
@@ -54,21 +54,15 @@ export function Header({
     window.location.replace('/login');
   };
 
-  // Format YYYY-MM-DD -> DD-MM-YY for display while preserving businessDate internally
+  // Format business date for management-facing display (e.g. 20 Sep 2026)
   const formattedDate = React.useMemo(() => {
-    if (!businessDate) return '';
-    const parts = businessDate.split('-');
-    if (parts.length === 3) {
-      const [year, month, day] = parts;
-      return `${day}-${month}-${year.slice(-2)}`;
-    }
-    return businessDate;
+    return formatDisplayDate(businessDate, 'short');
   }, [businessDate]);
 
   const isAdminUser = actualRole === 'Admin';
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between border-b border-stone-200 bg-white/95 px-2.5 sm:px-4 md:px-6 backdrop-blur-xs">
+    <header className="sticky top-0 z-30 flex h-16 w-full max-w-full items-center justify-between border-b border-[#E7E2D8] bg-white/95 px-2.5 sm:px-4 md:px-6 backdrop-blur-xs">
       {/* Left section: Hamburger & Date */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
         <button
@@ -79,7 +73,7 @@ export function Header({
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center gap-1.5 rounded-lg bg-stone-100 px-2 sm:px-2.5 py-1.5 border border-stone-200/80 text-xs sm:text-sm font-medium text-stone-700 min-w-0">
+        <div className="flex items-center gap-1.5 rounded-lg bg-[#F8F5F0] px-2 sm:px-2.5 py-1.5 border border-[#E7E2D8] text-xs sm:text-sm font-medium text-stone-700 min-w-0">
           <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
           <span className="truncate whitespace-nowrap text-[11px] sm:text-xs md:text-sm">
             Date: <strong className="text-stone-900 font-semibold">{formattedDate}</strong>

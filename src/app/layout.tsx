@@ -54,7 +54,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans bg-stone-100/70 text-stone-900">
+      <body className="min-h-full flex flex-col font-sans bg-[#FAF7F2] text-[#1C1917]">
         <AppShell>{children}</AppShell>
       </body>
     </html>
