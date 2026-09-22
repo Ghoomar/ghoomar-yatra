@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { formatINR, getTodayBusinessDate } from '@/lib/utils';
+import { formatINR, getTodayBusinessDate, formatDisplayDate } from '@/lib/utils';
 import {
   TrendingUp,
   Calendar,
@@ -320,7 +320,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
               Consolidated Daily Gross Sales Trend
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Authoritative total Gross Sales across all operational channels for {activeStartDate} through {activeEndDate} (IST)
+              Authoritative total Gross Sales across all operational channels for {formatDisplayDate(activeStartDate, 'short')} through {formatDisplayDate(activeEndDate, 'short')} (IST)
             </CardDescription>
           </div>
 

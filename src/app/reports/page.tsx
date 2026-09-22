@@ -56,6 +56,8 @@ export default function ReportsPage() {
   const [activeDrilldown, setActiveDrilldown] = useState<DrilldownType>(null);
   // Expand Gate detailed analytics in Tab 1
   const [showGateDetails, setShowGateDetails] = useState(false);
+  // Expand full executive narrative in Daily Operations Summary
+  const [showFullExecutiveSummary, setShowFullExecutiveSummary] = useState(false);
 
   // Authoritative datasets
   const [dailyData, setDailyData] = useState<any>(null);
@@ -403,18 +405,12 @@ export default function ReportsPage() {
   const executiveBrief = useMemo(() => {
     const lines: string[] = [];
 
-    // Date formatting
-    const [y, m, d] = businessDate.split('-').map(Number);
-    const dateObj = new Date(Date.UTC(y, m - 1, d));
-    const formattedDate = dateObj.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+    // Date formatting (prominent long format: e.g. 20 September 2026)
+    const formattedDate = formatDisplayDate(businessDate, 'long');
 
     // Zero-data case: neither gate nor sales logged
     if (gateFootfall === 0 && consolidatedGross === 0) {
-      return `On ${formattedDate}, no resort gate footfall or Petpooja sales were logged in the system.`;
+      return `On ${formattedDate}, no resort gate footfall or restaurant sales were logged in the system.`;
     }
 
     // Gate & Traffic sentence
@@ -470,11 +466,11 @@ export default function ReportsPage() {
     const actParts: string[] = [];
     if (camelData.totalQty > 0) actParts.push(`Camel Ride: ${camelData.totalQty} rides (${formatINR(camelData.totalGross)})`);
     if (gamesData.totalQty > 0) actParts.push(`Skill Games: ${gamesData.totalQty} tickets (${formatINR(gamesData.totalGross)})`);
-    if (mehendiData.totalQty > 0) actParts.push(`Mehendi: ${mehendiData.totalQty} services (${formatINR(mehendiData.totalGross)})`);
+    if (mehendiData.totalQty > 0) actParts.push(`Mehendi: ${mehendiData.totalQty} clients (${formatINR(mehendiData.totalGross)})`);
     if (champiData.totalQty > 0) actParts.push(`Champi: ${champiData.totalQty} sessions (${formatINR(champiData.totalGross)})`);
 
     if (actParts.length > 0) {
-      lines.push(`Village activity sales logged via Petpooja: ${actParts.join('; ')}.`);
+      lines.push(`Village activity sales: ${actParts.join('; ')}.`);
     }
 
     // Consolidated Total & Pacing sentence
@@ -488,12 +484,12 @@ export default function ReportsPage() {
       const dodGrossPct = (((consolidatedGross - prevGross) / prevGross) * 100).toFixed(1);
       const dodGrossDir = Number(dodGrossPct) >= 0 ? `+${dodGrossPct}%` : `${dodGrossPct}%`;
 
-      let compStr = `Day-over-day gross sales moved ${dodGrossDir} relative to ${prevDayDate} (${formatINR(prevGross)}).`;
+      let compStr = `Day-over-day gross sales moved ${dodGrossDir} relative to ${formatDisplayDate(prevDayDate, 'short')} (${formatINR(prevGross)}).`;
       if (prevDayGate && prevDayGate.total_visitors > 0 && gateFootfall > 0) {
         const pdFootfall = prevDayGate.total_visitors;
         const dodFootPct = (((gateFootfall - pdFootfall) / pdFootfall) * 100).toFixed(1);
         const dodFootDir = Number(dodFootPct) >= 0 ? `+${dodFootPct}%` : `${dodFootPct}%`;
-        compStr += ` Gate footfall moved ${dodFootDir} compared to ${prevDayDate} (${formatNumber(pdFootfall)} visitors).`;
+        compStr += ` Gate footfall moved ${dodFootDir} compared to ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} visitors).`;
       }
       lines.push(compStr);
     }
@@ -502,7 +498,7 @@ export default function ReportsPage() {
       const pwGross = Number(prevWeekSummary.gross_sales);
       const wowGrossPct = (((consolidatedGross - pwGross) / pwGross) * 100).toFixed(1);
       const wowGrossDir = Number(wowGrossPct) >= 0 ? `+${wowGrossPct}%` : `${wowGrossPct}%`;
-      lines.push(`Week-over-week gross sales moved ${wowGrossDir} compared to same weekday on ${prevWeekDate} (${formatINR(pwGross)}).`);
+      lines.push(`Week-over-week gross sales moved ${wowGrossDir} compared to same weekday on ${formatDisplayDate(prevWeekDate, 'short')} (${formatINR(pwGross)}).`);
     }
 
     return lines.join(' ');
@@ -541,6 +537,51 @@ export default function ReportsPage() {
     prevWeekDate,
   ]);
 
+  // Dynamic compact highlight metrics for Daily Operations Summary
+  const executiveHighlights = useMemo(() => {
+    const items: { label: string; value: string; sub?: string }[] = [];
+    if (gateFootfall > 0) {
+      items.push({ label: 'Visitors', value: formatNumber(gateFootfall), sub: 'Gate footfall' });
+    }
+    if (dineInPax > 0) {
+      items.push({ label: 'Restaurant', value: `${formatNumber(dineInPax)} Covers`, sub: `${dineInBillsCount} bills` });
+    }
+    if (dinerConversionRate !== null && dinerConversionRate > 0) {
+      items.push({ label: 'Conversion', value: `${dinerConversionRate.toFixed(1)}%`, sub: 'PAX ÷ footfall' });
+    }
+    if (spendPerDiner !== null && spendPerDiner > 0) {
+      items.push({ label: 'APC', value: formatINR(spendPerDiner), sub: 'Spend / cover' });
+    }
+    if (peakVisitorHour?.label) {
+      items.push({ label: 'Peak Period', value: peakVisitorHour.label, sub: `${peakVisitorHour.count || 0} entries` });
+    }
+    if (dineInNet > 0) {
+      items.push({ label: 'Restaurant Net', value: formatINR(dineInNet, true), sub: 'Net Sales' });
+    }
+    if (snacksGross > 0) {
+      items.push({ label: 'Snacks Stall', value: formatINR(snacksGross, true), sub: `${snacksBillCount} orders` });
+    }
+    const actTotal = camelData.totalGross + gamesData.totalGross + mehendiData.totalGross + champiData.totalGross;
+    if (actTotal > 0) {
+      items.push({ label: 'Attractions', value: formatINR(actTotal, true), sub: 'Gross Sales' });
+    }
+    return items;
+  }, [
+    gateFootfall,
+    dineInPax,
+    dineInBillsCount,
+    dinerConversionRate,
+    spendPerDiner,
+    peakVisitorHour,
+    dineInNet,
+    snacksGross,
+    snacksBillCount,
+    camelData,
+    gamesData,
+    mehendiData,
+    champiData,
+  ]);
+
   const toggleDrilldown = (type: DrilldownType) => {
     setActiveDrilldown((curr) => (curr === type ? null : type));
   };
@@ -555,7 +596,7 @@ export default function ReportsPage() {
             Management Reports &amp; Intelligence
           </h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
-            Unified executive operational and revenue dashboard backed by single sources of truth.
+            Unified operational and revenue performance dashboard across all estate channels.
           </p>
         </div>
 
@@ -629,40 +670,79 @@ export default function ReportsPage() {
               <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-900">
                 <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
                 <span>
-                  <strong className="font-semibold">Reconciled:</strong> Consolidated Gross Sales ({formatINR(consolidatedGross)}) matches Orders Master granular revenue streams across all channels for {formatDisplayDate(businessDate, 'short')}.
+                  <strong className="font-semibold">Reconciled:</strong> Consolidated Gross Sales ({formatINR(consolidatedGross)}) matches all granular sales channels for {formatDisplayDate(businessDate, 'short')}.
                 </span>
               </div>
             ) : (
               <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900">
                 <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-amber-900">Petpooja Reconciliation Notice</div>
+                  <div className="font-bold text-amber-900">Sales Reconciliation Notice</div>
                   <div className="text-amber-800 mt-0.5">
-                    Consolidated Gross ({formatINR(consolidatedGross)}) differs from granular Orders Master total ({formatINR(granularStreamsGrossSum)}) by <strong className="font-mono">{formatINR(reconciliationDifference)}</strong>. Review Petpooja import batches in Daily Sales.
+                    Consolidated Gross ({formatINR(consolidatedGross)}) differs from granular channel bills total ({formatINR(granularStreamsGrossSum)}) by <strong className="font-mono">{formatINR(reconciliationDifference)}</strong>. Review Daily Sales batches.
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Section 3: Dynamic Factual Executive Brief */}
+          {/* Section 3: Dynamic Management Operations Summary */}
           <Card className="border-[#E7E2D8] shadow-xs bg-white">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-[#6B162E]" />
-                Daily Operations &amp; Revenue Executive Brief ({formatDisplayDate(businessDate, 'short')})
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-[#6B162E]" />
+                  Daily Operations Summary
+                </CardTitle>
+                <Badge variant="outline" className="text-[10px] font-medium border-[#E7E2D8]">
+                  {formatDisplayDate(businessDate, 'short')}
+                </Badge>
+              </div>
               <CardDescription className="text-xs text-stone-500">
-                Authoritative cross-system operational and financial summary
+                Unified operational and financial performance overview
               </CardDescription>
             </CardHeader>
-            <CardContent className="text-xs sm:text-sm text-stone-800 leading-relaxed font-normal pt-1">
+            <CardContent className="pt-1">
               {loading ? (
                 <div className="py-4 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Generating executive brief...
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading operational summary...
                 </div>
               ) : (
-                <p className="whitespace-pre-line">{executiveBrief}</p>
+                <div className="space-y-3">
+                  {/* Dynamic compact highlight metrics row */}
+                  {executiveHighlights.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                      {executiveHighlights.map((item, idx) => (
+                        <div key={idx} className="p-2.5 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
+                          <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{item.label}</div>
+                          <div className="text-sm sm:text-base font-bold text-stone-900 tabular-nums mt-0.5">{item.value}</div>
+                          {item.sub && <div className="text-[10px] text-stone-400 mt-0.5 truncate">{item.sub}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Expandable narrative toggle */}
+                  <div className="flex items-center justify-between pt-2 border-t border-[#F0ECE3]">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullExecutiveSummary(!showFullExecutiveSummary)}
+                      className="text-xs font-semibold text-[#6B162E] hover:text-[#521123] flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <span>{showFullExecutiveSummary ? 'Hide summary' : 'View full summary'}</span>
+                      {showFullExecutiveSummary ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
+                    <span className="text-[11px] text-stone-400 hidden sm:inline">
+                      Factual cross-system daily analysis
+                    </span>
+                  </div>
+
+                  {showFullExecutiveSummary && (
+                    <div className="text-xs sm:text-sm text-stone-700 leading-relaxed font-normal bg-[#FAF8F5] p-3.5 rounded-xl border border-[#E7E2D8] animate-in fade-in duration-200">
+                      <p className="whitespace-pre-line">{executiveBrief}</p>
+                    </div>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -695,13 +775,13 @@ export default function ReportsPage() {
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Gate Footfall</div>
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Total persons' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Total persons entered' : 'No gate data'}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-[#6B162E] font-semibold uppercase tracking-wider">Restaurant PAX</div>
                   <div className="text-xl font-bold text-[#6B162E] tabular-nums mt-0.5">{dineInPax > 0 ? formatNumber(dineInPax) : '—'}</div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">{dineInPax > 0 ? 'Dine-In covers' : 'No covers'}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{dineInPax > 0 ? 'Dine-in covers' : 'No covers'}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
@@ -709,7 +789,7 @@ export default function ReportsPage() {
                   <div className="text-xl font-bold text-emerald-700 tabular-nums mt-0.5">
                     {dinerConversionRate !== null ? `${dinerConversionRate.toFixed(1)}%` : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">{dinerConversionRate !== null ? 'PAX ÷ Footfall' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{dinerConversionRate !== null ? 'PAX ÷ footfall' : 'No gate data'}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
@@ -717,15 +797,15 @@ export default function ReportsPage() {
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {spendPerGateVisitor !== null ? formatINR(spendPerGateVisitor) : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Dine-In ÷ Footfall' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Net sales ÷ visitor' : 'No gate data'}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Spend / Diner (APC)</div>
+                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Spend / Diner</div>
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInPax > 0 ? 'Avg per cover' : 'No covers'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInPax > 0 ? 'Average per cover' : 'No covers'}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
@@ -733,7 +813,7 @@ export default function ReportsPage() {
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {paxPerBill !== null ? `${paxPerBill.toFixed(1)}` : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInBillsCount > 0 ? 'PAX/bill' : 'No bills'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInBillsCount > 0 ? 'Covers per bill' : 'No bills'}</div>
                 </div>
               </div>
 
@@ -780,7 +860,7 @@ export default function ReportsPage() {
                     variant={activeDrilldown === 'restaurant' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    {activeDrilldown === 'restaurant' ? 'Active' : 'View Details'}
+                    View Details
                   </Badge>
                 </div>
                 <div className="mt-2">
@@ -790,11 +870,11 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                  <span>Gross: {formatINR(dineInGross)}</span>
+                  <span>Gross Sales {formatINR(dineInGross)}</span>
                   <span className="font-medium text-stone-700">{dineInBillsCount} Dine-In Bills</span>
                 </div>
                 <div className="text-[10px] text-stone-500 mt-0.5">
-                  {dineInPax} Covers • APC: {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
+                  {dineInPax} Covers • APC {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
                 </div>
               </div>
 
@@ -816,7 +896,7 @@ export default function ReportsPage() {
                     variant={activeDrilldown === 'snacks' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    {activeDrilldown === 'snacks' ? 'Active' : 'View Details'}
+                    View Details
                   </Badge>
                 </div>
                 <div className="mt-2">
@@ -826,11 +906,11 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                  <span>Net: {formatINR(snacksNet)}</span>
+                  <span>Net Sales {formatINR(snacksNet)}</span>
                   <span className="font-medium text-stone-700">{snacksBillCount} Orders</span>
                 </div>
                 <div className="text-[10px] text-stone-500 mt-0.5">
-                  ABV: {snacksAbv !== null ? formatINR(snacksAbv) : '—'} • Peak 8–10 PM
+                  ABV {snacksAbv !== null ? formatINR(snacksAbv) : '—'} • Peak 8–10 PM
                 </div>
               </div>
 
@@ -852,7 +932,7 @@ export default function ReportsPage() {
                     variant={activeDrilldown === 'camel' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    {activeDrilldown === 'camel' ? 'Active' : 'View Details'}
+                    View Details
                   </Badge>
                 </div>
                 {camelData.totalQty > 0 ? (
@@ -907,7 +987,7 @@ export default function ReportsPage() {
                     variant={activeDrilldown === 'games' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    {activeDrilldown === 'games' ? 'Active' : 'View Details'}
+                    View Details
                   </Badge>
                 </div>
                 {gamesData.totalQty > 0 ? (
@@ -962,7 +1042,7 @@ export default function ReportsPage() {
                     variant={activeDrilldown === 'mehendi' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    {activeDrilldown === 'mehendi' ? 'Active' : 'View Details'}
+                    View Details
                   </Badge>
                 </div>
                 {mehendiData.totalQty > 0 ? (
@@ -1017,7 +1097,7 @@ export default function ReportsPage() {
                     variant={activeDrilldown === 'champi' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    {activeDrilldown === 'champi' ? 'Active' : 'View Details'}
+                    View Details
                   </Badge>
                 </div>
                 {champiData.totalQty > 0 ? (
@@ -1062,12 +1142,12 @@ export default function ReportsPage() {
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-xs font-bold text-stone-800 tracking-tight">Daily Expenses</span>
                   <span className="text-[10px] font-semibold text-[#6B162E] flex items-center gap-0.5">
-                    Daily P&amp;L <ExternalLink className="h-2.5 w-2.5" />
+                    View P&amp;L →
                   </span>
                 </div>
                 <div className="mt-2">
                   <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Total Expenses</div>
-                  <div className={`text-xl font-bold tracking-tight mt-0.5 tabular-nums ${hasExpensesLogged ? 'text-rose-700' : 'text-stone-400'}`}>
+                  <div className={`text-xl font-bold tracking-tight mt-0.5 tabular-nums ${hasExpensesLogged ? 'text-[#6B162E]' : 'text-stone-400'}`}>
                     {hasExpensesLogged ? formatINR(totalOperationalExpenses) : '—'}
                   </div>
                 </div>
@@ -1081,10 +1161,11 @@ export default function ReportsPage() {
                     <span>No logged expenses</span>
                   )}
                 </div>
-                <div className="text-[10px] text-[#6B162E] font-medium mt-0.5 flex items-center gap-1">
-                  {hasExpensesLogged
-                    ? `Utilities: ${formatINR(totalUtilities)} • View P&L →`
-                    : 'Click to view full P&L Ledger →'}
+                <div className="text-[10px] text-stone-500 font-medium mt-0.5 flex items-center justify-between">
+                  <span>{hasExpensesLogged ? `Utilities: ${formatINR(totalUtilities)}` : 'Click to view full P&L'}</span>
+                  <span className="text-[#6B162E] font-semibold flex items-center gap-0.5">
+                    View P&amp;L <ExternalLink className="h-2.5 w-2.5" />
+                  </span>
                 </div>
               </Link>
             </div>
@@ -1092,23 +1173,28 @@ export default function ReportsPage() {
 
           {/* Section 6: Granular Drill-Down Views (Expandable per Clicked Card) */}
           {activeDrilldown && (
-            <div className="border border-[#E7E2D8] rounded-xl p-4 bg-white shadow-xs space-y-4 animate-in fade-in duration-200">
+            <div className="border border-[#E7E2D8] rounded-xl p-4 sm:p-5 bg-white shadow-xs space-y-4 animate-in fade-in duration-200">
               <div className="flex items-center justify-between pb-3 border-b border-[#E7E2D8]">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-stone-900 text-sm">
-                    {activeDrilldown === 'restaurant' && 'Restaurant Dine-In POS Analytics & All Bills'}
-                    {activeDrilldown === 'snacks' && 'Snacks Stall 5 PM–11 PM Breakdown & Top Items'}
-                    {activeDrilldown === 'camel' && 'Camel Ride Activity Hourly Breakdown'}
-                    {activeDrilldown === 'games' && 'Skill Games Stall Activity Hourly Breakdown'}
-                    {activeDrilldown === 'mehendi' && 'Mehendi Activity Hourly Breakdown'}
-                    {activeDrilldown === 'champi' && 'Champi Maalish Activity Hourly Breakdown'}
+                    {activeDrilldown === 'restaurant' && 'Restaurant Sales Analytics'}
+                    {activeDrilldown === 'snacks' && 'Snacks Stall — Hourly Sales & Top Items'}
+                    {activeDrilldown === 'camel' && 'Camel Ride — Hourly Activity'}
+                    {activeDrilldown === 'games' && 'Skill Games — Hourly Activity'}
+                    {activeDrilldown === 'mehendi' && 'Mehendi — Hourly Activity'}
+                    {activeDrilldown === 'champi' && 'Champi Maalish — Hourly Activity'}
                   </span>
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-[10px] border-[#E7E2D8]">
                     {formatDisplayDate(businessDate, 'short')}
                   </Badge>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setActiveDrilldown(null)} className="h-7 text-xs">
-                  Close Details
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveDrilldown(null)}
+                  className="h-7 text-xs rounded-lg border-[#E7E2D8]"
+                >
+                  Close
                 </Button>
               </div>
 
@@ -1126,43 +1212,82 @@ export default function ReportsPage() {
               {/* 2. SNACKS STALL DRILL-DOWN */}
               {activeDrilldown === 'snacks' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Hourly timeline 5 PM - 11 PM */}
-                    <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#E7E2D8]">
-                      <h4 className="text-xs font-bold text-stone-900 mb-2.5 flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-[#D97706]" />
-                        Hourly Sales Breakdown (5 PM – 11 PM)
-                      </h4>
-                      <div className="space-y-2">
-                        {snacksHourly.map((h) => {
-                          const maxHourlyGross = Math.max(...snacksHourly.map((x) => x.gross), 100);
-                          const pct = (h.gross / maxHourlyGross) * 100;
-                          return (
-                            <div key={h.hour} className="space-y-0.5">
-                              <div className="flex justify-between text-xs font-mono">
-                                <span className="text-stone-600 font-sans">{h.label}</span>
-                                <span className="font-bold text-stone-900">
-                                  {formatINR(h.gross)}{' '}
-                                  <span className="text-stone-400 font-normal">({h.count} orders)</span>
-                                </span>
-                              </div>
-                              <div className="w-full bg-[#E7E2D8] h-1.5 rounded-full overflow-hidden">
-                                <div className="bg-[#D97706] h-full rounded-full" style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          );
-                        })}
+                  {/* Exactly 3 strong summary KPIs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
+                    <div>
+                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">ORDERS</div>
+                      <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">{snacksBillCount}</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">Snack stall orders</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">GROSS SALES</div>
+                      <div className="text-xl sm:text-2xl font-bold text-[#6B162E] mt-0.5 tabular-nums">{formatINR(snacksGross)}</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">Net Sales: {formatINR(snacksNet)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">AVERAGE BILL</div>
+                      <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">{snacksAbv !== null ? formatINR(snacksAbv) : '—'}</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">Average bill value</div>
+                    </div>
+                  </div>
+
+                  {/* Two Column Section: Hourly Sales & Top Street Food & Snack Items */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1">
+                    {/* Hourly Sales Horizontal Bar Chart */}
+                    <div className="p-3.5 rounded-xl border border-[#E7E2D8] bg-[#FAF8F5]/60">
+                      <div className="flex items-center justify-between pb-2 border-b border-[#E7E2D8] mb-3">
+                        <h4 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-[#D97706]" />
+                          Hourly Sales
+                        </h4>
+                        <span className="text-[10px] text-stone-400">Evening snack service</span>
                       </div>
+
+                      {snacksHourly.every((h) => h.gross === 0 && h.count === 0) ? (
+                        <div className="py-8 text-center text-stone-400 text-xs">No snack sales recorded for this date.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(() => {
+                            const maxHourlyGross = Math.max(...snacksHourly.map((x) => x.gross), 1);
+                            return snacksHourly
+                              .filter((h) => h.count > 0 || h.gross > 0)
+                              .map((h) => {
+                                const pct = Math.max((h.gross / maxHourlyGross) * 100, 3);
+                                return (
+                                  <div key={h.hour} className="flex items-center gap-2 sm:gap-3 py-1">
+                                    <span className="w-16 sm:w-20 text-xs font-medium text-stone-600 shrink-0">{h.label}</span>
+                                    <div className="flex-1 bg-[#E7E2D8] h-3 rounded-full overflow-hidden">
+                                      <div
+                                        className="bg-amber-500 h-full rounded-full transition-all duration-300"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="w-16 sm:w-20 text-right text-xs font-mono font-bold text-stone-900 tabular-nums shrink-0">
+                                      {formatINR(h.gross)}
+                                    </span>
+                                    <span className="w-16 sm:w-20 text-right text-[11px] text-stone-500 shrink-0">
+                                      {h.count} {h.count === 1 ? 'order' : 'orders'}
+                                    </span>
+                                  </div>
+                                );
+                              });
+                          })()}
+                        </div>
+                      )}
                     </div>
 
-                    {/* Top Snacks Items */}
-                    <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#E7E2D8]">
-                      <h4 className="text-xs font-bold text-stone-900 mb-2.5 flex items-center gap-1.5">
-                        <UtensilsCrossed className="h-3.5 w-3.5 text-[#D97706]" />
-                        Top Street Food &amp; Snack Items
-                      </h4>
+                    {/* Top Street Food & Snack Items */}
+                    <div className="p-3.5 rounded-xl border border-[#E7E2D8] bg-[#FAF8F5]/60">
+                      <div className="flex items-center justify-between pb-2 border-b border-[#E7E2D8] mb-3">
+                        <h4 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                          <UtensilsCrossed className="h-3.5 w-3.5 text-[#D97706]" />
+                          Top Street Food &amp; Snack Items
+                        </h4>
+                        <span className="text-[10px] text-stone-400">By units sold</span>
+                      </div>
+
                       {snacksTopItems.length === 0 ? (
-                        <div className="py-6 text-center text-stone-400 text-xs">No snack items logged for this date.</div>
+                        <div className="py-8 text-center text-stone-400 text-xs">No snack items logged for this date.</div>
                       ) : (
                         <table className="w-full text-left text-xs">
                           <thead>
@@ -1175,14 +1300,14 @@ export default function ReportsPage() {
                           <tbody className="divide-y divide-[#F0ECE3]">
                             {snacksTopItems.map((item, idx) => (
                               <tr key={item.name} className="hover:bg-white/80">
-                                <td className="py-1.5 font-medium text-stone-900 flex items-center gap-1.5">
+                                <td className="py-2 font-medium text-stone-900 flex items-center gap-1.5">
                                   <span className="w-4 h-4 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-[9px] font-bold">
                                     {idx + 1}
                                   </span>
                                   {item.name}
                                 </td>
-                                <td className="py-1.5 text-center font-bold text-stone-700">{item.qty}</td>
-                                <td className="py-1.5 text-right font-mono font-bold text-[#6B162E]">{formatINR(item.net)}</td>
+                                <td className="py-2 text-center font-bold text-stone-700">{item.qty}</td>
+                                <td className="py-2 text-right font-mono font-bold text-[#6B162E]">{formatINR(item.net)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1195,65 +1320,143 @@ export default function ReportsPage() {
 
               {/* 3, 4, 5, 6. ATTRACTION HOURLY DRILL-DOWNS */}
               {['camel', 'games', 'mehendi', 'champi'].includes(activeDrilldown) && (() => {
-                const act =
-                  activeDrilldown === 'camel'
-                    ? camelData
-                    : activeDrilldown === 'games'
-                    ? gamesData
-                    : activeDrilldown === 'mehendi'
-                    ? mehendiData
-                    : champiData;
+                const isCamel = activeDrilldown === 'camel';
+                const isGames = activeDrilldown === 'games';
+                const isMehendi = activeDrilldown === 'mehendi';
+
+                const act = isCamel
+                  ? camelData
+                  : isGames
+                  ? gamesData
+                  : isMehendi
+                  ? mehendiData
+                  : champiData;
+
+                const unitLabel = isCamel
+                  ? 'Rides'
+                  : isGames
+                  ? 'Tickets'
+                  : isMehendi
+                  ? 'Clients'
+                  : 'Sessions';
+
+                const unitSingular = isCamel
+                  ? 'ride'
+                  : isGames
+                  ? 'ticket'
+                  : isMehendi
+                  ? 'client'
+                  : 'session';
+
+                const hasActivity = act.totalQty > 0;
 
                 return (
-                  <div className="bg-[#FAF8F5] p-4 rounded-xl border border-[#E7E2D8] space-y-3">
-                    <div className="flex flex-wrap items-center justify-between text-xs pb-2.5 border-b border-[#E7E2D8] gap-3">
+                  <div className="space-y-4">
+                    {/* Exactly 3 strong summary KPIs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
                       <div>
-                        <span className="text-stone-500">Total Units / Tickets:</span>{' '}
-                        <strong className="text-stone-900 font-bold">{act.totalQty}</strong>
+                        <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">
+                          {hasActivity ? unitLabel.toUpperCase() : 'ACTIVITY STATUS'}
+                        </div>
+                        <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">
+                          {hasActivity ? act.totalQty : 'No Activity'}
+                        </div>
+                        <div className="text-[10px] text-stone-400 mt-0.5">
+                          {hasActivity ? `Total ${unitLabel.toLowerCase()}` : 'No transactions recorded'}
+                        </div>
                       </div>
                       <div>
-                        <span className="text-stone-500">Average Price / Ticket:</span>{' '}
-                        <strong className="text-stone-900 font-bold">{act.abv !== null ? formatINR(act.abv) : '—'}</strong>
+                        <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">
+                          {hasActivity ? 'GROSS SALES' : unitLabel.toUpperCase()}
+                        </div>
+                        <div className="text-xl sm:text-2xl font-bold text-[#6B162E] mt-0.5 tabular-nums">
+                          {hasActivity ? formatINR(act.totalGross) : '0'}
+                        </div>
+                        <div className="text-[10px] text-stone-400 mt-0.5">
+                          {hasActivity ? 'Activity sales' : `Recorded ${unitLabel.toLowerCase()}`}
+                        </div>
                       </div>
                       <div>
-                        <span className="text-stone-500">Total Gross Revenue:</span>{' '}
-                        <strong className="text-[#6B162E] font-bold text-sm">{formatINR(act.totalGross)}</strong>
+                        <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">
+                          AVERAGE PRICE
+                        </div>
+                        <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">
+                          {hasActivity && act.abv !== null ? formatINR(act.abv) : '—'}
+                        </div>
+                        <div className="text-[10px] text-stone-400 mt-0.5">
+                          {hasActivity ? `Per ${unitSingular} rate` : 'Rate not available'}
+                        </div>
                       </div>
                     </div>
 
-                    {act.hourlyData.length === 0 || act.totalQty === 0 ? (
-                      <div className="py-8 text-center text-stone-400 text-xs">
-                        No activity transactions logged in Petpooja for this date.
+                    {/* Horizontal Bar Chart for Hourly Activity */}
+                    <div className="p-3.5 rounded-xl border border-[#E7E2D8] bg-[#FAF8F5]/60">
+                      <div className="flex items-center justify-between pb-2 border-b border-[#E7E2D8] mb-3">
+                        <h4 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-[#6B162E]" />
+                          Hourly Activity
+                        </h4>
+                        <span className="text-[10px] text-stone-400">
+                          {unitLabel} and revenue distribution
+                        </span>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <h5 className="text-xs font-semibold text-stone-700">Hourly Distribution (Petpooja Hourly Items)</h5>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-                          {act.hourlyData.map((pt) => (
-                            <div key={pt.hour} className="p-2.5 bg-white rounded-lg border border-[#E7E2D8] text-center">
-                              <div className="text-[10px] text-stone-500 font-medium">{pt.label}</div>
-                              <div className="text-sm font-bold text-stone-900 mt-0.5">{pt.qty} sold</div>
-                              <div className="text-[10px] text-[#6B162E] font-mono font-semibold">{formatINR(pt.amount)}</div>
-                            </div>
-                          ))}
+
+                      {!hasActivity || act.hourlyData.length === 0 ? (
+                        <div className="py-8 text-center text-stone-400 text-xs">
+                          No activity recorded for {formatDisplayDate(businessDate, 'short')}.
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="space-y-2">
+                          {(() => {
+                            const maxGross = Math.max(...act.hourlyData.map((x) => x.amount), 1);
+                            return act.hourlyData.map((pt) => {
+                              const pct = Math.max((pt.amount / maxGross) * 100, 3);
+                              const hourText =
+                                pt.hour === 1
+                                  ? '01:00 AM (Petpooja posting time)'
+                                  : pt.label;
+
+                              return (
+                                <div key={pt.hour} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 py-1.5 border-b border-[#F0ECE3] last:border-b-0">
+                                  <div className="w-28 sm:w-48 text-xs font-semibold text-stone-700 shrink-0">
+                                    {hourText}
+                                  </div>
+                                  <div className="flex-1 flex items-center gap-3">
+                                    <div className="flex-1 bg-[#E7E2D8] h-3 rounded-full overflow-hidden">
+                                      <div
+                                        className="bg-amber-500 h-full rounded-full transition-all duration-300"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <div className="w-16 sm:w-20 text-right text-xs font-medium text-stone-600 shrink-0">
+                                      {pt.qty} {pt.qty === 1 ? unitSingular : unitLabel.toLowerCase()}
+                                    </div>
+                                    <div className="w-20 sm:w-24 text-right text-xs font-mono font-bold text-[#6B162E] tabular-nums shrink-0">
+                                      {formatINR(pt.amount)}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
             </div>
           )}
 
-          {/* Section 7: Daily Operating Surplus Flash Report */}
+          {/* Section 7: Daily Operating Surplus */}
           <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
                 <CardTitle className="text-sm font-bold text-stone-900">
-                  Daily Operating Surplus Flash Report
+                  Daily Operating Surplus
                 </CardTitle>
                 <CardDescription className="text-xs text-stone-500">
-                  Financial reconciliation of revenue against store consumption and operating expenses for {formatDisplayDate(businessDate, 'short')}
+                  Financial reconciliation of Net Sales against store consumption and operating expenses for {formatDisplayDate(businessDate, 'short')}
                 </CardDescription>
               </div>
               <Button
@@ -1383,7 +1586,7 @@ export default function ReportsPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Vendor Accounts Summary</CardTitle>
-              <CardDescription className="text-stone-500">Authoritative balances derived from invoices and payment allocations</CardDescription>
+              <CardDescription className="text-stone-500">Current balances derived from invoices and payment allocations</CardDescription>
             </div>
             <Button
               variant="outline"
