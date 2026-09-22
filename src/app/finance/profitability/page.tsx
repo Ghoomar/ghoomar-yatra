@@ -49,14 +49,31 @@ export default function ProfitabilityPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch sales for business date
-      const { data: sale } = await supabase
-        .from('sales_reports')
-        .select('*')
-        .eq('business_date', businessDate)
-        .maybeSingle();
+      // 1. Fetch authoritative sales for business date (Petpooja Executive Summary / Daily Sales Summary)
+      const [{ data: execSummary }, { data: salesSummary }, { data: legacySale }] = await Promise.all([
+        supabase.from('sales_executive_summaries').select('*').eq('business_date', businessDate).maybeSingle(),
+        supabase.from('daily_sales_summary').select('*').eq('business_date', businessDate).maybeSingle(),
+        supabase.from('sales_reports').select('*').eq('business_date', businessDate).maybeSingle(),
+      ]);
 
-      setSalesReport(sale || null);
+      const isReported = Boolean(execSummary || salesSummary?.is_reported || legacySale?.is_reported);
+      const grossSales = Number(execSummary?.grand_total ?? salesSummary?.gross_sales ?? legacySale?.gross_sales ?? 0);
+      const netSales = Number(execSummary?.net_sales ?? salesSummary?.net_sales ?? legacySale?.net_sales ?? 0);
+      const discounts = Number(execSummary?.discount ?? salesSummary?.discounts ?? legacySale?.discounts ?? 0);
+      const taxAmount = Number(execSummary?.total_tax ?? salesSummary?.tax_amount ?? legacySale?.tax_amount ?? 0);
+      const billCount = Number(execSummary?.successful_bills_count ?? salesSummary?.bill_count ?? 0);
+      const customerCount = Number(salesSummary?.customer_count ?? 0);
+
+      setSalesReport({
+        is_reported: isReported,
+        gross_sales: grossSales,
+        net_sales: netSales,
+        discounts: discounts,
+        tax_amount: taxAmount,
+        bill_count: billCount,
+        customer_count: customerCount,
+        source: execSummary ? 'Petpooja Executive Summary' : salesSummary ? 'Petpooja Daily Summary' : 'Manual Report',
+      });
 
       // 2. Fetch stock movements for this date (Material Consumption & Fuel Issues)
       const { data: movs } = await supabase

@@ -44,6 +44,9 @@ interface HourlyActivityPoint {
   net: number;
 }
 
+const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
+const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
+
 export default function ReportsPage() {
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
@@ -63,6 +66,8 @@ export default function ReportsPage() {
   const [gateSummary, setGateSummary] = useState<any>(null);
   const [inventoryMovements, setInventoryMovements] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [directExpenses, setDirectExpenses] = useState<number>(0);
+  const [electricityCost, setElectricityCost] = useState<number>(0);
 
   // Historical comparative data (DoD and WoW)
   const [prevDaySummary, setPrevDaySummary] = useState<any>(null);
@@ -102,6 +107,8 @@ export default function ReportsPage() {
         prevWeekSumRes,
         prevDayGateRes,
         prevWeekGateRes,
+        expRes,
+        elecRes,
       ] = await Promise.all([
         supabase.from('daily_financial_summary').select('*').eq('business_date', businessDate).maybeSingle(),
         supabase.from('daily_sales_summary').select('*').eq('business_date', businessDate).maybeSingle(),
@@ -112,7 +119,7 @@ export default function ReportsPage() {
         supabase
           .from('stock_movements')
           .select(`
-            id, created_at, movement_type, purpose, quantity, unit_cost, total_value,
+            id, item_id, created_at, movement_type, purpose, quantity, unit_cost, total_value,
             item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)),
             department:departments(name),
             responsible_person:employees(name)
@@ -124,6 +131,8 @@ export default function ReportsPage() {
         supabase.from('daily_sales_summary').select('*').eq('business_date', prevWeekDate).maybeSingle(),
         fetch(`/api/operations/gate/analytics?date=${prevDayDate}`),
         fetch(`/api/operations/gate/analytics?date=${prevWeekDate}`),
+        supabase.from('expenses').select('amount').eq('business_date', businessDate),
+        supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
       ]);
 
       setDailyData(dFinRes.data || null);
@@ -133,6 +142,12 @@ export default function ReportsPage() {
       setHourlyItems(hourlyRes.data || []);
       setVendors(vSumRes.data || []);
       setInventoryMovements(movsRes.data || []);
+
+      const expTotal = (expRes.data || []).reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+      setDirectExpenses(expTotal);
+
+      const totalKvah = (elecRes.data || []).reduce((s: number, r: any) => s + (Number(r.delta_consumption) || 0), 0);
+      setElectricityCost(totalKvah * 10.00); // authoritative standard ₹10/KVAH rate
 
       if (gateRes.ok) {
         const gateJson = await gateRes.json();
@@ -305,11 +320,12 @@ export default function ReportsPage() {
     const totalNet = matching.reduce((sum, i) => sum + (Number(i.net_sales) || 0), 0);
     const abv = totalQty > 0 ? totalGross / totalQty : null;
 
-    // Hourly map
+    // Hourly map - cover all 24 hours (0..23) so closing/settlement hours (0, 1 AM) and evening hours are fully accounted for
     const hourMap = new Map<number, HourlyActivityPoint>();
-    for (let h = 12; h <= 23; h++) {
+    for (let h = 0; h < 24; h++) {
       const displayH = h % 12 === 0 ? 12 : h % 12;
-      const label = `${displayH}:00 ${h >= 12 ? 'PM' : 'AM'}`;
+      const meridiem = h >= 12 ? 'PM' : 'AM';
+      const label = `${String(displayH).padStart(2, '0')}:00 ${meridiem}`;
       hourMap.set(h, { hour: h, label, qty: 0, amount: 0, net: 0 });
     }
 
@@ -323,7 +339,8 @@ export default function ReportsPage() {
       }
     });
 
-    const hourlyData = Array.from(hourMap.values()).filter((pt) => pt.amount > 0 || (pt.hour >= 17 && pt.hour <= 22));
+    // Display all hour slots where tickets/activities were transacted
+    const hourlyData = Array.from(hourMap.values()).filter((pt) => pt.qty > 0);
 
     return {
       totalQty,
@@ -339,10 +356,37 @@ export default function ReportsPage() {
   const mehendiData = useMemo(() => parseActivityStream('Mehendi'), [hourlyItems]);
   const champiData = useMemo(() => parseActivityStream('Champi'), [hourlyItems]);
 
-  // 6. Expenses (from Daily P&L & store movements)
-  const totalVariableExpenses = Number(dailyData?.variable_expenses || 0);
-  const totalStoreConsumption = Number(dailyData?.total_material_consumption || 0);
-  const totalDailyPnlExpenses = totalVariableExpenses + totalStoreConsumption;
+  // 6. Authoritative Operating Expenses (from Daily P&L sources: expenses vouchers, stock movements, and utilities)
+  const { totalStoreConsumption, totalUtilities } = useMemo(() => {
+    let storeSum = 0;
+    let dieselCost = 0;
+    let lpgCost = 0;
+
+    (inventoryMovements || []).forEach((m: any) => {
+      if (['transfer', 'purchase', 'opening', 'return', 'count_adjustment', 'physical_count_adjustment'].includes(m.movement_type)) {
+        return;
+      }
+      const val = Math.abs(Number(m.total_value)) || 0;
+
+      if (m.item_id === DIESEL_ITEM_ID || m.purpose === 'Generator Fuel') {
+        dieselCost += val;
+      } else if (m.item_id === LPG_ITEM_ID || m.purpose === 'Kitchen Gas') {
+        lpgCost += val;
+      } else {
+        storeSum += val;
+      }
+    });
+
+    const utilsTotal = dieselCost + lpgCost + electricityCost;
+    return {
+      totalStoreConsumption: storeSum,
+      totalUtilities: utilsTotal,
+    };
+  }, [inventoryMovements, electricityCost]);
+
+  const totalDirectVouchers = directExpenses;
+  const totalOperationalExpenses = totalDirectVouchers + totalStoreConsumption + totalUtilities;
+  const hasExpensesLogged = totalOperationalExpenses > 0;
 
   // 7. Internal Reconciliation Check
   // Compares Consolidated Gross against sum of granular Order Types in Orders Master
@@ -891,15 +935,23 @@ export default function ReportsPage() {
                     Daily P&amp;L <ExternalLink className="h-2.5 w-2.5" />
                   </span>
                 </div>
-                <div className="text-lg font-bold text-rose-700 mt-1">
-                  {formatINR(totalDailyPnlExpenses)}
+                <div className={`text-lg font-bold mt-1 ${hasExpensesLogged ? 'text-rose-700' : 'text-stone-400'}`}>
+                  {hasExpensesLogged ? formatINR(totalOperationalExpenses) : '—'}
                 </div>
                 <div className="text-[10px] text-stone-500 mt-1 flex justify-between">
-                  <span>Direct: {formatINR(totalVariableExpenses)}</span>
-                  <span>Store: {formatINR(totalStoreConsumption)}</span>
+                  {hasExpensesLogged ? (
+                    <>
+                      <span>Direct: {formatINR(totalDirectVouchers)}</span>
+                      <span>Store: {formatINR(totalStoreConsumption)}</span>
+                    </>
+                  ) : (
+                    <span>No logged expenses</span>
+                  )}
                 </div>
                 <div className="text-[10px] text-amber-700 font-medium mt-0.5 flex items-center gap-1">
-                  Click to view full P&amp;L Ledger →
+                  {hasExpensesLogged
+                    ? `Utilities: ${formatINR(totalUtilities)} • View P&L →`
+                    : 'Click to view full P&L Ledger →'}
                 </div>
               </Link>
             </div>
@@ -1096,19 +1148,21 @@ export default function ReportsPage() {
                   <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/60">
                     <div className="text-[11px] text-stone-500 font-medium">Store Consumption</div>
                     <div className="text-lg font-bold text-stone-900 mt-0.5">
-                      {formatINR(totalStoreConsumption)}
+                      {totalStoreConsumption > 0 ? formatINR(totalStoreConsumption) : '—'}
                     </div>
                   </div>
                   <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/60">
-                    <div className="text-[11px] text-stone-500 font-medium">Direct Expenses</div>
+                    <div className="text-[11px] text-stone-500 font-medium">Direct &amp; Utilities</div>
                     <div className="text-lg font-bold text-stone-900 mt-0.5">
-                      {formatINR(totalVariableExpenses)}
+                      {(totalDirectVouchers + totalUtilities) > 0 ? formatINR(totalDirectVouchers + totalUtilities) : '—'}
                     </div>
                   </div>
                   <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200/80">
                     <div className="text-[11px] text-amber-800 font-bold">Gross Operating Surplus</div>
                     <div className="text-lg font-bold text-amber-900 mt-0.5">
-                      {formatINR(Number(dailyData?.gross_operating_surplus || (consolidatedNet - totalDailyPnlExpenses)))}
+                      {hasExpensesLogged || consolidatedNet > 0
+                        ? formatINR(consolidatedNet - totalOperationalExpenses)
+                        : '—'}
                     </div>
                   </div>
                 </div>
