@@ -40,13 +40,19 @@ export function KPICards({
 }: KPICardsProps) {
   const getBadgeClass = (status: BreakEvenStatus | string) => {
     switch (status) {
+      case 'ON TARGET':
       case 'Healthy':
         return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+      case 'BELOW TARGET':
+      case 'AT RISK':
       case 'At Risk':
         return 'bg-amber-100 text-amber-800 border border-amber-200';
+      case 'BELOW BREAK-EVEN':
       case 'Below Break-Even':
-      default:
         return 'bg-rose-100 text-rose-800 border border-rose-200';
+      case 'NOT REPORTED':
+      default:
+        return 'bg-stone-100 text-stone-700 border border-stone-200';
     }
   };
 
@@ -198,7 +204,7 @@ export function KPICards({
         </Card>
       </Link>
 
-      {/* 8. Monthly Position -> /reports */}
+      {/* 8. Monthly Performance -> /reports */}
       <Link
         href="/reports"
         className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
@@ -206,7 +212,7 @@ export function KPICards({
         <Card className="p-4 transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
           <div className="flex items-center justify-between">
             <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              Monthly Position
+              Monthly Performance
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${getBadgeClass(breakEvenPacingStatus)}`}>
@@ -216,7 +222,7 @@ export function KPICards({
           <div className="text-xl sm:text-2xl font-black text-stone-900 mt-1.5 tracking-tight">
             {formatINR(projectedMonthEndRevenue, true)} Proj.
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Vs ₹30L Break-Even</div>
+          <div className="text-[11px] text-stone-500 mt-1">Vs ₹30L Target</div>
         </Card>
       </Link>
     </div>

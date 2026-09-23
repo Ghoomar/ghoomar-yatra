@@ -294,14 +294,19 @@ export default function ProfitabilityPage() {
         </Card>
 
         <Card>
-          <CardDescription>Monthly Position</CardDescription>
+          <CardDescription>Monthly Performance</CardDescription>
           <div className="flex items-center gap-2 mt-1">
-            <Badge variant={breakEven.status === 'Healthy' ? 'success' : breakEven.status === 'At Risk' ? 'warning' : 'danger'} className="text-xs py-1 px-2.5 font-bold">
-              {breakEven.status.toUpperCase()}
+            <Badge variant={
+              breakEven.status === 'ON TARGET' ? 'success' :
+              breakEven.status === 'BELOW TARGET' ? 'info' :
+              breakEven.status === 'AT RISK' ? 'warning' :
+              breakEven.status === 'BELOW BREAK-EVEN' ? 'danger' : 'default'
+            } className="text-xs py-1 px-2.5 font-bold">
+              {breakEven.status}
             </Badge>
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            Projected Month-End: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (Target: {formatINR(planningBreakEven, true)})
+            Projected Month-End Revenue: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (Target: {formatINR(planningBreakEven, true)})
           </div>
         </Card>
       </div>
@@ -449,15 +454,15 @@ export default function ProfitabilityPage() {
         </div>
       </Card>
 
-      {/* Break Even Comparison */}
+      {/* Target & Break-Even Analysis */}
       <Card>
         <CardHeader>
-          <CardTitle>Break-Even</CardTitle>
+          <CardTitle>Target &amp; Break-Even</CardTitle>
         </CardHeader>
         <CardContent className="pt-0 text-xs space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">Monthly Target</div>
+              <div className="text-xs font-bold text-stone-700 uppercase">Monthly Revenue Target</div>
               <div className="text-2xl font-black text-stone-900">{formatINR(planningBreakEven)} / month</div>
               <p className="text-stone-500 text-[11px]">
                 Requires <strong>{formatINR(breakEven.requiredDailyRevenuePlanning)}/day</strong> across the remaining {breakEven.daysRemaining} days.
@@ -465,12 +470,12 @@ export default function ProfitabilityPage() {
             </div>
 
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">Calculated Break-Even</div>
+              <div className="text-xs font-bold text-stone-700 uppercase">Calculated Break-Even Point</div>
               <div className="text-2xl font-black text-amber-700">
                 {formatINR(breakEven.calculatedBreakEven)} / month
               </div>
               <p className="text-stone-500 text-[11px]">
-                Derived from fixed costs and current contribution margin ratio ({cmRatioPercent}%).
+                Fixed overhead coverage based on current operational margin.
               </p>
             </div>
           </div>

@@ -305,7 +305,7 @@ export default function DashboardPage() {
         projectedMonthEndRevenue={breakEven.projectedMonthEndRevenue}
       />
 
-      {/* Row 2: Target Pacing and Monthly Position */}
+      {/* Row 2: Target Pacing and Monthly Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TargetPacing
           dailyTarget={dailyTarget}
@@ -317,11 +317,13 @@ export default function DashboardPage() {
         />
 
         <MonthlyPosition
+          monthlyRevenueTarget={breakEven.monthlyRevenueTarget}
           planningBreakEven={breakEven.planningBreakEven}
           calculatedBreakEven={breakEven.calculatedBreakEven}
           mtdRevenue={breakEven.mtdRevenue}
           daysElapsed={breakEven.daysElapsed}
           daysInMonth={mtdSummary?.days_in_month || daysInMonth}
+          daysReported={mtdSummary?.days_reported}
           averageDailyRevenue={breakEven.averageDailyRevenue}
           requiredDailyRevenue={breakEven.requiredDailyRevenuePlanning}
           projectedMonthEndRevenue={breakEven.projectedMonthEndRevenue}

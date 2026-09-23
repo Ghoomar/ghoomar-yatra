@@ -73,7 +73,7 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
     }
   }
 
-  // 3. Profitability & Break-Even Insight
+  // 3. Profitability & Revenue Target Insight
   if (input.planningBreakEven > 0) {
     if (input.breakEvenProjected < input.planningBreakEven) {
       const gap = Math.round((input.planningBreakEven - input.breakEvenProjected) / 100000);
@@ -81,7 +81,7 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
         id: 'be-below',
         category: 'Profitability',
         type: 'Projection',
-        statement: `At current month-to-date pace, projected month-end revenue is ₹${gap}L below the ₹30 Lakhs break-even point.`,
+        statement: `At current month-to-date pace, projected month-end revenue is ₹${gap}L below the ₹30 Lakhs monthly revenue target.`,
         detail: 'Management intervention required on highway visibility and weekend dinner footfall.',
         severity: 'critical',
       });
@@ -91,7 +91,7 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
         id: 'be-on-track',
         category: 'Profitability',
         type: 'Projection',
-        statement: 'Current monthly revenue pace is on track to achieve and exceed the ₹30 Lakhs break-even objective.',
+        statement: 'Current monthly revenue pace is on track to achieve and exceed the ₹30 Lakhs monthly revenue target.',
         detail: `Projected month-end: ₹${projLakhs}L.`,
         severity: 'positive',
       });

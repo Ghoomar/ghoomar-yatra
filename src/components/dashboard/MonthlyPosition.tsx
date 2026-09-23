@@ -1,76 +1,130 @@
+'use client';
+
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatINR } from '@/lib/utils';
+import { MonthlyPerformanceStatus } from '@/lib/finance-engine';
 
-interface MonthlyPositionProps {
-  planningBreakEven: number;
+export interface MonthlyPerformanceProps {
+  monthlyRevenueTarget?: number;
+  planningBreakEven?: number; // backwards compatibility alias
   calculatedBreakEven: number;
   mtdRevenue: number;
   daysElapsed: number;
   daysInMonth: number;
+  daysReported?: number;
   averageDailyRevenue: number;
   requiredDailyRevenue: number;
   projectedMonthEndRevenue: number;
-  status: 'Healthy' | 'At Risk' | 'Below Break-Even';
+  status: MonthlyPerformanceStatus | string;
 }
 
-export function MonthlyPosition({
-  planningBreakEven,
+export function MonthlyPerformance({
+  monthlyRevenueTarget,
+  planningBreakEven = 3000000,
   calculatedBreakEven,
   mtdRevenue,
   daysElapsed,
   daysInMonth,
+  daysReported = 0,
   averageDailyRevenue,
   requiredDailyRevenue,
   projectedMonthEndRevenue,
   status,
-}: MonthlyPositionProps) {
+}: MonthlyPerformanceProps) {
+  const target = monthlyRevenueTarget ?? planningBreakEven;
   const remainingDays = Math.max(0, daysInMonth - daysElapsed);
-  const percentOfTarget = planningBreakEven > 0 ? Math.round((mtdRevenue / planningBreakEven) * 100) : 0;
+  const percentOfTarget = target > 0 ? Math.round((mtdRevenue / target) * 100) : 0;
+  const getBadgeVariant = (s: string): 'success' | 'warning' | 'danger' | 'info' | 'default' => {
+    switch (s) {
+      case 'ON TARGET':
+      case 'Healthy':
+        return 'success';
+      case 'BELOW TARGET':
+        return 'info';
+      case 'AT RISK':
+        return 'warning';
+      case 'BELOW BREAK-EVEN':
+        return 'danger';
+      case 'NOT REPORTED':
+      default:
+        return 'default';
+    }
+  };
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle>Monthly Position</CardTitle>
-          <Badge variant={status === 'Healthy' ? 'success' : status === 'At Risk' ? 'warning' : 'danger'}>
-            {status.toUpperCase()}
+          <CardTitle>Monthly Performance</CardTitle>
+          <Badge variant={getBadgeVariant(status)}>
+            {status}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 pt-2 text-xs">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          {/* 1. Month-to-Date Revenue */}
           <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
-            <div className="text-[11px] text-stone-500 font-medium">MTD Revenue</div>
+            <div className="text-[11px] text-stone-500 font-medium">Month-to-Date Revenue</div>
             <div className="text-base sm:text-lg font-bold text-stone-900 mt-0.5">{formatINR(mtdRevenue)}</div>
             <div className="text-[10px] text-stone-400">Day {daysElapsed} of {daysInMonth}</div>
           </div>
 
+          {/* 2. Average Daily Revenue */}
           <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
-            <div className="text-[11px] text-stone-500 font-medium">Current Daily Avg</div>
+            <div className="text-[11px] text-stone-500 font-medium">Average Daily Revenue</div>
             <div className="text-base sm:text-lg font-bold text-stone-900 mt-0.5">{formatINR(averageDailyRevenue)}</div>
-            <div className="text-[10px] text-stone-400">Achieved pace</div>
+            <div className="text-[10px] text-stone-400">
+              {daysReported > 0 ? `Based on ${daysReported} reported days` : 'No reported days'}
+            </div>
           </div>
 
+          {/* 3. Required Daily Revenue */}
           <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
-            <div className="text-[11px] text-stone-500 font-medium">Required Avg/Day</div>
+            <div className="text-[11px] text-stone-500 font-medium">Required Daily Revenue</div>
             <div className="text-base sm:text-lg font-bold text-amber-700 mt-0.5">{formatINR(requiredDailyRevenue)}</div>
-            <div className="text-[10px] text-stone-400">For next {remainingDays} days</div>
+            <div className="text-[10px] text-stone-400">
+              {remainingDays > 0 ? `Required over the next ${remainingDays} days` : 'Month completed'}
+            </div>
           </div>
 
+          {/* 4. Projected Month-End Revenue */}
           <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
-            <div className="text-[11px] text-stone-500 font-medium">Projected Month-End</div>
+            <div className="text-[11px] text-stone-500 font-medium">Projected Month-End Revenue</div>
             <div className="text-base sm:text-lg font-bold text-stone-900 mt-0.5">{formatINR(projectedMonthEndRevenue)}</div>
-            <div className="text-[10px] text-stone-400">Target: {formatINR(planningBreakEven)}</div>
+            <div className="text-[10px] text-stone-400">At current average daily revenue</div>
           </div>
         </div>
 
-        <div className="p-3 bg-stone-50 rounded-lg border border-stone-200 text-stone-700 text-[11px] flex items-center justify-between">
-          <span><strong>Break-Even Target:</strong> {formatINR(planningBreakEven)} ({percentOfTarget}% achieved)</span>
-          <span><strong>Dynamic Cost BEP:</strong> {formatINR(calculatedBreakEven)}</span>
+        {/* Bottom Summary Strip: Clearly separating Monthly Revenue Target and Calculated Break-Even Point */}
+        <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-stone-700 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <span className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider block">
+              Monthly Revenue Target
+            </span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="font-extrabold text-stone-900 text-sm">{formatINR(target)}</span>
+              <span className="text-[11px] text-stone-500 font-medium">
+                ({percentOfTarget}% of Monthly Target Achieved)
+              </span>
+            </div>
+          </div>
+
+          <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-stone-200">
+            <span className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider block">
+              Calculated Break-Even Point
+            </span>
+            <div className="font-extrabold text-stone-900 text-sm mt-0.5">
+              {formatINR(calculatedBreakEven)}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
+
+// Backwards compatibility alias
+export const MonthlyPosition = MonthlyPerformance;

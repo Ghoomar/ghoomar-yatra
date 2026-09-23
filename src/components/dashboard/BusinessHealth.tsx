@@ -8,7 +8,7 @@ interface BusinessHealthProps {
   inventoryHealth: 'Healthy' | 'Warning';
   attendanceHealth: 'Healthy' | 'Warning';
   cashHealth: 'Healthy' | 'Warning';
-  profitabilityHealth: 'Healthy' | 'Warning' | 'At Risk' | 'Below Break-Even';
+  profitabilityHealth: 'Healthy' | 'Warning' | 'At Risk' | 'Below Break-Even' | 'ON TARGET' | 'BELOW TARGET' | 'NOT REPORTED' | string;
 }
 
 export function BusinessHealth({
@@ -36,8 +36,9 @@ export function BusinessHealth({
       <CardContent className="pt-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
           {healthItems.map((item, idx) => {
-            const isGood = item.status === 'Healthy';
-            const isWarn = item.status === 'Warning' || item.status === 'Pending';
+            const isGood = item.status === 'Healthy' || item.status === 'ON TARGET';
+            const isWarn = item.status === 'Warning' || item.status === 'Pending' || item.status === 'BELOW TARGET' || item.status === 'At Risk' || item.status === 'AT RISK';
+            const isDanger = item.status === 'Below Break-Even' || item.status === 'BELOW BREAK-EVEN';
             return (
               <div
                 key={idx}
