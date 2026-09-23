@@ -57,6 +57,10 @@ export default function ProfitabilityPage() {
       ]);
 
       const isReported = Boolean(execSummary || salesSummary?.is_reported);
+      const subTotal = Number(
+        execSummary?.sub_total ??
+        (salesSummary ? Number(salesSummary.net_sales || 0) + Number(salesSummary.discounts || 0) : 0)
+      );
       const grossSales = Number(execSummary?.grand_total ?? salesSummary?.gross_sales ?? 0);
       const netSales = Number(execSummary?.net_sales ?? salesSummary?.net_sales ?? 0);
       const discounts = Number(execSummary?.discount ?? salesSummary?.discounts ?? 0);
@@ -71,6 +75,7 @@ export default function ProfitabilityPage() {
 
       setSalesReport({
         is_reported: isReported,
+        sub_total: subTotal,
         gross_sales: grossSales,
         net_sales: netSales,
         discounts: discounts,
@@ -324,7 +329,7 @@ export default function ProfitabilityPage() {
       <Card>
         <div className="divide-y divide-stone-100 text-xs sm:text-sm">
           {/* Revenue */}
-          <div className="py-3.5 space-y-2 px-2">
+          <div className="py-3.5 space-y-2.5 px-2">
             <div className="flex items-center justify-between font-bold text-stone-900">
               <div className="flex items-center gap-2">
                 <Receipt className="h-4 w-4 text-emerald-600" />
@@ -345,27 +350,37 @@ export default function ProfitabilityPage() {
             </div>
 
             {pnl.isReported && salesReport && (
-              <div className="space-y-1.5 pt-0.5">
-                <div className="pl-4 space-y-1.5 text-xs">
+              <div className="space-y-2 pt-0.5">
+                {/* Sales Before Discounts and Discounts */}
+                <div className="pl-4 space-y-1 text-xs">
                   <div className="flex items-center justify-between text-stone-700">
-                    <span>Gross Bill Value</span>
-                    <span className="font-mono font-medium text-stone-900">{formatINR(salesReport.gross_sales)}</span>
+                    <span>Sales Before Discounts</span>
+                    <span className="font-mono font-medium text-stone-900">{formatINR(salesReport.sub_total)}</span>
                   </div>
                   <div className="flex items-center justify-between text-stone-500">
                     <span>Less: Discounts</span>
-                    <span className="font-mono text-stone-600">− {formatINR(salesReport.discounts || 0)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-stone-500">
-                    <span>Less: GST / Taxes</span>
-                    <span className="font-mono text-stone-600">− {formatINR(salesReport.tax_amount || 0)}</span>
+                    <span className="font-mono text-rose-600">− {formatINR(salesReport.discounts || 0)}</span>
                   </div>
                 </div>
 
+                {/* Net Sales */}
                 <div className="pt-2 border-t border-stone-200 flex items-center justify-between font-bold text-stone-900 bg-stone-50/70 px-2.5 py-2 rounded-lg">
                   <span className="font-bold text-stone-900">Net Sales</span>
                   <span className="text-emerald-700 text-base font-extrabold font-mono">
                     {formatINR(pnl.revenue)}
                   </span>
+                </div>
+
+                {/* Informational Taxes & Billed Amount */}
+                <div className="pl-4 pt-1 space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-stone-600">
+                    <span>GST / Taxes Collected</span>
+                    <span className="font-mono text-stone-800">{formatINR(salesReport.tax_amount || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-stone-700 font-medium">
+                    <span>Gross Bill Value</span>
+                    <span className="font-mono text-stone-900">{formatINR(salesReport.gross_sales)}</span>
+                  </div>
                 </div>
               </div>
             )}
