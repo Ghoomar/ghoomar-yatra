@@ -261,15 +261,10 @@ export async function fetchMTDFinancialSummary(
     console.warn('RPC get_mtd_financial_summary failed, using query fallback:', e);
   }
 
-  // 2. Resilient fallback query directly from daily_sales_summary (or sales_reports) and daily_financial_summary
-  const [{ data: salesSummaryRows }, { data: legacySalesRows }, { data: finRows }] = await Promise.all([
+  // 2. Resilient fallback query directly from daily_sales_summary and daily_financial_summary
+  const [{ data: salesSummaryRows }, { data: finRows }] = await Promise.all([
     supabase
       .from('daily_sales_summary')
-      .select('net_sales, gross_sales, discounts, is_reported')
-      .gte('business_date', monthStart)
-      .lte('business_date', businessDate),
-    supabase
-      .from('sales_reports')
       .select('net_sales, gross_sales, discounts, is_reported')
       .gte('business_date', monthStart)
       .lte('business_date', businessDate),
@@ -280,12 +275,12 @@ export async function fetchMTDFinancialSummary(
       .lte('business_date', businessDate),
   ]);
 
-  const salesRows = (salesSummaryRows && salesSummaryRows.length > 0) ? salesSummaryRows : legacySalesRows;
+  const salesRows = salesSummaryRows || [];
 
-  const mtd_net_sales = (salesRows || []).reduce((s: number, r: any) => s + (Number(r.net_sales) || 0), 0);
-  const mtd_gross_sales = (salesRows || []).reduce((s: number, r: any) => s + (Number(r.gross_sales) || 0), 0);
-  const mtd_discounts = (salesRows || []).reduce((s: number, r: any) => s + (Number(r.discounts) || 0), 0);
-  const days_reported = (salesRows || []).filter((r: any) => r.is_reported).length;
+  const mtd_net_sales = salesRows.reduce((s: number, r: any) => s + (Number(r.net_sales) || 0), 0);
+  const mtd_gross_sales = salesRows.reduce((s: number, r: any) => s + (Number(r.gross_sales) || 0), 0);
+  const mtd_discounts = salesRows.reduce((s: number, r: any) => s + (Number(r.discounts) || 0), 0);
+  const days_reported = salesRows.filter((r: any) => r.is_reported).length;
 
   const mtd_customer_food_cost = (finRows || []).reduce((s: number, r: any) => s + (Number(r.customer_food_consumption) || 0), 0);
   const mtd_staff_food_cost = (finRows || []).reduce((s: number, r: any) => s + (Number(r.staff_food_consumption) || 0), 0);

@@ -61,7 +61,7 @@ export default function DailyClosingPage() {
         { data: cars },
         { data: utilities },
       ] = await Promise.all([
-        supabase.from('sales_reports').select('id, is_reported, net_sales').eq('business_date', businessDate).maybeSingle(),
+        supabase.from('daily_sales_summary').select('business_date, is_reported, net_sales, gross_sales, bill_count').eq('business_date', businessDate).maybeSingle(),
         supabase.from('attendance').select('id').eq('business_date', businessDate).limit(1),
         supabase.from('expenses').select('id, amount').eq('business_date', businessDate),
         supabase.from('purchase_headers').select('id, net_amount').eq('business_date', businessDate),
@@ -77,14 +77,16 @@ export default function DailyClosingPage() {
       const expenseTotal = (expenses || []).reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
       const purchaseTotal = (purchases || []).reduce((s: number, p: any) => s + Number(p.net_amount || 0), 0);
 
+      const isSalesVerified = Boolean(sales?.is_reported && (Number(sales.bill_count) > 0 || Number(sales.net_sales) > 0));
+
       const items: ChecklistItem[] = [
         {
           key: 'sales',
           label: 'Petpooja Sales',
-          isComplete: Boolean(sales?.is_reported),
-          statusText: sales?.is_reported
-            ? `Reported: ${formatINR(Number(sales.net_sales || 0))}`
-            : 'Not reported',
+          isComplete: isSalesVerified,
+          statusText: isSalesVerified && sales
+            ? `Verified: ${formatINR(Number(sales.net_sales || 0))} (${sales.bill_count || 0} bills)`
+            : 'Missing — No Petpooja sales import found',
           isRequired: true,
         },
         {
