@@ -1,0 +1,21 @@
+{
+  "active": "Active",
+  "inactive": "Inactive",
+  "pending": "Pending",
+  "approved": "Approved",
+  "rejected": "Rejected",
+  "closed": "Closed",
+  "open": "Open",
+  "reopened": "Reopened",
+  "healthy": "Healthy",
+  "atRisk": "At Risk",
+  "belowBreakEven": "Below Break-Even",
+  "present": "Present",
+  "absent": "Absent",
+  "weeklyOff": "Weekly Off",
+  "leave": "Leave",
+  "halfDay": "Half Day",
+  "doubleShift": "Double Shift",
+  "reported": "REPORTED",
+  "notReported": "NOT REPORTED"
+}

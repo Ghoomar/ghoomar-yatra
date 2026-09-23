@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 import { InventoryCategory, Unit } from '@/lib/types/database';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import { X, Package, Check, AlertCircle } from 'lucide-react';
 
 import { logAuditAction } from '@/lib/audit-logger';
@@ -38,6 +40,7 @@ const REPLENISHMENT_FREQUENCIES = [
 ];
 
 export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const isEdit = Boolean(item?.id || item?.item_id);
   const itemId = item?.id || item?.item_id;
@@ -188,17 +191,17 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('Item Name is required.');
+      setErrorMessage(t('inventory.modal.nameRequired'));
       return;
     }
     if (!unitId) {
-      setErrorMessage('Base Unit is required.');
+      setErrorMessage(t('inventory.modal.unitRequired'));
       return;
     }
 
     const parsedFactor = isSameUnit ? 1 : Number(conversionFactor);
     if (isNaN(parsedFactor) || parsedFactor <= 0 || !isFinite(parsedFactor)) {
-      setErrorMessage('Conversion factor must be a valid positive number greater than 0.');
+      setErrorMessage(t('inventory.modal.factorInvalid'));
       return;
     }
 
@@ -268,7 +271,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       if (onSaved) onSaved(savedResult);
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save inventory item.');
+      setErrorMessage(err.message || t('inventory.modal.failedToSave'));
     } finally {
       setSaving(false);
     }
@@ -292,7 +295,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
             </div>
             <div>
               <h2 className="text-base font-bold text-stone-900">
-                {isEdit ? `Edit Item: ${item?.name}` : 'Add Item'}
+                {isEdit ? t('inventory.modal.editTitle', { name: item?.name }) : t('inventory.modal.addTitle')}
               </h2>
             </div>
           </div>
@@ -318,25 +321,25 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
                 <label className="block font-medium text-stone-700 mb-1">
-                  Item Name <span className="text-rose-500">*</span>
+                  {t('inventory.modal.name')}
                 </label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Fresh Malai Paneer, Basmati Rice"
+                  placeholder={t('inventory.modal.namePlaceholder')}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">SKU Code</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.code')}</label>
                 <input
                   type="text"
                   value={itemCode}
                   onChange={(e) => setItemCode(e.target.value)}
-                  placeholder="e.g. RAW-001"
+                  placeholder={t('inventory.modal.codePlaceholder')}
                   className="w-full rounded-md border border-stone-300 bg-stone-50 p-2 font-mono text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -344,7 +347,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Class</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.class')}</label>
                 <select
                   value={inventoryClass}
                   onChange={(e) => handleClassChange(e.target.value)}
@@ -352,23 +355,23 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 >
                   {INVENTORY_CLASSES.map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {t(`inventory.stock.classes.${c}`, { defaultValue: c })}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Category</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.category')}</label>
                 <select
                   value={categoryId}
                   onChange={(e) => handleCategoryChange(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  <option value="">Select Category...</option>
+                  <option value="">{t('inventory.modal.selectCategory')}</option>
                   {filteredCategories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} {c.code ? `(${c.code})` : ''}
+                      {getLocalizedMasterName(c, locale)} {c.code ? `(${c.code})` : ''}
                     </option>
                   ))}
                 </select>
@@ -378,11 +381,11 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
           {/* Unit & Conversions */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
-            <h3 className="font-semibold text-stone-800">Units &amp; Packaging</h3>
+            <h3 className="font-semibold text-stone-800">{t('inventory.modal.unitsPackaging')}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Base Unit <span className="text-rose-500">*</span>
+                  {t('inventory.modal.unit')}
                 </label>
                 <select
                   required
@@ -396,12 +399,12 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   }}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  <option value="">Select Base Unit...</option>
+                  <option value="">{t('inventory.modal.selectUnit')}</option>
                   {units
                     .filter((u) => u.is_active || u.id === unitId)
                     .map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} ({u.symbol})
+                        {getLocalizedMasterName(u, locale)} ({getLocalizedMasterSymbol(u, locale)})
                       </option>
                     ))}
                 </select>
@@ -409,7 +412,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Purchase Unit
+                  {t('inventory.modal.purchaseUnit')}
                 </label>
                 <select
                   value={secondaryUnitId}
@@ -422,12 +425,12 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   }}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  <option value="">Same as Base Unit</option>
+                  <option value="">{t('inventory.modal.sameAsBase')}</option>
                   {units
                     .filter((u) => u.is_active || u.id === secondaryUnitId)
                     .map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.name} ({u.symbol})
+                      {getLocalizedMasterName(u, locale)} ({getLocalizedMasterSymbol(u, locale)})
                     </option>
                   ))}
                 </select>
@@ -435,7 +438,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Conversion Factor
+                  {t('inventory.modal.conversionFactor')}
                 </label>
                 <input
                   type="number"
@@ -456,7 +459,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                 />
                 {isSameUnit && (
                   <span className="text-[10px] text-stone-400 mt-0.5 block">
-                    Fixed at 1 for identical units
+                    {t('inventory.modal.fixedAtOne')}
                   </span>
                 )}
               </div>
@@ -464,18 +467,22 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
             {!isSameUnit && secondaryUnitId && (
               <div className="p-2.5 bg-amber-50/80 rounded-lg border border-amber-200/70 text-[11px] text-amber-800">
-                <strong>Conversion Formula:</strong> 1 {units.find((u) => u.id === secondaryUnitId)?.name || 'Purchase Unit'} = {conversionFactor || 1} {units.find((u) => u.id === unitId)?.symbol || 'Base Units'}.
+                {t('inventory.modal.conversionFormula', {
+                  purchaseUnit: getLocalizedMasterName(units.find((u) => u.id === secondaryUnitId), locale) || 'Purchase Unit',
+                  factor: conversionFactor || 1,
+                  baseUnit: getLocalizedMasterSymbol(units.find((u) => u.id === unitId), locale) || 'Base Units',
+                })}
               </div>
             )}
           </div>
 
           {/* Storage & Replenishment */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
-            <h3 className="font-semibold text-stone-800">Stock &amp; Storage</h3>
+            <h3 className="font-semibold text-stone-800">{t('inventory.modal.stockStorage')}</h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               {inventoryClass === 'Food Raw Material' && (
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Storage</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.storage')}</label>
                   <select
                     value={storageType}
                     onChange={(e) => setStorageType(e.target.value)}
@@ -483,7 +490,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   >
                     {STORAGE_TYPES.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {t(`inventory.modal.storageTypes.${s}`, { defaultValue: s })}
                       </option>
                     ))}
                   </select>
@@ -491,7 +498,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
               )}
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Minimum Stock</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.minStock')}</label>
                 <input
                   type="number"
                   step="0.001"
@@ -503,7 +510,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Preferred Stock</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.preferredStock')}</label>
                 <input
                   type="number"
                   step="0.001"
@@ -516,12 +523,12 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
               {inventoryClass === 'Food Raw Material' && (
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Shelf Life (Days)</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.shelfLifeDays')}</label>
                   <input
                     type="number"
                     value={shelfLifeDays}
                     onChange={(e) => setShelfLifeDays(e.target.value ? parseInt(e.target.value) : '')}
-                    placeholder="e.g. 7"
+                    placeholder={t('inventory.modal.shelfLifePlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   />
                 </div>
@@ -529,7 +536,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
             </div>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Replenishment</label>
+              <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.replenishment')}</label>
               <select
                 value={replenishmentFrequency}
                 onChange={(e) => setReplenishmentFrequency(e.target.value)}
@@ -537,7 +544,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
               >
                 {REPLENISHMENT_FREQUENCIES.map((r) => (
                   <option key={r} value={r}>
-                    {r}
+                    {t(`inventory.modal.replenishmentFrequencies.${r}`, { defaultValue: r })}
                   </option>
                 ))}
               </select>
@@ -547,19 +554,19 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           {/* Notes & Active Status */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Notes</label>
+              <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.notes')}</label>
               <textarea
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Preferred brands, quality checks, recipe usages..."
+                placeholder={t('inventory.modal.notesPlaceholder')}
                 className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 resize-none"
               />
             </div>
 
             <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200">
               <div>
-                <div className="font-semibold text-stone-800">Active</div>
+                <div className="font-semibold text-stone-800">{t('inventory.modal.active')}</div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -576,10 +583,10 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
             <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-              Cancel
+              {t('inventory.modal.cancel')}
             </Button>
             <Button type="submit" variant="amber" disabled={saving}>
-              {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Item'}
+              {saving ? t('inventory.modal.saving') : isEdit ? t('inventory.modal.saveChanges') : t('inventory.modal.save')}
             </Button>
           </div>
         </form>

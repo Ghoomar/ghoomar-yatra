@@ -24,8 +24,10 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 export default function StaffFinancialsPage() {
+  const { t } = useI18n();
   // Current month default: e.g. "2026-05"
   const defaultMonth = () => {
     return '2026-05'; // Default to reference month with rich authentic data
@@ -213,10 +215,10 @@ export default function StaffFinancialsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Wallet className="h-6 w-6 text-amber-600" />
-            Staff Financials &amp; Salary Ledger
+            {t('people.financials.title')}
           </h1>
           <p className="text-sm text-stone-500">
-            Accrued salary payable ledger, disbursements, and pending liability tracking.
+            {t('people.financials.subtitle')}
           </p>
         </div>
 
@@ -258,7 +260,7 @@ export default function StaffFinancialsPage() {
             title="Roll up attendance and recalculate periods"
           >
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-            Sync Attendance
+            {syncing ? t('people.financials.syncing') : t('people.financials.syncAttendance')}
           </Button>
 
           {!isPeriodClosed ? (
@@ -269,12 +271,12 @@ export default function StaffFinancialsPage() {
               className="bg-stone-800 hover:bg-stone-900 text-white text-xs font-semibold"
             >
               <Lock className="h-3.5 w-3.5 mr-1.5" />
-              Close Period
+              {closing ? t('people.financials.closing') : t('people.financials.closePeriod')}
             </Button>
           ) : (
             <Badge variant="default" className="py-1 px-2.5 text-xs bg-stone-100 text-stone-700 border border-stone-300">
               <Lock className="h-3 w-3 mr-1 text-stone-500" />
-              Period Closed
+              {t('people.financials.periodClosed')}
             </Badge>
           )}
         </div>
@@ -309,13 +311,13 @@ export default function StaffFinancialsPage() {
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-4">
             <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
-              Total Salary Due
+              {t('people.financials.kpi.totalDue')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-1">
               {formatINR(summary.totalDue)}
             </div>
             <span className="text-[11px] text-stone-500 block mt-0.5">
-              Accrued for {summary.staffCount} staff members
+              {t('people.financials.accruedFor', { count: summary.staffCount })}
             </span>
           </CardContent>
         </Card>
@@ -324,13 +326,13 @@ export default function StaffFinancialsPage() {
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-4">
             <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
-              Salary Given
+              {t('people.financials.kpi.totalDisbursed')}
             </span>
             <div className="text-2xl font-bold text-emerald-700 mt-1">
               {formatINR(summary.totalGiven)}
             </div>
             <span className="text-[11px] text-stone-500 block mt-0.5">
-              Disbursed in {salaryMonth}
+              {t('people.financials.disbursedIn', { month: salaryMonth })}
             </span>
           </CardContent>
         </Card>
@@ -340,17 +342,17 @@ export default function StaffFinancialsPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
-                Pending Balance
+                {t('people.financials.kpi.pendingBalance')}
               </span>
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900">
-                PAYABLE
+                {t('people.financials.payableBadge')}
               </span>
             </div>
             <div className="text-2xl font-extrabold text-amber-800 mt-1">
               {formatINR(summary.pendingBalance)}
             </div>
             <span className="text-[11px] text-amber-700 block mt-0.5 font-medium">
-              Outstanding liability to be paid
+              {t('people.financials.outstandingDesc')}
             </span>
           </CardContent>
         </Card>
@@ -359,13 +361,13 @@ export default function StaffFinancialsPage() {
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-4">
             <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
-              Earned This Month
+              {t('people.financials.table.net')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-1">
               {formatINR(summary.netEarned)}
             </div>
             <span className="text-[11px] text-stone-500 block mt-0.5">
-              Net of {formatINR(summary.totalDeductions)} deductions
+              {t('people.financials.netOfDeductions', { amount: formatINR(summary.totalDeductions) })}
             </span>
           </CardContent>
         </Card>
@@ -377,10 +379,10 @@ export default function StaffFinancialsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               <CardTitle className="text-base font-bold text-stone-900">
-                Staff Salary Payable Register
+                {t('people.financials.registerTitle')}
               </CardTitle>
               <Badge variant="outline" className="text-xs">
-                {filteredRows.length} {filteredRows.length === 1 ? 'employee' : 'employees'}
+                {t('people.financials.employeeCount', { count: filteredRows.length })}
               </Badge>
             </div>
 
@@ -390,7 +392,7 @@ export default function StaffFinancialsPage() {
                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Filter by name, code, dept..."
+                  placeholder={t('people.financials.searchStaff')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full rounded-lg border border-stone-200 pl-8 pr-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-stone-50/50"
@@ -407,7 +409,7 @@ export default function StaffFinancialsPage() {
                 }`}
               >
                 <Filter className="h-3 w-3" />
-                Pending Only
+                {t('people.financials.pendingOnly')}
               </button>
             </div>
           </div>
@@ -417,18 +419,18 @@ export default function StaffFinancialsPage() {
           {loading ? (
             <div className="py-16 text-center text-stone-400">
               <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-amber-500" />
-              <p className="text-sm">Loading staff salary register...</p>
+              <p className="text-sm">{t('people.financials.loading')}</p>
             </div>
           ) : filteredRows.length === 0 ? (
             <div className="py-16 text-center text-stone-400">
-              <p className="text-sm">No employee records found for {salaryMonth}.</p>
+              <p className="text-sm">{t('people.financials.noRecords')}</p>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleSyncAttendance}
                 className="mt-3 text-xs"
               >
-                Sync Attendance for {salaryMonth}
+                {t('people.financials.syncAttendance')}
               </Button>
             </div>
           ) : (
@@ -436,17 +438,17 @@ export default function StaffFinancialsPage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Employee</th>
-                    <th className="p-3">Dept / Role</th>
-                    <th className="p-3 text-right">Monthly Base</th>
-                    <th className="p-3 text-center">Pay Days</th>
-                    <th className="p-3 text-right">Earned</th>
-                    <th className="p-3 text-right">Prev Pending</th>
-                    <th className="p-3 text-right font-bold text-stone-900">Total Due</th>
-                    <th className="p-3 text-right text-emerald-700">Given</th>
-                    <th className="p-3 text-right font-extrabold text-amber-800">Pending Balance</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3 text-right">Actions</th>
+                    <th className="p-3">{t('people.financials.table.employee')}</th>
+                    <th className="p-3">{t('people.financials.table.deptRole')}</th>
+                    <th className="p-3 text-right">{t('people.financials.table.monthlyBase')}</th>
+                    <th className="p-3 text-center">{t('people.financials.table.days')}</th>
+                    <th className="p-3 text-right">{t('people.financials.table.net')}</th>
+                    <th className="p-3 text-right">{t('people.financials.table.prevPending')}</th>
+                    <th className="p-3 text-right font-bold text-stone-900">{t('people.financials.table.totalDue')}</th>
+                    <th className="p-3 text-right text-emerald-700">{t('people.financials.table.paid')}</th>
+                    <th className="p-3 text-right font-extrabold text-amber-800">{t('people.financials.table.balance')}</th>
+                    <th className="p-3 text-center">{t('people.financials.table.status')}</th>
+                    <th className="p-3 text-right">{t('people.financials.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -464,7 +466,7 @@ export default function StaffFinancialsPage() {
                             <span>{r.employee_name}</span>
                             {r.contractor_name && (
                               <Badge variant="outline" className="text-[10px] py-0 px-1 text-purple-700 border-purple-200 bg-purple-50">
-                                Contractor
+                                {t('people.financials.contractor')}
                               </Badge>
                             )}
                           </div>
@@ -545,10 +547,10 @@ export default function StaffFinancialsPage() {
                           >
                             {r.period_status === 'closed' ? (
                               <span className="flex items-center gap-1">
-                                <Lock className="h-2.5 w-2.5" /> Closed
+                                <Lock className="h-2.5 w-2.5" /> {t('people.financials.closed')}
                               </span>
                             ) : (
-                              'Draft'
+                              t('people.financials.draft')
                             )}
                           </Badge>
                         </td>
@@ -563,7 +565,7 @@ export default function StaffFinancialsPage() {
                               title="Record salary payment"
                             >
                               <Banknote className="h-3.5 w-3.5 mr-1" />
-                              Pay
+                              {t('people.financials.table.pay')}
                             </Button>
 
                             {r.period_status === 'draft' && (
@@ -611,7 +613,7 @@ export default function StaffFinancialsPage() {
           record={paymentRecord}
           onSuccess={() => {
             loadData();
-            setMessage({ type: 'success', text: 'Disbursement recorded successfully.' });
+            setMessage({ type: 'success', text: t('people.paymentModal.success') });
           }}
         />
       )}
@@ -632,8 +634,8 @@ export default function StaffFinancialsPage() {
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-stone-200 overflow-hidden">
             <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4 bg-stone-50">
               <div>
-                <h3 className="text-base font-bold text-stone-900">Adjust Period Deductions</h3>
-                <p className="text-xs text-stone-500">{editingPeriod.employee_name} • {editingPeriod.salary_month}</p>
+                <h3 className="text-base font-bold text-stone-900">{t('people.financials.editDeductionModal.title')}</h3>
+                <p className="text-xs text-stone-500">{t('people.financials.editDeductionModal.employeeSubtitle', { name: editingPeriod.employee_name, month: editingPeriod.salary_month })}</p>
               </div>
               <button
                 onClick={() => setEditingPeriod(null)}
@@ -646,7 +648,7 @@ export default function StaffFinancialsPage() {
             <form onSubmit={handleSaveEditPeriod} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Manual Deductions (₹)
+                  {t('people.financials.editDeductionModal.penalty')}
                 </label>
                 <input
                   type="number"
@@ -657,19 +659,19 @@ export default function StaffFinancialsPage() {
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold"
                 />
                 <p className="text-[11px] text-stone-400 mt-1">
-                  Manager adjustments, damages, or fines. (Attendance penalties are separate).
+                  {t('people.financials.editDeductionModal.penaltyDesc')}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Notes / Reason
+                  {t('people.financials.editDeductionModal.notes')}
                 </label>
                 <textarea
                   rows={3}
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Reason for deduction adjustment..."
+                  placeholder={t('people.financials.editDeductionModal.notesPlaceholder')}
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
@@ -682,7 +684,7 @@ export default function StaffFinancialsPage() {
                   onClick={() => setEditingPeriod(null)}
                   disabled={savingEdit}
                 >
-                  Cancel
+                  {t('people.financials.editDeductionModal.cancel')}
                 </Button>
                 <Button
                   type="submit"
@@ -690,7 +692,7 @@ export default function StaffFinancialsPage() {
                   disabled={savingEdit}
                   className="bg-amber-600 hover:bg-amber-700 text-white"
                 >
-                  {savingEdit ? 'Saving...' : 'Save Adjustments'}
+                  {savingEdit ? t('people.financials.editDeductionModal.saving') : t('people.financials.editDeductionModal.save')}
                 </Button>
               </div>
             </form>

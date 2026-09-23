@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import { ItemModal } from '@/components/inventory/ItemModal';
 import { UnitModal } from '@/components/admin/UnitModal';
 import { ItemMovementDrawer } from '@/components/inventory/ItemMovementDrawer';
@@ -32,74 +34,75 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 
-function getMovementBadge(type: string) {
+function getMovementBadge(type: string, t: (key: string, params?: any) => string) {
   switch (type) {
     case 'count_adjustment':
     case 'physical_count_adjustment':
       return (
         <Badge variant="warning" className="gap-1 font-mono text-[10px]">
-          <Scale className="h-3 w-3" /> Count Audit
+          <Scale className="h-3 w-3" /> {t('inventory.stock.movementBadges.count_adjustment')}
         </Badge>
       );
     case 'purchase':
       return (
         <Badge variant="success" className="gap-1 font-mono text-[10px]">
-          <ShoppingBag className="h-3 w-3" /> Purchase Inward
+          <ShoppingBag className="h-3 w-3" /> {t('inventory.stock.movementBadges.purchase')}
         </Badge>
       );
     case 'transfer':
       return (
         <Badge variant="default" className="gap-1 font-mono text-[10px] bg-blue-100 text-blue-800 border-blue-200">
-          <Truck className="h-3 w-3" /> Transfer
+          <Truck className="h-3 w-3" /> {t('inventory.stock.movementBadges.transfer')}
         </Badge>
       );
     case 'consumption_issue':
     case 'issue':
       return (
         <Badge variant="danger" className="gap-1 font-mono text-[10px]">
-          <ArrowRightLeft className="h-3 w-3" /> Store Issue
+          <ArrowRightLeft className="h-3 w-3" /> {t('inventory.stock.movementBadges.consumption_issue')}
         </Badge>
       );
     case 'sale':
       return (
         <Badge variant="success" className="gap-1 font-mono text-[10px] bg-emerald-100 text-emerald-800 border-emerald-200">
-          <ShoppingBag className="h-3 w-3" /> Direct Sale
+          <ShoppingBag className="h-3 w-3" /> {t('inventory.stock.movementBadges.sale')}
         </Badge>
       );
     case 'consumption':
       return (
         <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-purple-50 text-purple-700 border-purple-200">
-          <Flame className="h-3 w-3" /> Consumed
+          <Flame className="h-3 w-3" /> {t('inventory.stock.movementBadges.consumption')}
         </Badge>
       );
     case 'staff_food':
       return (
         <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200">
-          <UtensilsCrossed className="h-3 w-3" /> Staff Food
+          <UtensilsCrossed className="h-3 w-3" /> {t('inventory.stock.movementBadges.staff_food')}
         </Badge>
       );
     case 'breakage':
       return (
         <Badge variant="danger" className="gap-1 font-mono text-[10px] bg-rose-100 text-rose-800 border-rose-200">
-          <AlertTriangle className="h-3 w-3" /> Broken / Damaged
+          <AlertTriangle className="h-3 w-3" /> {t('inventory.stock.movementBadges.breakage')}
         </Badge>
       );
     case 'loss':
       return (
         <Badge variant="danger" className="gap-1 font-mono text-[10px] bg-amber-100 text-amber-800 border-amber-200">
-          <AlertCircle className="h-3 w-3" /> Lost / Missing
+          <AlertCircle className="h-3 w-3" /> {t('inventory.stock.movementBadges.loss')}
         </Badge>
       );
     case 'opening':
-      return <Badge variant="outline" className="gap-1 font-mono text-[10px]">Opening Balance</Badge>;
+      return <Badge variant="outline" className="gap-1 font-mono text-[10px]">{t('inventory.stock.movementBadges.opening')}</Badge>;
     case 'wastage':
-      return <Badge variant="danger" className="gap-1 font-mono text-[10px]">Wastage / Scrap</Badge>;
+      return <Badge variant="danger" className="gap-1 font-mono text-[10px]">{t('inventory.stock.movementBadges.wastage')}</Badge>;
     default:
       return <Badge variant="outline" className="text-[10px]">{type}</Badge>;
   }
 }
 
 function InventoryContent() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -170,7 +173,7 @@ function InventoryContent() {
     try {
       const { data, error } = await supabase
         .from('stock_movements')
-        .select(`*, item:inventory_items(id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, name)), source_location:inventory_locations!stock_movements_source_location_id_fkey(id, name, code), destination_location:inventory_locations!stock_movements_destination_location_id_fkey(id, name, code)`)
+        .select(`*, item:inventory_items(id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)), source_location:inventory_locations!stock_movements_source_location_id_fkey(id, name, code), destination_location:inventory_locations!stock_movements_destination_location_id_fkey(id, name, code)`)
         .order('business_date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -338,7 +341,7 @@ function InventoryContent() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Package className="h-6 w-6 text-amber-600" />
-            Stock &amp; Items
+            {t('inventory.stock.title')}
           </h1>
         </div>
 
@@ -352,7 +355,7 @@ function InventoryContent() {
             }}
             className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
           >
-            <Plus className="h-4 w-4" /> Add Item
+            <Plus className="h-4 w-4" /> {t('inventory.stock.addItem')}
           </Button>
 
           <Button
@@ -361,18 +364,18 @@ function InventoryContent() {
             onClick={() => setUnitModalOpen(true)}
             className="gap-1.5"
           >
-            <Scale className="h-4 w-4 text-stone-500" /> Units
+            <Scale className="h-4 w-4 text-stone-500" /> {t('inventory.stock.units')}
           </Button>
 
           <Link href="/inventory/issues">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> Issues &amp; Transfers
+              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> {t('inventory.stock.issuesAndTransfers')}
             </Button>
           </Link>
 
           <Link href="/inventory/count">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <ClipboardList className="h-4 w-4 text-stone-500" /> Stock Audit
+              <ClipboardList className="h-4 w-4 text-stone-500" /> {t('inventory.stock.stockAudit')}
             </Button>
           </Link>
 
@@ -383,7 +386,7 @@ function InventoryContent() {
               loadData();
               loadMovements();
             }}
-            title="Refresh catalog and movements"
+            title={t('inventory.stock.refresh')}
           >
             <RefreshCw className={`h-4 w-4 text-stone-600 ${loading || movementsLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -396,7 +399,7 @@ function InventoryContent() {
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
             <div>
-              <span className="font-bold">{expiringItemsCount} {expiringItemsCount === 1 ? 'item has' : 'items have'}</span> batches expiring within 30 days or already expired.
+              <span className="font-bold">{t('inventory.stock.expiringBanner', { count: expiringItemsCount })}</span>
             </div>
           </div>
           <Button
@@ -405,7 +408,7 @@ function InventoryContent() {
             onClick={() => setExpiryFilter(expiryFilter === 'EXPIRING_SOON' ? 'ALL' : 'EXPIRING_SOON')}
             className="text-xs h-7 border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
           >
-            {expiryFilter === 'EXPIRING_SOON' ? 'Show All Items' : 'View Expiring Items'}
+            {expiryFilter === 'EXPIRING_SOON' ? t('inventory.stock.showAll') : t('inventory.stock.viewExpiring')}
           </Button>
         </div>
       )}
@@ -425,7 +428,7 @@ function InventoryContent() {
             }`}
           >
             <Package className="h-4 w-4" />
-            Catalog ({items.length})
+            {t('inventory.stock.tabs.catalog', { count: items.length })}
           </button>
 
           <button
@@ -440,7 +443,7 @@ function InventoryContent() {
             }`}
           >
             <ArrowRightLeft className="h-4 w-4" />
-            Movements ({movements.length})
+            {t('inventory.stock.tabs.movements', { count: movements.length })}
           </button>
         </div>
       </div>
@@ -451,37 +454,37 @@ function InventoryContent() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Stock Value</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.totalValuation')}</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalStockValue)}</div>
               </CardHeader>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Locations</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.locations')}</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1 flex items-center gap-1.5">
                   <MapPin className="h-5 w-5 text-amber-600" />
-                  {locations.length} Locations
+                  {t('inventory.stock.kpi.locationsCount', { count: locations.length })}
                 </div>
               </CardHeader>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Low Stock</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.lowStock')}</CardDescription>
                 <div className={`text-2xl font-bold mt-1 ${lowStockCount > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                  {lowStockCount} Below Minimum
+                  {lowStockCount > 0 ? t('inventory.stock.kpi.belowMin', { count: lowStockCount }) : t('inventory.stock.statuses.sufficient')}
                 </div>
               </CardHeader>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Items</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.totalItems')}</CardDescription>
                 <div className="text-xl font-bold text-stone-800 mt-1">
-                  {activeCount} <span className="text-xs font-normal text-emerald-600">Active</span>
+                  {activeCount} <span className="text-xs font-normal text-emerald-600">{t('inventory.stock.statuses.active')}</span>
                   {inactiveCount > 0 && (
-                    <> / {inactiveCount} <span className="text-xs font-normal text-stone-400">Inactive</span></>
+                    <> / {inactiveCount} <span className="text-xs font-normal text-stone-400">{t('inventory.stock.statuses.inactive')}</span></>
                   )}
                 </div>
               </CardHeader>
@@ -495,14 +498,14 @@ function InventoryContent() {
               {/* Location Selector */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-stone-700 flex items-center gap-1.5 shrink-0">
-                  <MapPin className="h-4 w-4 text-amber-600" /> Location:
+                  <MapPin className="h-4 w-4 text-amber-600" /> {t('inventory.stock.locationLabel')}
                 </span>
                 <select
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value)}
                   className="font-semibold text-xs rounded-lg border border-stone-300 py-1.5 px-3 bg-stone-50 text-stone-900 focus:outline-none focus:border-amber-500 focus:bg-white"
                 >
-                  <option value="ALL">🏢 All Locations</option>
+                  <option value="ALL">🏢 {t('inventory.stock.allLocations')}</option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
                       📍 {loc.name} ({loc.code})
@@ -518,7 +521,7 @@ function InventoryContent() {
                       onChange={(e) => setHideZeroStock(e.target.checked)}
                       className="rounded border-stone-300 text-amber-600 focus:ring-amber-500"
                     />
-                    Hide items with 0 stock here
+                    {t('inventory.stock.hideZeroStock')}
                   </label>
                 )}
               </div>
@@ -537,14 +540,14 @@ function InventoryContent() {
                           : 'text-stone-500 hover:text-stone-800'
                       }`}
                     >
-                      {st}
+                      {st === 'ALL' ? t('common.all') : st === 'ACTIVE' ? t('inventory.stock.statuses.active') : t('inventory.stock.statuses.inactive')}
                     </button>
                   ))}
                 </div>
 
                 {expiryFilter === 'EXPIRING_SOON' && (
                   <Badge variant="warning" className="gap-1 text-[10px]">
-                    <Calendar className="h-3 w-3" /> Expiring Soon Active
+                    <Calendar className="h-3 w-3" /> {t('inventory.stock.expiringSoonActive')}
                   </Badge>
                 )}
               </div>
@@ -563,7 +566,7 @@ function InventoryContent() {
                         : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                     }`}
                   >
-                    {cls}
+                    {cls === 'ALL' ? t('common.all') : t(`inventory.stock.classes.${cls}`, { defaultValue: cls })}
                   </button>
                 ))}
               </div>
@@ -572,7 +575,7 @@ function InventoryContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Search items..."
+                  placeholder={t('inventory.stock.searchPlaceholder')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
@@ -587,10 +590,10 @@ function InventoryContent() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <CardTitle>
-                    Items ({filteredItems.length})
+                    {t('inventory.stock.itemsCount', { count: filteredItems.length })}
                     {selectedLocationObj && (
                       <span className="ml-2 text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        Location: {selectedLocationObj.name}
+                        {t('inventory.stock.locationBadge', { name: selectedLocationObj.name })}
                       </span>
                     )}
                   </CardTitle>
@@ -600,29 +603,29 @@ function InventoryContent() {
             <CardContent className="pt-0">
               {loading ? (
                 <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading inventory data...
+                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> {t('inventory.stock.loadingInventory')}
                 </div>
               ) : filteredItems.length === 0 ? (
-                <div className="py-12 text-center text-stone-400 text-xs">No inventory items found matching criteria.</div>
+                <div className="py-12 text-center text-stone-400 text-xs">{t('inventory.stock.noItemsFound')}</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                        <th className="py-2.5 px-3">SKU</th>
-                        <th className="py-2.5 px-3">Item</th>
-                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.table.sku')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.table.item')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.table.category')}</th>
                         <th className="py-2.5 px-3 text-right">
-                          {selectedLocationId === 'ALL' ? 'Qty' : `Stock at ${selectedLocationObj?.code || 'Loc'}`}
+                          {selectedLocationId === 'ALL' ? t('inventory.stock.table.qty') : t('inventory.stock.table.stockAt', { loc: selectedLocationObj?.code || 'Loc' })}
                         </th>
                         {selectedLocationId === 'ALL' && (
-                          <th className="py-2.5 px-3">Locations</th>
+                          <th className="py-2.5 px-3">{t('inventory.stock.table.locations')}</th>
                         )}
-                        <th className="py-2.5 px-3 text-right">Min</th>
-                        <th className="py-2.5 px-3 text-right">Rate (₹)</th>
-                        <th className="py-2.5 px-3 text-right">Value</th>
-                        <th className="py-2.5 px-3 text-center">Status</th>
-                        <th className="py-2.5 px-3 text-right">Actions</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.min')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.wacCost')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.valuation')}</th>
+                        <th className="py-2.5 px-3 text-center">{t('inventory.stock.table.status')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.actions')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
@@ -635,6 +638,7 @@ function InventoryContent() {
                         const isActive = i.is_active !== false;
                         const locList = (itemLocationStockMap[i.item_id] || []).filter((l) => l.quantity > 0);
                         const expInfo = itemExpiryMap[i.item_id];
+                        const unitDisplay = i.unit_symbol_hi && locale === 'hi' ? i.unit_symbol_hi : (i.unit_symbol || 'units');
 
                         return (
                           <tr
@@ -648,7 +652,7 @@ function InventoryContent() {
                                 type="button"
                                 onClick={() => setSelectedMovementItem(i)}
                                 className="hover:underline hover:text-amber-800 cursor-pointer font-mono text-left"
-                                title="Click to view movement ledger"
+                                title={t('inventory.stock.actions.viewLedger')}
                               >
                                 {i.item_code}
                               </button>
@@ -658,7 +662,7 @@ function InventoryContent() {
                                 type="button"
                                 onClick={() => setSelectedMovementItem(i)}
                                 className="font-semibold text-stone-900 hover:text-amber-700 hover:underline cursor-pointer text-left block"
-                                title="Click to view movement ledger"
+                                title={t('inventory.stock.actions.viewLedger')}
                               >
                                 {i.name}
                               </button>
@@ -670,11 +674,11 @@ function InventoryContent() {
                               )}
                             </td>
                             <td className="py-3 px-3 text-stone-600">
-                              {i.category_name || 'General'} <span className="text-stone-400">({i.inventory_class})</span>
+                              {i.category_name || 'General'} <span className="text-stone-400">({t(`inventory.stock.classes.${i.inventory_class}`, { defaultValue: i.inventory_class })})</span>
                             </td>
                             <td className="py-3 px-3 text-right font-bold text-sm text-stone-900 whitespace-nowrap">
                               {locQty.toFixed(2)}{' '}
-                              <span className="text-xs font-normal text-stone-500">{i.unit_symbol || 'units'}</span>
+                              <span className="text-xs font-normal text-stone-500">{unitDisplay}</span>
                             </td>
                             {selectedLocationId === 'ALL' && (
                               <td className="py-3 px-3">
@@ -686,7 +690,7 @@ function InventoryContent() {
                                       <span
                                         key={loc.location_id}
                                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-stone-100 border border-stone-200 text-[10px] font-mono text-stone-700"
-                                        title={`${loc.location_name}: ${loc.quantity} ${i.unit_symbol}`}
+                                        title={`${loc.location_name}: ${loc.quantity} ${unitDisplay}`}
                                       >
                                         <span className="font-bold text-amber-800">{loc.location_code}</span>: {loc.quantity}
                                       </span>
@@ -707,10 +711,10 @@ function InventoryContent() {
                             <td className="py-3 px-3 text-center">
                               {isLow ? (
                                 <Badge variant="danger" className="gap-1">
-                                  <AlertTriangle className="h-3 w-3" /> Low Stock
+                                  <AlertTriangle className="h-3 w-3" /> {t('inventory.stock.statuses.low')}
                                 </Badge>
                               ) : (
-                                <Badge variant="success">Sufficient</Badge>
+                                <Badge variant="success">{t('inventory.stock.statuses.sufficient')}</Badge>
                               )}
                             </td>
                             <td className="py-3 px-3 text-right">
@@ -720,9 +724,9 @@ function InventoryContent() {
                                   size="sm"
                                   onClick={() => setSelectedMovementItem(i)}
                                   className="h-7 px-2 text-stone-600 hover:text-amber-700"
-                                  title="View movement ledger"
+                                  title={t('inventory.stock.actions.viewLedger')}
                                 >
-                                  <History className="h-3.5 w-3.5 mr-1 text-amber-600" /> Ledger
+                                  <History className="h-3.5 w-3.5 mr-1 text-amber-600" /> {t('inventory.stock.table.ledger')}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -732,9 +736,9 @@ function InventoryContent() {
                                     setItemModalOpen(true);
                                   }}
                                   className="h-7 px-2 text-stone-600 hover:text-stone-900"
-                                  title="Edit Item"
+                                  title={t('inventory.stock.table.edit')}
                                 >
-                                  <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
+                                  <Edit2 className="h-3.5 w-3.5 mr-1" /> {t('inventory.stock.table.edit')}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -745,7 +749,7 @@ function InventoryContent() {
                                       ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50'
                                       : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50'
                                   }`}
-                                  title={isActive ? 'Deactivate Item' : 'Activate Item'}
+                                  title={isActive ? t('inventory.stock.actions.deactivate') : t('inventory.stock.actions.activate')}
                                 >
                                   <Power className="h-3.5 w-3.5" />
                                 </Button>
@@ -767,32 +771,32 @@ function InventoryContent() {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Movements</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.movements')}</CardDescription>
                 <div className="text-2xl font-bold text-stone-900 mt-1">{movements.length}</div>
               </CardHeader>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Count Audits</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.countAudits')}</CardDescription>
                 <div className="text-2xl font-bold text-amber-700 mt-1">
-                  {totalAdjustments.length} <span className="text-xs font-normal text-stone-500">{totalAdjustments.length === 1 ? 'posting' : 'postings'}</span>
+                  {totalAdjustments.length} <span className="text-xs font-normal text-stone-500">{t('inventory.stock.postings', { count: totalAdjustments.length })}</span>
                 </div>
               </CardHeader>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Purchases</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.purchases')}</CardDescription>
                 <div className="text-2xl font-bold text-emerald-700 mt-1">{formatINR(totalPurchasesValue)}</div>
               </CardHeader>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
-                <CardDescription>Transfers &amp; Issues</CardDescription>
+                <CardDescription>{t('inventory.stock.kpi.transfersAndIssues')}</CardDescription>
                 <div className="text-2xl font-bold text-blue-700 mt-1">
-                  {totalTransfersLogged.length} <span className="text-xs font-normal text-stone-500">{totalTransfersLogged.length === 1 ? 'transfer' : 'transfers'}</span> / {totalIssuesLogged.length} <span className="text-xs font-normal text-stone-500">{totalIssuesLogged.length === 1 ? 'issue' : 'issues'}</span>
+                  {totalTransfersLogged.length} <span className="text-xs font-normal text-stone-500">{t('inventory.stock.transferCount', { count: totalTransfersLogged.length })}</span> / {totalIssuesLogged.length} <span className="text-xs font-normal text-stone-500">{t('inventory.stock.issueCount', { count: totalIssuesLogged.length })}</span>
                 </div>
               </CardHeader>
             </Card>
@@ -802,17 +806,17 @@ function InventoryContent() {
           <div className="space-y-3 bg-white p-3.5 border border-stone-200 rounded-xl text-xs shadow-xs">
             {/* Quick Movement Type Buttons */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-              <span className="text-xs font-semibold text-stone-500 shrink-0 mr-1">Type:</span>
+              <span className="text-xs font-semibold text-stone-500 shrink-0 mr-1">{t('inventory.stock.movementFilter.type')}</span>
               {[
-                { id: 'ALL', label: 'All Movements' },
-                { id: 'count_adjustment', label: 'Count Audits' },
-                { id: 'purchase', label: 'Purchases' },
-                { id: 'transfer', label: 'Transfers' },
-                { id: 'consumption_issue', label: 'Store Issues' },
-                { id: 'sale', label: 'Direct Sales' },
-                { id: 'breakage', label: 'Breakage/Loss' },
-                { id: 'opening', label: 'Opening' },
-                { id: 'wastage', label: 'Wastage' },
+                { id: 'ALL', labelKey: 'inventory.stock.movementFilter.allMovements' },
+                { id: 'count_adjustment', labelKey: 'inventory.stock.movementFilter.countAudits' },
+                { id: 'purchase', labelKey: 'inventory.stock.movementFilter.purchases' },
+                { id: 'transfer', labelKey: 'inventory.stock.movementFilter.transfers' },
+                { id: 'consumption_issue', labelKey: 'inventory.stock.movementFilter.storeIssues' },
+                { id: 'sale', labelKey: 'inventory.stock.movementFilter.directSales' },
+                { id: 'breakage', labelKey: 'inventory.stock.movementFilter.breakageLoss' },
+                { id: 'opening', labelKey: 'inventory.stock.movementFilter.opening' },
+                { id: 'wastage', labelKey: 'inventory.stock.movementFilter.wastage' },
               ].map((mType) => (
                 <button
                   key={mType.id}
@@ -823,7 +827,7 @@ function InventoryContent() {
                       : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                   }`}
                 >
-                  {mType.label}
+                  {t(mType.labelKey)}
                 </button>
               ))}
             </div>
@@ -832,13 +836,13 @@ function InventoryContent() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-stone-100">
               {/* Location Filter */}
               <div className="flex items-center gap-1.5">
-                <span className="text-stone-500 font-medium shrink-0">Location:</span>
+                <span className="text-stone-500 font-medium shrink-0">{t('inventory.stock.locationLabel')}</span>
                 <select
                   value={movementLocationFilter}
                   onChange={(e) => setMovementLocationFilter(e.target.value)}
                   className="w-full rounded-lg border border-stone-200 py-1.5 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
                 >
-                  <option value="ALL">All Locations</option>
+                  <option value="ALL">{t('inventory.stock.allLocations')}</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name} ({l.code})
@@ -849,13 +853,13 @@ function InventoryContent() {
 
               {/* Item Filter Dropdown */}
               <div className="flex items-center gap-1.5">
-                <span className="text-stone-500 font-medium shrink-0">Item:</span>
+                <span className="text-stone-500 font-medium shrink-0">{t('inventory.stock.itemLabel')}</span>
                 <select
                   value={movementItemFilter}
                   onChange={(e) => setMovementItemFilter(e.target.value)}
                   className="w-full rounded-lg border border-stone-200 py-1.5 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white truncate"
                 >
-                  <option value="ALL">All Items</option>
+                  <option value="ALL">{t('inventory.stock.allItems')}</option>
                   {items.map((i) => (
                     <option key={i.item_id} value={i.item_id}>
                       {i.name} ({i.item_code})
@@ -869,7 +873,7 @@ function InventoryContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Search item, reason, batch..."
+                  placeholder={t('inventory.stock.searchMovementPlaceholder')}
                   value={movementSearch}
                   onChange={(e) => setMovementSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"
@@ -882,43 +886,43 @@ function InventoryContent() {
           <Card>
             <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-stone-100">
               <div>
-                <CardTitle>Movements ({filteredMovements.length})</CardTitle>
+                <CardTitle>{t('inventory.stock.tabs.movements', { count: filteredMovements.length })}</CardTitle>
               </div>
               <Link href="/inventory/count">
                 <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-                  <ClipboardList className="h-3.5 w-3.5 text-amber-600" /> New Stock Audit
+                  <ClipboardList className="h-3.5 w-3.5 text-amber-600" /> {t('inventory.stock.newStockAudit')}
                 </Button>
               </Link>
             </CardHeader>
             <CardContent className="pt-0">
               {movementsLoading ? (
                 <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading movement transactions...
+                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> {t('inventory.stock.loadingMovements')}
                 </div>
               ) : filteredMovements.length === 0 ? (
                 <div className="py-12 text-center text-stone-500 text-xs">
-                  No stock movements found matching your filter criteria.
+                  {t('inventory.stock.noMovementsFound')}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                        <th className="py-2.5 px-3">Date</th>
-                        <th className="py-2.5 px-3">Item</th>
-                        <th className="py-2.5 px-3 text-center">Type</th>
-                        <th className="py-2.5 px-3">Location</th>
-                        <th className="py-2.5 px-3 text-right">Qty</th>
-                        <th className="py-2.5 px-3 text-right">Rate</th>
-                        <th className="py-2.5 px-3 text-right">Value</th>
-                        <th className="py-2.5 px-3">Purpose / Batch</th>
-                        <th className="py-2.5 px-3">Notes / Ref</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.date')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.item')}</th>
+                        <th className="py-2.5 px-3 text-center">{t('inventory.stock.movementColumns.type')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.location')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.movementColumns.qty')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.movementColumns.rate')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.movementColumns.value')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.purposeBatch')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.notesRef')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
                       {filteredMovements.map((m) => {
                         const qty = Number(m.quantity) || 0;
-                        const unitSymbol = m.item?.unit?.symbol || 'units';
+                        const unitSymbol = getLocalizedMasterSymbol(m.item?.unit, locale) || 'units';
 
                         return (
                           <tr key={m.id} className="hover:bg-stone-50/80 transition-colors">
@@ -930,7 +934,7 @@ function InventoryContent() {
                               <div className="font-mono text-[10px] text-stone-400">{m.item?.item_code}</div>
                             </td>
                             <td className="py-3 px-3 text-center whitespace-nowrap">
-                              {getMovementBadge(m.movement_type)}
+                              {getMovementBadge(m.movement_type, t)}
                             </td>
                             <td className="py-3 px-3 whitespace-nowrap">
                               {m.source_location && m.destination_location ? (
@@ -1022,12 +1026,14 @@ function InventoryContent() {
 }
 
 export default function InventoryPage() {
+  const { t } = useI18n();
+
   return (
     <Suspense
       fallback={
         <div className="py-16 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
           <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
-          Loading central inventory...
+          {t('inventory.stock.loadingCentral')}
         </div>
       }
     >

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
 import {
   X,
   History,
@@ -28,6 +29,7 @@ interface ItemMovementDrawerProps {
 }
 
 export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawerProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,29 +77,29 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
   const getMovementBadge = (type: string, purpose?: string) => {
     switch (type) {
       case 'purchase':
-        return <Badge variant="success" className="gap-1"><ArrowDownLeft className="h-3 w-3" /> Purchase Inward</Badge>;
+        return <Badge variant="success" className="gap-1"><ArrowDownLeft className="h-3 w-3" /> {t('inventory.stock.movementBadges.purchase')}</Badge>;
       case 'opening':
-        return <Badge variant="outline" className="gap-1">Opening Balance</Badge>;
+        return <Badge variant="outline" className="gap-1">{t('inventory.stock.movementBadges.opening')}</Badge>;
       case 'transfer':
-        return <Badge variant="default" className="gap-1"><ArrowRightLeft className="h-3 w-3" /> Transfer</Badge>;
+        return <Badge variant="default" className="gap-1"><ArrowRightLeft className="h-3 w-3" /> {t('inventory.stock.movementBadges.transfer')}</Badge>;
       case 'issue':
-        return <Badge variant="info" className="gap-1"><ArrowUpRight className="h-3 w-3" /> {purpose || 'Store Issue'}</Badge>;
+        return <Badge variant="info" className="gap-1"><ArrowUpRight className="h-3 w-3" /> {purpose || t('inventory.stock.movementBadges.issue')}</Badge>;
       case 'sale':
-        return <Badge variant="success" className="gap-1">Direct Sale</Badge>;
+        return <Badge variant="success" className="gap-1">{t('inventory.stock.movementBadges.sale')}</Badge>;
       case 'consumption':
-        return <Badge variant="info" className="gap-1">Consumption</Badge>;
+        return <Badge variant="info" className="gap-1">{t('inventory.stock.movementBadges.consumption')}</Badge>;
       case 'return':
-        return <Badge variant="success" className="gap-1">Return Inward</Badge>;
+        return <Badge variant="success" className="gap-1">{t('inventory.stock.movementBadges.return')}</Badge>;
       case 'staff_food':
-        return <Badge variant="warning" className="gap-1"><ArrowUpRight className="h-3 w-3" /> Staff Food</Badge>;
+        return <Badge variant="warning" className="gap-1"><ArrowUpRight className="h-3 w-3" /> {t('inventory.stock.movementBadges.staff_food')}</Badge>;
       case 'wastage':
       case 'spoilage':
       case 'breakage':
       case 'loss':
-        return <Badge variant="danger" className="gap-1"><ArrowUpRight className="h-3 w-3" /> {type}</Badge>;
+        return <Badge variant="danger" className="gap-1"><ArrowUpRight className="h-3 w-3" /> {t(`inventory.stock.movementBadges.${type}`, { defaultValue: type })}</Badge>;
       case 'count_adjustment':
       case 'physical_count_adjustment':
-        return <Badge variant="outline" className="gap-1"><Scale className="h-3 w-3" /> Count Variance</Badge>;
+        return <Badge variant="outline" className="gap-1"><Scale className="h-3 w-3" /> {t('inventory.stock.movementBadges.count_adjustment')}</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
     }
@@ -132,19 +134,19 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
         {/* Stock Snapshot Cards */}
         <div className="p-6 border-b border-stone-200 bg-stone-50/50 grid grid-cols-3 gap-3">
           <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Stock</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.drawer.stockOnHand')}</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
-              {currentQty.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">{item.unit_symbol || item.unit?.symbol || 'units'}</span>
+              {currentQty.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">{item.unit_symbol_hi && locale === 'hi' ? item.unit_symbol_hi : (item.unit_symbol || item.unit?.symbol || 'units')}</span>
             </div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">WAC</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.drawer.wacCost')}</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
               {formatINR(wacCost)}
             </div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Stock Value</div>
+            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.drawer.totalValuation')}</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
               {formatINR(totalValue)}
             </div>
@@ -155,7 +157,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
         <div className="flex-1 overflow-y-auto p-6 space-y-3">
           <div className="flex items-center justify-between pb-1">
             <h3 className="font-bold text-stone-900 flex items-center gap-2">
-              <History className="h-4 w-4 text-amber-600" /> Movement History ({movements.length})
+              <History className="h-4 w-4 text-amber-600" /> {t('inventory.stock.tabs.movements', { count: movements.length })}
             </h3>
             <Button variant="outline" size="sm" onClick={loadMovements} disabled={loading} className="h-7 text-xs">
               <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
@@ -163,9 +165,9 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
           </div>
 
           {loading ? (
-            <div className="py-12 text-center text-stone-400">Loading movements...</div>
+            <div className="py-12 text-center text-stone-400">{t('inventory.drawer.loading')}</div>
           ) : movements.length === 0 ? (
-            <div className="py-12 text-center text-stone-400">No stock movements recorded for this item.</div>
+            <div className="py-12 text-center text-stone-400">{t('inventory.drawer.noMovements')}</div>
           ) : (
             <div className="space-y-2">
               {movements.map((m) => (
@@ -177,7 +179,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
                     </div>
                     <span className="font-mono font-bold text-sm text-stone-900">
                       {m.movement_type === 'count_adjustment' && Number(m.quantity) > 0 ? '+' : ''}
-                      {m.quantity} {item.unit_symbol || item.unit?.symbol || 'units'}
+                      {m.quantity} {item.unit_symbol_hi && locale === 'hi' ? item.unit_symbol_hi : (item.unit_symbol || item.unit?.symbol || 'units')}
                     </span>
                   </div>
 
@@ -218,7 +220,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
         {/* Footer */}
         <div className="p-4 border-t border-stone-200 bg-stone-50 flex justify-end">
           <Button variant="outline" onClick={onClose}>
-            Close
+            {t('common.close')}
           </Button>
         </div>
       </div>

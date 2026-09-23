@@ -5,11 +5,14 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { logAuditAction } from '@/lib/audit-logger';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 import { X, Plus, Edit2, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 
 interface InventoryCategory {
   id: string;
   name: string;
+  name_hi?: string | null;
   code?: string | null;
   inventory_class: string;
   is_active: boolean;
@@ -34,6 +37,7 @@ export function InventoryCategoryModal({
   onClose,
   onUpdated,
 }: InventoryCategoryModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +96,7 @@ export function InventoryCategoryModal({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('Category name is required.');
+      setErrorMessage(t('inventory.categories.nameRequired'));
       return;
     }
 
@@ -142,7 +146,7 @@ export function InventoryCategoryModal({
       await loadCategories();
       if (onUpdated) onUpdated();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save category.');
+      setErrorMessage(err.message || t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -168,7 +172,7 @@ export function InventoryCategoryModal({
       await loadCategories();
       if (onUpdated) onUpdated();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to update category status.');
+      setErrorMessage(err.message || t('common.error'));
     }
   };
 
@@ -184,9 +188,9 @@ export function InventoryCategoryModal({
               <Layers className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-stone-900">Inventory Category Master</h2>
+              <h2 className="text-base font-bold text-stone-900">{t('inventory.categories.title')}</h2>
               <p className="text-[11px] text-stone-500">
-                Configure item categories, SKU prefixes, and inventory class classification
+                {t('inventory.categories.subtitle')}
               </p>
             </div>
           </div>
@@ -210,21 +214,21 @@ export function InventoryCategoryModal({
           {/* Form */}
           <form onSubmit={handleSave} className="bg-stone-50 p-4 border border-stone-200 rounded-xl space-y-3">
             <div className="font-semibold text-stone-800 flex items-center justify-between">
-              <span>{editingId ? 'Edit Category Details' : 'Add New Inventory Category'}</span>
+              <span>{editingId ? t('inventory.categories.editCategory') : t('inventory.categories.addCategory')}</span>
               {editingId && (
                 <button
                   type="button"
                   onClick={resetForm}
                   className="text-amber-600 hover:underline text-[11px] font-normal"
                 >
-                  Cancel Edit
+                  {t('common.cancel')}
                 </button>
               )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <label className="block text-stone-700 font-medium mb-1">Category Name *</label>
+                <label className="block text-stone-700 font-medium mb-1">{t('inventory.categories.name')}</label>
                 <input
                   type="text"
                   value={name}
@@ -236,13 +240,13 @@ export function InventoryCategoryModal({
               </div>
 
               <div>
-                <label className="block text-stone-700 font-medium mb-1">SKU Prefix Code</label>
+                <label className="block text-stone-700 font-medium mb-1">{t('inventory.categories.code')}</label>
                 <input
                   type="text"
                   maxLength={4}
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. SPC, DAI"
+                  placeholder={t('inventory.categories.codePlaceholder')}
                   className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white font-mono uppercase focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -250,7 +254,7 @@ export function InventoryCategoryModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <div>
-                <label className="block text-stone-700 font-medium mb-1">Inventory Class *</label>
+                <label className="block text-stone-700 font-medium mb-1">{t('inventory.categories.class')}</label>
                 <select
                   value={inventoryClass}
                   onChange={(e) => setInventoryClass(e.target.value)}
@@ -258,7 +262,7 @@ export function InventoryCategoryModal({
                 >
                   {INVENTORY_CLASSES.map((cls) => (
                     <option key={cls} value={cls}>
-                      {cls}
+                      {t(`inventory.stock.classes.${cls}`, { defaultValue: cls })}
                     </option>
                   ))}
                 </select>
@@ -272,14 +276,14 @@ export function InventoryCategoryModal({
                     onChange={(e) => setIsActive(e.target.checked)}
                     className="h-4 w-4 rounded text-amber-600 focus:ring-amber-500 border-stone-300"
                   />
-                  <span className="font-medium">Active (Available for item creation)</span>
+                  <span className="font-medium">{t('inventory.categories.active')}</span>
                 </label>
               </div>
             </div>
 
             <div className="flex justify-end pt-1">
               <Button type="submit" variant="amber" size="sm" disabled={saving}>
-                {saving ? 'Saving...' : editingId ? 'Update Category' : 'Create Category'}
+                {saving ? t('inventory.categories.saving') : editingId ? t('inventory.categories.save') : t('inventory.categories.addCategory')}
               </Button>
             </div>
           </form>
@@ -287,20 +291,20 @@ export function InventoryCategoryModal({
           {/* List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-stone-700 font-semibold px-1">
-              <span>Configured Categories ({categories.length})</span>
+              <span>{t('inventory.categories.title')} ({categories.length})</span>
               <button
                 type="button"
                 onClick={loadCategories}
                 className="text-stone-400 hover:text-stone-700 flex items-center gap-1 text-[11px]"
               >
-                <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
+                <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> {t('common.refresh')}
               </button>
             </div>
 
             {loading ? (
-              <div className="py-8 text-center text-stone-400">Loading categories...</div>
+              <div className="py-8 text-center text-stone-400">{t('inventory.categories.loading')}</div>
             ) : categories.length === 0 ? (
-              <div className="py-8 text-center text-stone-400">No categories found.</div>
+              <div className="py-8 text-center text-stone-400">{t('inventory.categories.loading')}</div>
             ) : (
               <div className="border border-stone-200 rounded-xl overflow-hidden divide-y divide-stone-100 bg-white">
                 {categories.map((cat) => (
@@ -312,17 +316,17 @@ export function InventoryCategoryModal({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-stone-900 text-sm">{cat.name}</span>
+                        <span className="font-bold text-stone-900 text-sm">{getLocalizedMasterName(cat, locale)}</span>
                         {cat.code && (
                           <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
                             {cat.code}
                           </span>
                         )}
-                        <Badge variant="outline">{cat.inventory_class}</Badge>
+                        <Badge variant="outline">{t(`inventory.stock.classes.${cat.inventory_class}`, { defaultValue: cat.inventory_class })}</Badge>
                         {cat.is_active ? (
-                          <Badge variant="success">Active</Badge>
+                          <Badge variant="success">{t('inventory.categories.active')}</Badge>
                         ) : (
-                          <Badge variant="outline">Inactive</Badge>
+                          <Badge variant="outline">{t('inventory.categories.inactive')}</Badge>
                         )}
                       </div>
                     </div>
@@ -334,7 +338,7 @@ export function InventoryCategoryModal({
                         size="sm"
                         onClick={() => handleStartEdit(cat)}
                         className="h-7 px-2 text-stone-600 hover:text-stone-900"
-                        title="Edit category"
+                        title={t('common.edit')}
                       >
                         <Edit2 className="h-3 w-3" />
                       </Button>
@@ -345,7 +349,7 @@ export function InventoryCategoryModal({
                         onClick={() => handleToggleStatus(cat)}
                         className="h-7 px-2.5 text-[11px]"
                       >
-                        {cat.is_active ? 'Deactivate' : 'Activate'}
+                        {cat.is_active ? t('inventory.stock.actions.deactivate') : t('inventory.stock.actions.activate')}
                       </Button>
                     </div>
                   </div>
@@ -358,7 +362,7 @@ export function InventoryCategoryModal({
         {/* Footer */}
         <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 flex justify-end">
           <Button variant="secondary" onClick={onClose}>
-            Close
+            {t('common.close')}
           </Button>
         </div>
       </div>

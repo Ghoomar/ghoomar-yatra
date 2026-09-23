@@ -15,7 +15,8 @@ export interface UserProfile {
   email: string;
   phone?: string | null;
   role_id: string;
-  role?: { id: string; name: RoleName };
+  role?: { id: string; name: RoleName; name_hi?: string };
+  locale?: 'en' | 'hi';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -44,6 +45,7 @@ export interface InventoryItemPosition {
 export interface VendorCategory {
   id: string;
   name: string;
+  name_hi?: string | null;
   description?: string | null;
   is_active: boolean;
   created_at?: string;
@@ -53,7 +55,9 @@ export interface VendorCategory {
 export interface Unit {
   id: string;
   name: string;
+  name_hi?: string | null;
   symbol: string;
+  symbol_hi?: string | null;
   is_active: boolean;
   created_at?: string;
 }
@@ -61,6 +65,7 @@ export interface Unit {
 export interface InventoryCategory {
   id: string;
   name: string;
+  name_hi?: string | null;
   inventory_class: 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
   is_active: boolean;
   created_at?: string;
@@ -69,6 +74,7 @@ export interface InventoryCategory {
 export interface Department {
   id: string;
   name: string;
+  name_hi?: string | null;
   code?: string | null;
   is_active: boolean;
   created_at?: string;
@@ -78,20 +84,22 @@ export interface Team {
   id: string;
   department_id: string;
   name: string;
+  name_hi?: string | null;
   code?: string | null;
   is_active: boolean;
   created_at?: string;
-  department?: { id: string; name: string };
+  department?: { id: string; name: string; name_hi?: string | null };
 }
 
 export interface EmployeeRole {
   id: string;
   team_id: string;
   name: string;
+  name_hi?: string | null;
   can_receive_store_issues?: boolean;
   is_active: boolean;
   created_at?: string;
-  team?: { id: string; name: string; department_id: string; department?: { id: string; name: string } };
+  team?: { id: string; name: string; name_hi?: string | null; department_id: string; department?: { id: string; name: string; name_hi?: string | null } };
 }
 
 export interface InventoryItemMaster {

@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { VendorCategory } from '@/lib/types/database';
 import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, Tag } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface VendorCategoryModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ interface VendorCategoryModalProps {
 }
 
 export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCategoryModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [categories, setCategories] = useState<VendorCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +24,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
 
   // Form State
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -52,6 +56,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
   const resetForm = () => {
     setEditingCat(null);
     setName('');
+    setNameHi('');
     setDescription('');
     setErrorMessage(null);
   };
@@ -59,6 +64,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
   const handleStartEdit = (cat: VendorCategory) => {
     setEditingCat(cat);
     setName(cat.name);
+    setNameHi((cat as any).name_hi || '');
     setDescription(cat.description || '');
     setErrorMessage(null);
   };
@@ -94,6 +100,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
           .from('vendor_categories')
           .update({
             name: name.trim(),
+            name_hi: nameHi.trim() || null,
             description: description.trim() || null,
             updated_at: new Date().toISOString(),
           })
@@ -103,6 +110,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
         // Create category
         const { error } = await supabase.from('vendor_categories').insert({
           name: name.trim(),
+          name_hi: nameHi.trim() || null,
           description: description.trim() || null,
           is_active: true,
         });
@@ -131,7 +139,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
               <Tag className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-stone-900">Vendor Categories</h2>
+              <h2 className="text-base font-bold text-stone-900">{t('purchases.vendors.categoryModal.title')}</h2>
             </div>
           </div>
           <button
@@ -154,14 +162,14 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-4 bg-stone-50 rounded-lg border border-stone-200 space-y-3">
             <div className="font-semibold text-stone-800 flex items-center justify-between">
-              <span>{editingCat ? 'Edit Category' : 'Add Category'}</span>
+              <span>{editingCat ? t('purchases.vendors.categoryModal.editCategory') : t('purchases.vendors.categoryModal.addCategory')}</span>
               {editingCat && (
                 <button
                   type="button"
                   onClick={resetForm}
                   className="text-stone-500 hover:text-stone-800 text-[11px] underline"
                 >
-                  Cancel Edit
+                  {t('purchases.vendors.categoryModal.cancelEdit')}
                 </button>
               )}
             </div>
@@ -169,7 +177,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Category Name <span className="text-rose-500">*</span>
+                  {t('purchases.vendors.categoryModal.categoryName')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -182,7 +190,20 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Description</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('purchases.vendors.categoryModal.categoryNameHi')}
+                </label>
+                <input
+                  type="text"
+                  value={nameHi}
+                  onChange={(e) => setNameHi(e.target.value)}
+                  placeholder="उदा. समुद्री भोजन और पोल्ट्री"
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.categoryModal.description')}</label>
                 <input
                   type="text"
                   value={description}
@@ -195,7 +216,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="submit" variant="amber" size="sm" disabled={saving}>
-                {saving ? 'Saving...' : editingCat ? 'Save Changes' : '+ Add Category'}
+                {saving ? t('purchases.vendors.categoryModal.saving') : editingCat ? t('purchases.vendors.categoryModal.saveCategory') : `+ ${t('purchases.vendors.categoryModal.addCategory')}`}
               </Button>
             </div>
           </form>
@@ -203,7 +224,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
           {/* Category List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-stone-700 font-semibold border-b pb-1">
-              <span>Configured Categories ({categories.length})</span>
+              <span>{t('purchases.vendors.categoryModal.title')} ({categories.length})</span>
               <button onClick={loadCategories} className="text-stone-400 hover:text-stone-600 p-1">
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
@@ -211,10 +232,10 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
 
             {loading ? (
               <div className="py-8 text-center text-stone-400 flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading categories...
+                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> {t('purchases.vendors.loading')}
               </div>
             ) : categories.length === 0 ? (
-              <div className="py-8 text-center text-stone-500">No categories found.</div>
+              <div className="py-8 text-center text-stone-500">{t('purchases.vendors.categoryModal.noCategories')}</div>
             ) : (
               <div className="divide-y divide-stone-100 border rounded-lg overflow-hidden bg-white">
                 {categories.map((cat) => (
@@ -226,9 +247,14 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
                   >
                     <div>
                       <div className="font-semibold text-stone-900 flex items-center gap-2">
-                        {cat.name}
+                        <span>{getLocalizedMasterName(cat, locale)}</span>
+                        {cat.name && (cat as any).name_hi && (
+                          <span className="text-stone-400 text-[11px] font-normal">
+                            ({locale === 'hi' ? cat.name : (cat as any).name_hi})
+                          </span>
+                        )}
                         <Badge variant={cat.is_active ? 'success' : 'default'}>
-                          {cat.is_active ? 'Active' : 'Inactive'}
+                          {cat.is_active ? t('purchases.vendors.status.active') : t('purchases.vendors.status.inactive')}
                         </Badge>
                       </div>
                       {cat.description && (
@@ -240,7 +266,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
                       <button
                         type="button"
                         onClick={() => handleStartEdit(cat)}
-                        title="Edit Category"
+                        title={t('purchases.vendors.actions.editVendor')}
                         className="p-1.5 rounded text-stone-500 hover:text-amber-600 hover:bg-stone-100"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
@@ -248,7 +274,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
                       <button
                         type="button"
                         onClick={() => handleToggleActive(cat)}
-                        title={cat.is_active ? 'Deactivate' : 'Activate'}
+                        title={cat.is_active ? t('purchases.vendors.actions.deactivateVendor') : t('purchases.vendors.actions.activateVendor')}
                         className={`p-1.5 rounded ${
                           cat.is_active
                             ? 'text-stone-400 hover:text-rose-600 hover:bg-rose-50'
@@ -268,7 +294,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
         {/* Footer */}
         <div className="px-6 py-3 border-t border-stone-200 flex justify-end bg-stone-50">
           <Button variant="secondary" size="sm" onClick={onClose}>
-            Done
+            {t('common.done')}
           </Button>
         </div>
       </div>

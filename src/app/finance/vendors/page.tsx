@@ -27,8 +27,10 @@ import {
   Info,
   Tag
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 export default function VendorsPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
 
   const [vendors, setVendors] = useState<VendorOutstandingSummary[]>([]);
@@ -64,7 +66,7 @@ export default function VendorsPage() {
       ] = await Promise.all([
         supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
         supabase.from('vendors').select('*').order('name'),
-        supabase.from('inventory_items').select('id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)').eq('is_active', true).order('name'),
+        supabase.from('inventory_items').select('id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi)').eq('is_active', true).order('name'),
         supabase.from('vendor_items').select('id, vendor_id, inventory_item_id, last_purchase_rate, last_purchase_date'),
       ]);
 
@@ -77,7 +79,7 @@ export default function VendorsPage() {
       setVendorItems(viData || []);
     } catch (err: any) {
       console.error('Failed to load vendors:', err);
-      setMessage({ type: 'error', text: 'Failed to load vendor registry. ' + (err.message || '') });
+      setMessage({ type: 'error', text: t('purchases.bills.errLoad') + ' ' + (err.message || '') });
     } finally {
       setLoading(false);
     }
@@ -212,7 +214,10 @@ export default function VendorsPage() {
 
       if ((purchaseCount && purchaseCount > 0) || (paymentCount && paymentCount > 0)) {
         setCannotDeleteReason(
-          `This vendor has ${purchaseCount || 0} purchase invoice(s) and ${paymentCount || 0} payment voucher(s). Under accounting safety rules, vendors with historical transactions cannot be deleted. You can mark this vendor as Inactive instead.`
+          t('purchases.vendors.deleteModal.hasTransactions', {
+            purchases: purchaseCount || 0,
+            payments: paymentCount || 0,
+          })
         );
       }
     } catch (err: any) {
@@ -255,7 +260,7 @@ export default function VendorsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2.5">
             <Building2 className="h-6 w-6 text-amber-600" />
-            Vendors
+            {t('purchases.vendors.title')}
           </h1>
         </div>
 
@@ -263,16 +268,16 @@ export default function VendorsPage() {
           <Link href="/finance/purchases">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
               <ShoppingBag className="h-4 w-4 text-stone-500" />
-              Purchases & Bills
+              {t('purchases.bills.title')}
             </Button>
           </Link>
           <Button variant="outline" size="sm" onClick={() => setCategoryModalOpen(true)} className="gap-1.5 text-stone-700">
             <Tag className="h-4 w-4 text-amber-600" />
-            Categories
+            {t('purchases.vendors.categories')}
           </Button>
           <Button variant="amber" size="sm" onClick={handleOpenAddModal} className="gap-1.5">
             <Plus className="h-4 w-4" />
-            Add Vendor
+            {t('purchases.vendors.addVendor')}
           </Button>
           <Button variant="outline" size="sm" onClick={loadData} title="Refresh data">
             <RefreshCw className="h-4 w-4" />
@@ -283,22 +288,22 @@ export default function VendorsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardDescription>Vendors</CardDescription>
+          <CardDescription>{t('purchases.vendors.kpi.vendors')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{totalVendors}</div>
         </Card>
 
         <Card>
-          <CardDescription>Active</CardDescription>
+          <CardDescription>{t('purchases.vendors.kpi.active')}</CardDescription>
           <div className="text-2xl font-bold text-emerald-700 mt-1">{activeVendorsCount}</div>
         </Card>
 
         <Card>
-          <CardDescription>Outstanding</CardDescription>
+          <CardDescription>{t('purchases.vendors.kpi.outstanding')}</CardDescription>
           <div className="text-2xl font-bold text-rose-600 mt-1">{formatINR(totalOutstanding)}</div>
         </Card>
 
         <Card>
-          <CardDescription>Purchases</CardDescription>
+          <CardDescription>{t('purchases.vendors.kpi.purchases')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalPurchasesAllTime)}</div>
         </Card>
       </div>
@@ -334,35 +339,35 @@ export default function VendorsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search vendors..."
+                placeholder={t('purchases.vendors.searchPlaceholder')}
                 className="w-full pl-9 pr-4 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"
               />
             </div>
 
             {/* Status Filter */}
             <div className="flex items-center gap-1.5 w-full md:w-auto">
-              <span className="text-xs text-stone-500 font-medium">Status:</span>
+              <span className="text-xs text-stone-500 font-medium">{t('purchases.vendors.filter.status')}</span>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
                 className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
               >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="all">{t('purchases.vendors.filter.all')}</option>
+                <option value="active">{t('purchases.vendors.filter.active')}</option>
+                <option value="inactive">{t('purchases.vendors.filter.inactive')}</option>
               </select>
             </div>
 
             {/* Category Filter */}
             {allCategories.length > 0 && (
               <div className="flex items-center gap-1.5 w-full md:w-auto">
-                <span className="text-xs text-stone-500 font-medium">Category:</span>
+                <span className="text-xs text-stone-500 font-medium">{t('purchases.vendors.filter.category')}</span>
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
                   className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
                 >
-                  <option value="all">All</option>
+                  <option value="all">{t('purchases.vendors.filter.all')}</option>
                   {allCategories.map((c) => (
                     <option key={c} value={c}>
                       {c}
@@ -375,16 +380,16 @@ export default function VendorsPage() {
             {/* Item Supplied Filter */}
             {catalogItems.length > 0 && (
               <div className="flex items-center gap-1.5 w-full md:w-auto">
-                <span className="text-xs text-stone-500 font-medium">Item:</span>
+                <span className="text-xs text-stone-500 font-medium">{t('purchases.vendors.filter.item')}</span>
                 <select
                   value={itemFilter}
                   onChange={(e) => setItemFilter(e.target.value)}
                   className="rounded-lg border border-stone-200 py-2 px-2.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500 bg-white max-w-[220px] truncate"
                 >
-                  <option value="all">All</option>
+                  <option value="all">{t('purchases.vendors.filter.all')}</option>
                   {catalogItems.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.name} ({item.item_code})
+                      {item.name_hi && locale === 'hi' ? item.name_hi : item.name} ({item.item_code})
                     </option>
                   ))}
                 </select>
@@ -403,7 +408,7 @@ export default function VendorsPage() {
                 }}
                 className="text-xs text-stone-500 hover:text-stone-800"
               >
-                Reset
+                {t('purchases.vendors.filter.reset')}
               </Button>
             )}
           </div>
@@ -414,9 +419,9 @@ export default function VendorsPage() {
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-stone-100">
           <div>
-            <CardTitle>Vendors</CardTitle>
+            <CardTitle>{t('purchases.vendors.title')}</CardTitle>
             <CardDescription>
-              {filteredVendors.length} vendors
+              {filteredVendors.length} {t('purchases.vendors.kpi.vendors')}
             </CardDescription>
           </div>
         </CardHeader>
@@ -425,27 +430,27 @@ export default function VendorsPage() {
           {loading ? (
             <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
               <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
-              Loading vendor catalog...
+              {t('purchases.vendors.loading')}
             </div>
           ) : filteredVendors.length === 0 ? (
             <div className="py-12 text-center text-stone-500 text-xs">
-              No vendors found matching your criteria.
+              {t('purchases.vendors.noVendors')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                    <th className="py-3 px-3">Code</th>
-                    <th className="py-3 px-3">Vendor</th>
-                    <th className="py-3 px-3">Categories</th>
-                    <th className="py-3 px-3">Contact</th>
-                    <th className="py-3 px-3">Payment Terms</th>
-                    <th className="py-3 px-3 text-right">Purchased</th>
-                    <th className="py-3 px-3 text-right">Paid</th>
-                    <th className="py-3 px-3 text-right">Outstanding</th>
-                    <th className="py-3 px-3 text-center">Status</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
+                    <th className="py-3 px-3">{t('purchases.vendors.table.code')}</th>
+                    <th className="py-3 px-3">{t('purchases.vendors.table.name')}</th>
+                    <th className="py-3 px-3">{t('purchases.vendors.table.categories')}</th>
+                    <th className="py-3 px-3">{t('purchases.vendors.table.contact')}</th>
+                    <th className="py-3 px-3">{t('purchases.vendors.table.paymentTerms')}</th>
+                    <th className="py-3 px-3 text-right">{t('purchases.vendors.table.purchased')}</th>
+                    <th className="py-3 px-3 text-right">{t('purchases.vendors.table.paid')}</th>
+                    <th className="py-3 px-3 text-right">{t('purchases.vendors.table.balance')}</th>
+                    <th className="py-3 px-3 text-center">{t('purchases.vendors.filter.status')}</th>
+                    <th className="py-3 px-3 text-right">{t('purchases.vendors.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -506,7 +511,7 @@ export default function VendorsPage() {
                                 </span>
                               ))
                             ) : (
-                              <span className="text-[11px] text-stone-400 italic">General</span>
+                              <span className="text-[11px] text-stone-400 italic">{t('purchases.vendors.general')}</span>
                             )}
                           </div>
                         </td>
@@ -550,14 +555,14 @@ export default function VendorsPage() {
                         {/* Status */}
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <Badge variant={isActive ? 'success' : 'default'}>
-                            {isActive ? 'Active' : 'Inactive'}
+                            {isActive ? t('purchases.vendors.status.active') : t('purchases.vendors.status.inactive')}
                           </Badge>
                         </td>
 
                         {/* Actions */}
                         <td className="py-3 px-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
-                            <Link href={`/finance/vendors/${v.vendor_id}`} title="View Details & Ledger">
+                            <Link href={`/finance/vendors/${v.vendor_id}`} title={t('purchases.vendors.actions.viewDetails')}>
                               <button className="p-1.5 rounded text-stone-500 hover:text-amber-600 hover:bg-stone-100 transition-colors">
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </button>
@@ -565,7 +570,7 @@ export default function VendorsPage() {
 
                             <button
                               onClick={() => handleOpenEditModal(v)}
-                              title="Edit Vendor"
+                              title={t('purchases.vendors.actions.editVendor')}
                               className="p-1.5 rounded text-stone-500 hover:text-amber-600 hover:bg-stone-100 transition-colors"
                             >
                               <Edit2 className="h-3.5 w-3.5" />
@@ -573,7 +578,7 @@ export default function VendorsPage() {
 
                             <button
                               onClick={() => handleToggleStatus(v)}
-                              title={isActive ? 'Deactivate Vendor' : 'Activate Vendor'}
+                              title={isActive ? t('purchases.vendors.actions.deactivateVendor') : t('purchases.vendors.actions.activateVendor')}
                               className={`p-1.5 rounded transition-colors ${
                                 isActive
                                   ? 'text-stone-400 hover:text-amber-700 hover:bg-amber-50'
@@ -585,7 +590,7 @@ export default function VendorsPage() {
 
                             <button
                               onClick={() => handleInitiateDelete(v)}
-                              title="Delete Vendor (Zero-Transaction Only)"
+                              title={t('purchases.vendors.actions.deleteVendor')}
                               className="p-1.5 rounded text-stone-300 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -644,7 +649,7 @@ export default function VendorsPage() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-stone-900">
-                  {cannotDeleteReason ? 'Cannot Delete Vendor' : 'Confirm Permanent Deletion'}
+                  {cannotDeleteReason ? t('purchases.vendors.deleteModal.titleCannot') : t('purchases.vendors.deleteModal.titleConfirm')}
                 </h3>
                 <div className="text-stone-500 font-mono mt-0.5">
                   {deleteModalVendor.vendor_code} — {deleteModalVendor.vendor_name}
@@ -655,7 +660,7 @@ export default function VendorsPage() {
             {deleteChecking ? (
               <div className="py-4 text-center text-stone-500 flex items-center justify-center gap-2">
                 <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
-                Verifying transaction history...
+                {t('purchases.vendors.deleteModal.checking')}
               </div>
             ) : cannotDeleteReason ? (
               <div className="space-y-3">
@@ -665,7 +670,7 @@ export default function VendorsPage() {
                 <div className="p-3 bg-stone-50 border border-stone-200 text-stone-600 rounded-lg flex items-center gap-2">
                   <Info className="h-4 w-4 text-stone-400 shrink-0" />
                   <span>
-                    Deactivating keeps your accounts balanced while stopping any new purchases from this vendor.
+                    {t('purchases.vendors.deleteModal.deactivateNotice')}
                   </span>
                 </div>
                 <div className="flex justify-end gap-2 pt-2 border-t">
@@ -674,7 +679,7 @@ export default function VendorsPage() {
                     variant="secondary"
                     onClick={() => setDeleteModalVendor(null)}
                   >
-                    Close
+                    {t('purchases.vendors.deleteModal.close')}
                   </Button>
                   <Button
                     type="button"
@@ -684,14 +689,14 @@ export default function VendorsPage() {
                       setDeleteModalVendor(null);
                     }}
                   >
-                    Deactivate Vendor
+                    {t('purchases.vendors.deleteModal.deactivateAction')}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-stone-700 leading-relaxed">
-                  This vendor has <strong>zero historical transactions</strong>. Are you sure you want to permanently remove it? This action cannot be undone.
+                  {t('purchases.vendors.deleteModal.zeroTxNotice')}
                 </p>
                 <div className="flex justify-end gap-2 pt-2 border-t">
                   <Button
@@ -699,14 +704,14 @@ export default function VendorsPage() {
                     variant="secondary"
                     onClick={() => setDeleteModalVendor(null)}
                   >
-                    Cancel
+                    {t('purchases.vendors.deleteModal.cancel')}
                   </Button>
                   <Button
                     type="button"
                     variant="danger"
                     onClick={handleConfirmDelete}
                   >
-                    Delete Vendor
+                    {t('purchases.vendors.deleteModal.deleteAction')}
                   </Button>
                 </div>
               </div>

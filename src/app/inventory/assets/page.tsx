@@ -18,8 +18,11 @@ import {
   Search,
   ArrowRight,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 export default function PhysicalAssetsPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [assets, setAssets] = useState<any[]>([]);
@@ -47,11 +50,11 @@ export default function PhysicalAssetsPage() {
         .from('inventory_items')
         .select(`
           *,
-          unit:units!inventory_items_unit_id_fkey(symbol, name),
-          category:inventory_categories(name),
+          unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+          category:inventory_categories(name, name_hi),
           location_stocks:item_location_stocks(
             id, quantity, location_id,
-            location:inventory_locations(id, name, code, location_type)
+            location:inventory_locations(id, name, name_hi, code, location_type)
           )
         `)
         .eq('inventory_class', 'Physical Asset')
@@ -153,7 +156,7 @@ export default function PhysicalAssetsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Layers className="h-6 w-6 text-amber-600" />
-            Physical Assets
+            {t('inventory.assets.title')}
           </h1>
         </div>
 
@@ -165,7 +168,7 @@ export default function PhysicalAssetsPage() {
             disabled={loading}
             className="gap-1.5"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> Refresh
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> {t('common.refresh')}
           </Button>
         </div>
       </div>
@@ -190,22 +193,22 @@ export default function PhysicalAssetsPage() {
       {/* KPI Highlights */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4 bg-white border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Total Assets</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{t('inventory.assets.totalAssets')}</div>
           <div className="text-xl font-bold text-stone-900 mt-1">{totalOwnedAll} <span className="text-xs font-normal text-stone-500">pcs</span></div>
         </Card>
 
         <Card className="p-4 bg-emerald-50/50 border-emerald-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">In Service</div>
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">{t('inventory.assets.inService')}</div>
           <div className="text-xl font-bold text-emerald-900 mt-1">{totalInServiceAll} <span className="text-xs font-normal text-emerald-600">pcs</span></div>
         </Card>
 
         <Card className="p-4 bg-amber-50/50 border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Broken / Repair</div>
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">{t('inventory.assets.brokenRepair')}</div>
           <div className="text-xl font-bold text-amber-900 mt-1">{totalBrokenAll} <span className="text-xs font-normal text-amber-600">pcs</span></div>
         </Card>
 
         <Card className="p-4 bg-red-50/50 border-red-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-red-700 uppercase tracking-wider">Missing / Lost</div>
+          <div className="text-[11px] font-semibold text-red-700 uppercase tracking-wider">{t('inventory.assets.missingLost')}</div>
           <div className="text-xl font-bold text-red-900 mt-1">{totalLostAll} <span className="text-xs font-normal text-red-600">pcs</span></div>
         </Card>
       </div>
@@ -214,16 +217,16 @@ export default function PhysicalAssetsPage() {
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-stone-200 text-xs">
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <MapPin className="h-4 w-4 text-stone-400 shrink-0" />
-          <span className="font-medium text-stone-700 whitespace-nowrap">Location:</span>
+          <span className="font-medium text-stone-700 whitespace-nowrap">{t('inventory.assets.location')}</span>
           <select
             value={selectedLocationId}
             onChange={(e) => setSelectedLocationId(e.target.value)}
             className="w-full sm:w-64 rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white font-medium"
           >
-            <option value="ALL">All Locations</option>
+            <option value="ALL">{t('inventory.assets.allLocations')}</option>
             {locations.map((loc) => (
               <option key={loc.id} value={loc.id}>
-                {loc.name}
+                {getLocalizedMasterName(loc, locale)}
               </option>
             ))}
           </select>
@@ -235,7 +238,7 @@ export default function PhysicalAssetsPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search assets..."
+            placeholder={t('inventory.assets.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-1.5 rounded-md border border-stone-300 text-stone-900 focus:outline-none"
           />
         </div>
@@ -246,32 +249,32 @@ export default function PhysicalAssetsPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Assets</CardTitle>
+              <CardTitle>{t('inventory.assets.table.asset')}</CardTitle>
             </div>
             <div className="text-xs text-stone-500">
-              Showing {filteredAssets.length} of {assets.length} assets
+              {t('inventory.assets.showingCount', { filtered: filteredAssets.length, total: assets.length })}
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
             <div className="py-16 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-              <RefreshCw className="h-5 w-5 animate-spin text-amber-600" /> Loading asset register & room balances...
+              <RefreshCw className="h-5 w-5 animate-spin text-amber-600" /> {t('inventory.assets.loadingAssets')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                    <th className="py-2.5 px-3">Code</th>
-                    <th className="py-2.5 px-3">Asset</th>
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3">Locations</th>
-                    <th className="py-2.5 px-3 text-right">In Service</th>
-                    <th className="py-2.5 px-3 text-right">Broken</th>
-                    <th className="py-2.5 px-3 text-right">Lost</th>
-                    <th className="py-2.5 px-3 text-right">Total</th>
-                    <th className="py-2.5 px-3 text-center">Action</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.table.code')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.table.asset')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.table.category')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.table.locations')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('inventory.assets.table.inService')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('inventory.assets.table.broken')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('inventory.assets.table.lost')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('inventory.assets.table.total')}</th>
+                    <th className="py-2.5 px-3 text-center">{t('inventory.assets.table.action')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -281,6 +284,7 @@ export default function PhysicalAssetsPage() {
                       selectedLocationId !== 'ALL'
                         ? locStocks.find((ls: any) => ls.location_id === selectedLocationId)?.quantity || 0
                         : null;
+                    const unitSym = getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs';
 
                     return (
                       <tr
@@ -296,12 +300,12 @@ export default function PhysicalAssetsPage() {
                             {asset.name}
                           </div>
                           <div className="text-[11px] text-stone-400">
-                            {formatINR(Number(asset.current_weighted_average_cost || 0))} / {asset.unit?.symbol || 'pcs'}
+                            {formatINR(Number(asset.current_weighted_average_cost || 0))} / {unitSym}
                           </div>
                         </td>
                         <td className="py-3 px-3 text-stone-600">
                           <Badge variant="outline" className="text-[10px] py-0">
-                            {asset.category?.name || 'Equipment'}
+                            {getLocalizedMasterName(asset.category, locale) || 'Equipment'}
                           </Badge>
                         </td>
                         <td className="py-3 px-3">
@@ -315,17 +319,17 @@ export default function PhysicalAssetsPage() {
                                     : 'bg-stone-50 text-stone-700 border-stone-200'
                                 }`}
                               >
-                                {ls.location?.name}: {ls.quantity}
+                                {getLocalizedMasterName(ls.location, locale)}: {ls.quantity}
                               </span>
                             ))}
                             {locStocks.length === 0 && (
-                              <span className="text-[10px] text-stone-400 italic">No room allocated</span>
+                              <span className="text-[10px] text-stone-400 italic">{t('inventory.assets.noRoomAllocated')}</span>
                             )}
                           </div>
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-emerald-800">
                           {selectedLocStock !== null ? selectedLocStock : asset.in_service_qty}{' '}
-                          <span className="text-[10px] text-stone-500 font-normal">{asset.unit?.symbol || 'pcs'}</span>
+                          <span className="text-[10px] text-stone-500 font-normal">{unitSym}</span>
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-amber-800">
                           {asset.broken_qty > 0 ? (
@@ -343,11 +347,11 @@ export default function PhysicalAssetsPage() {
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-stone-900">
                           {asset.total_owned_qty}{' '}
-                          <span className="text-[10px] text-stone-500 font-normal">{asset.unit?.symbol || 'pcs'}</span>
+                          <span className="text-[10px] text-stone-500 font-normal">{unitSym}</span>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className="text-stone-400 group-hover:text-amber-600 transition-colors inline-flex items-center gap-0.5 text-[11px] font-semibold">
-                            Manage <ArrowRight className="h-3 w-3" />
+                            {t('inventory.assets.manage')} <ArrowRight className="h-3 w-3" />
                           </span>
                         </td>
                       </tr>
@@ -356,7 +360,7 @@ export default function PhysicalAssetsPage() {
                   {filteredAssets.length === 0 && (
                     <tr>
                       <td colSpan={9} className="py-10 text-center text-stone-400">
-                        No physical assets found matching the selected filters.
+                        {t('inventory.assets.noAssetsFound')}
                       </td>
                     </tr>
                   )}

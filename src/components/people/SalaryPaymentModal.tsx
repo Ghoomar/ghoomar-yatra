@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { EmployeeSalarySummaryRow, SalaryPaymentMethod, SalaryPaymentType } from '@/lib/types/database';
 import { Banknote, X, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 interface SalaryPaymentModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export function SalaryPaymentModal({
   record,
   onSuccess,
 }: SalaryPaymentModalProps) {
+  const { t } = useI18n();
   const [paymentDate, setPaymentDate] = useState(getTodayBusinessDate());
   const [amount, setAmount] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<SalaryPaymentMethod>('Bank Transfer');
@@ -51,11 +53,11 @@ export function SalaryPaymentModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (numAmount <= 0) {
-      setError('Please enter a valid disbursement amount greater than 0.');
+      setError(t('people.paymentModal.errorAmount'));
       return;
     }
     if (!paymentDate) {
-      setError('Please select the payment disbursement date.');
+      setError(t('people.paymentModal.errorDate'));
       return;
     }
 
@@ -104,9 +106,9 @@ export function SalaryPaymentModal({
               <Banknote className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-stone-900">Record Salary Payment</h2>
+              <h2 className="text-lg font-bold text-stone-900">{t('people.paymentModal.title')}</h2>
               <p className="text-xs text-stone-500">
-                Disburse salary or advance toward pending liability
+                {t('people.paymentModal.subtitle')}
               </p>
             </div>
           </div>
@@ -149,25 +151,25 @@ export function SalaryPaymentModal({
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-stone-200 text-xs">
               <div>
-                <span className="text-stone-500 block">Earned Month</span>
+                <span className="text-stone-500 block">{t('people.paymentModal.earnedMonth')}</span>
                 <span className="font-medium text-stone-800">{formatINR(record.net_earned_salary)}</span>
               </div>
               <div>
-                <span className="text-stone-500 block">Prev Pending</span>
+                <span className="text-stone-500 block">{t('people.paymentModal.prevPending')}</span>
                 <span className="font-medium text-stone-800">{formatINR(record.previous_pending_salary)}</span>
               </div>
               <div>
-                <span className="text-stone-500 block">Total Due</span>
+                <span className="text-stone-500 block">{t('people.paymentModal.totalDue')}</span>
                 <span className="font-bold text-stone-900">{formatINR(record.total_salary_due)}</span>
               </div>
               <div>
-                <span className="text-stone-500 block">Already Given</span>
+                <span className="text-stone-500 block">{t('people.paymentModal.alreadyGiven')}</span>
                 <span className="font-medium text-emerald-700">{formatINR(record.total_salary_given)}</span>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-stone-200 bg-amber-50/60 -mx-4 -mb-4 px-4 py-2.5 rounded-b-xl">
-              <span className="text-xs font-semibold text-amber-900">Current Outstanding Balance:</span>
+              <span className="text-xs font-semibold text-amber-900">{t('people.paymentModal.outstandingBalance')}</span>
               <span className="text-base font-bold text-amber-700">
                 {formatINR(record.pending_salary_balance)}
               </span>
@@ -179,7 +181,7 @@ export function SalaryPaymentModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Payment Date <span className="text-rose-500">*</span>
+                  {t('people.paymentModal.date')}
                 </label>
                 <input
                   type="date"
@@ -192,7 +194,7 @@ export function SalaryPaymentModal({
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Amount (₹) <span className="text-rose-500">*</span>
+                  {t('people.paymentModal.amount')}
                 </label>
                 <input
                   type="number"
@@ -211,7 +213,7 @@ export function SalaryPaymentModal({
               <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
                 <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
                 <span>
-                  Disbursement ({formatINR(numAmount)}) exceeds the current pending balance ({formatINR(pendingBal)}). The excess will reflect as an advance credit on the employee balance.
+                  {t('people.paymentModal.overpaymentWarning')}
                 </span>
               </div>
             )}
@@ -219,39 +221,39 @@ export function SalaryPaymentModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Payment Type <span className="text-rose-500">*</span>
+                  {t('people.paymentModal.paymentType')}
                 </label>
                 <select
                   value={paymentType}
                   onChange={(e) => setPaymentType(e.target.value as SalaryPaymentType)}
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
-                  <option value="Salary Payment">Salary Payment</option>
-                  <option value="Advance Salary">Advance Salary</option>
-                  <option value="Settlement">Settlement</option>
+                  <option value="Salary Payment">{t('people.paymentModal.types.Salary Payment')}</option>
+                  <option value="Advance Salary">{t('people.paymentModal.types.Advance Salary')}</option>
+                  <option value="Settlement">{t('people.paymentModal.types.Settlement')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Payment Method <span className="text-rose-500">*</span>
+                  {t('people.paymentModal.paymentMethod')}
                 </label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value as SalaryPaymentMethod)}
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
-                  <option value="Bank Transfer">Bank Transfer (NEFT/IMPS/RTGS)</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Cheque">Cheque</option>
+                  <option value="Bank Transfer">{t('people.paymentModal.methods.Bank Transfer')}</option>
+                  <option value="UPI">{t('people.paymentModal.methods.UPI')}</option>
+                  <option value="Cash">{t('people.paymentModal.methods.Cash')}</option>
+                  <option value="Cheque">{t('people.paymentModal.methods.Cheque')}</option>
                 </select>
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Reference / UTR / Cheque / Txn No.
+                {t('people.paymentModal.referenceNumber')}
               </label>
               <input
                 type="text"
@@ -264,7 +266,7 @@ export function SalaryPaymentModal({
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Notes / Purpose
+                {t('people.paymentModal.notes')}
               </label>
               <textarea
                 rows={2}
@@ -279,14 +281,18 @@ export function SalaryPaymentModal({
           {/* Action Buttons */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-100">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
-              Cancel
+              {t('people.paymentModal.cancel')}
             </Button>
             <Button
               type="submit"
               disabled={saving || numAmount <= 0}
               className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
             >
-              {saving ? 'Disbursing...' : `Disburse ${numAmount > 0 ? formatINR(numAmount) : ''}`}
+              {saving
+                ? t('people.paymentModal.disbursing')
+                : (numAmount > 0
+                    ? t('people.paymentModal.disburse', { amount: formatINR(numAmount) })
+                    : t('people.paymentModal.disburseNoAmount'))}
             </Button>
           </div>
         </form>

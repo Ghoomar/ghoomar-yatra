@@ -1,0 +1,42 @@
+{
+  "title": "Daily Staff Attendance Register",
+  "subtitle": "Digital muster roll recorded from physical attendance register for midnight operational reporting.",
+  "statusLabel": "Attendance Status:",
+  "recorded": "RECORDED",
+  "notSubmitted": "NOT SUBMITTED FOR TODAY",
+  "markAllPresent": "Mark All Present",
+  "saveRegister": "Save Register",
+  "saving": "Saving...",
+  "stats": {
+    "present": "Present",
+    "absent": "Absent",
+    "weeklyOff": "Weekly Off",
+    "leave": "Leave",
+    "overtimeHours": "Overtime Hours"
+  },
+  "rosterTitle": "Attendance Roster ({count} Staff)",
+  "rosterSubtitle": "Rapid status selection with overtime and penalty logging",
+  "noStaffFound": "No active employees found. Please register employees first.",
+  "table": {
+    "staffMember": "Staff Member",
+    "deptRole": "Dept / Role",
+    "status": "Attendance Status",
+    "otHours": "OT (Hrs)",
+    "penalty": "Penalty (₹)",
+    "notes": "Notes",
+    "remarksPlaceholder": "Remarks..."
+  },
+  "statusOptions": {
+    "present": "Present",
+    "absent": "Absent",
+    "weeklyOff": "Weekly Off",
+    "halfDay": "Half Day",
+    "doubleShift": "Double Shift",
+    "leave": "Leave"
+  },
+  "messages": {
+    "savedSuccess": "Attendance for {count} staff members saved successfully.",
+    "loadFailed": "Failed to load attendance register.",
+    "saveFailed": "Failed to save attendance: {error}"
+  }
+}

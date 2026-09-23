@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import {
   ArrowRightLeft,
   Plus,
@@ -26,6 +28,7 @@ interface IssueLine {
 }
 
 export default function StoreIssuesPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [activeTab, setActiveTab] = useState<'issue' | 'transfer'>('issue');
@@ -76,17 +79,17 @@ export default function StoreIssuesPage() {
           .from('inventory_items')
           .select(`
             *,
-            unit:units!inventory_items_unit_id_fkey(symbol, name),
-            sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, name),
-            category:inventory_categories(id, name, inventory_class),
+            unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+            sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+            category:inventory_categories(id, name, name_hi, inventory_class),
             location_stocks:item_location_stocks(location_id, quantity)
           `)
           .eq('is_active', true)
           .order('name'),
         supabase.from('inventory_locations').select('*').eq('is_active', true).order('name'),
         supabase.from('departments').select('*').eq('is_active', true).order('name'),
-        supabase.from('teams').select('*, department:departments(id, name)').eq('is_active', true).order('name'),
-        supabase.from('employees').select('id, name, employment_status, department_id, team_id, role:employee_roles(id, name, is_active, can_receive_store_issues)').eq('employment_status', 'Active').order('name'),
+        supabase.from('teams').select('*, department:departments(id, name, name_hi)').eq('is_active', true).order('name'),
+        supabase.from('employees').select('id, name, employment_status, department_id, team_id, role:employee_roles(id, name, name_hi, is_active, can_receive_store_issues)').eq('employment_status', 'Active').order('name'),
         supabase.from('department_inventory_categories').select('*'),
       ]);
 
@@ -115,12 +118,12 @@ export default function StoreIssuesPage() {
         .from('stock_movements')
         .select(`
           id, business_date, movement_type, quantity, purpose, notes, created_at,
-          item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)),
-          department:departments(name),
+          item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+          department:departments(name, name_hi),
           responsible_person:employees!stock_movements_responsible_person_id_fkey(
             name,
-            team:teams(name),
-            role:employee_roles(name)
+            team:teams(name, name_hi),
+            role:employee_roles(name, name_hi)
           ),
           source_loc:inventory_locations!stock_movements_source_location_id_fkey(name),
           dest_loc:inventory_locations!stock_movements_destination_location_id_fkey(name)
@@ -430,7 +433,7 @@ export default function StoreIssuesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ArrowRightLeft className="h-6 w-6 text-amber-600" />
-            Store Issues &amp; Transfers
+            {t('inventory.issues.title')}
           </h1>
         </div>
 
@@ -442,7 +445,7 @@ export default function StoreIssuesPage() {
             className="px-3 py-1.5 border border-stone-300 rounded-lg text-xs font-mono bg-white text-stone-900"
           />
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-1.5">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> Refresh
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> {t('common.refresh')}
           </Button>
         </div>
       </div>
@@ -474,7 +477,7 @@ export default function StoreIssuesPage() {
               : 'text-stone-500 hover:text-stone-800'
           }`}
         >
-          <Users className="h-4 w-4" /> Issue to Department / Staff
+          <Users className="h-4 w-4" /> {t('inventory.issues.tabIssue')}
         </button>
         <button
           onClick={() => setActiveTab('transfer')}
@@ -484,7 +487,7 @@ export default function StoreIssuesPage() {
               : 'text-stone-500 hover:text-stone-800'
           }`}
         >
-          <MapPin className="h-4 w-4" /> Transfer Between Locations
+          <MapPin className="h-4 w-4" /> {t('inventory.issues.tabTransfer')}
         </button>
       </div>
 
@@ -494,14 +497,14 @@ export default function StoreIssuesPage() {
           <div className="lg:col-span-2">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle>Issue Goods</CardTitle>
+                <CardTitle>{t('inventory.issues.recordIssue')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleIssueSubmit} className="space-y-4 text-xs">
                   {/* Source Store Location */}
                   <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-200">
                     <label className="block font-semibold text-amber-900 mb-1 flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-amber-600" /> Source Location{' '}
+                      <MapPin className="h-3.5 w-3.5 text-amber-600" /> {t('inventory.issues.sourceLocation')}{' '}
                       <span className="text-red-500">*</span>
                     </label>
                     <select
@@ -510,10 +513,10 @@ export default function StoreIssuesPage() {
                       required
                       className="w-full rounded-md border border-amber-300 p-2 text-stone-900 bg-white focus:outline-none"
                     >
-                      <option value="">Select Store Location...</option>
+                      <option value="">{t('inventory.issues.selectSourceLocation')}</option>
                       {locations.map((loc) => (
                         <option key={loc.id} value={loc.id}>
-                          {loc.name} ({loc.location_type})
+                          {getLocalizedMasterName(loc, locale)} ({loc.location_type})
                         </option>
                       ))}
                     </select>
@@ -523,7 +526,7 @@ export default function StoreIssuesPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block font-medium text-stone-700 mb-1">
-                        Department <span className="text-red-500">*</span>
+                        {t('inventory.issues.department')} <span className="text-red-500">*</span>
                       </label>
                       <select
                         value={departmentId}
@@ -531,26 +534,26 @@ export default function StoreIssuesPage() {
                         required
                         className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                       >
-                        <option value="">Select Department...</option>
+                        <option value="">{t('inventory.issues.selectDepartment')}</option>
                         {departments.map((d) => (
                           <option key={d.id} value={d.id}>
-                            {d.name}
+                            {getLocalizedMasterName(d, locale)}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Team</label>
+                      <label className="block font-medium text-stone-700 mb-1">{t('inventory.issues.team')}</label>
                       <select
                         value={teamId}
                         onChange={(e) => handleTeamChange(e.target.value)}
                         className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                       >
-                        <option value="">All / General</option>
-                        {availableTeams.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
+                        <option value="">{t('inventory.issues.allTeams')}</option>
+                        {availableTeams.map((teamItem) => (
+                          <option key={teamItem.id} value={teamItem.id}>
+                            {getLocalizedMasterName(teamItem, locale)}
                           </option>
                         ))}
                       </select>
@@ -559,11 +562,11 @@ export default function StoreIssuesPage() {
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block font-medium text-stone-700">
-                          Staff In-Charge <span className="text-rose-500">*</span>
+                          {t('inventory.issues.staffInCharge')} <span className="text-rose-500">*</span>
                         </label>
                         {filteredEmployees.length === 0 && (departmentId || teamId) && (
                           <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            No eligible receivers
+                            {t('inventory.issues.noEligibleReceivers')}
                           </span>
                         )}
                       </div>
@@ -575,12 +578,12 @@ export default function StoreIssuesPage() {
                       >
                         <option value="">
                           {filteredEmployees.length === 0
-                            ? 'No staff with issue receiving permission'
-                            : 'Select Eligible Staff...'}
+                            ? t('inventory.issues.noStaffPermission')
+                            : t('inventory.issues.selectEligibleStaff')}
                         </option>
                         {filteredEmployees.map((emp) => (
                           <option key={emp.id} value={emp.id}>
-                            {emp.name} ({emp.role?.name || 'Staff'})
+                            {emp.name} ({getLocalizedMasterName(emp.role, locale) || t('people.employees.staff')})
                           </option>
                         ))}
                       </select>
@@ -590,29 +593,29 @@ export default function StoreIssuesPage() {
                   {/* Purpose & Notes */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Purpose</label>
+                      <label className="block font-medium text-stone-700 mb-1">{t('inventory.issues.purpose')}</label>
                       <select
                         value={purpose}
                         onChange={(e) => setPurpose(e.target.value)}
                         className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none font-medium"
                       >
-                        <option value="Customer Food">Customer Food Preparation</option>
-                        <option value="Staff Food">Staff Meal Preparation</option>
-                        <option value="Service Issue">Dining & Service Requirement</option>
-                        <option value="Admin & Stationery">Office & Admin Use</option>
-                        <option value="Housekeeping Supply">Housekeeping & Cleaning</option>
-                        <option value="Wastage">Spoilage / Kitchen Wastage</option>
-                        <option value="Operational Consumption">General Operations</option>
+                        <option value="Customer Food">{t('inventory.issues.purposeOptions.Customer Food')}</option>
+                        <option value="Staff Food">{t('inventory.issues.purposeOptions.Staff Food')}</option>
+                        <option value="Service Issue">{t('inventory.issues.purposeOptions.Service Issue')}</option>
+                        <option value="Admin & Stationery">{t('inventory.issues.purposeOptions.Admin & Stationery')}</option>
+                        <option value="Housekeeping Supply">{t('inventory.issues.purposeOptions.Housekeeping Supply')}</option>
+                        <option value="Wastage">{t('inventory.issues.purposeOptions.Wastage')}</option>
+                        <option value="Operational Consumption">{t('inventory.issues.purposeOptions.Operational Consumption')}</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                      <label className="block font-medium text-stone-700 mb-1">{t('common.notes')}</label>
                       <input
                         type="text"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
-                        placeholder="e.g. Dinner buffet replenishment, morning prep"
+                        placeholder={t('inventory.issues.notesPlaceholder')}
                         className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                       />
                     </div>
@@ -621,9 +624,9 @@ export default function StoreIssuesPage() {
                   {/* Line Items */}
                   <div className="border-t pt-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-stone-900">Items</span>
+                      <span className="font-semibold text-stone-900">{t('inventory.issues.linesTitle')}</span>
                       <Button type="button" variant="outline" size="sm" onClick={handleAddLine} className="gap-1 text-xs">
-                        <Plus className="h-3.5 w-3.5" /> Add Item
+                        <Plus className="h-3.5 w-3.5" /> {t('inventory.issues.addLine')}
                       </Button>
                     </div>
 
@@ -634,6 +637,8 @@ export default function StoreIssuesPage() {
                           selectedItem?.location_stocks?.find((ls: any) => ls.location_id === sourceLocationId)?.quantity || 0;
                         const factor = Number(selectedItem?.conversion_factor || 1);
                         const hasPack = selectedItem?.secondary_unit_id && factor > 1;
+                        const baseUnitSym = getLocalizedMasterSymbol(selectedItem?.unit, locale) || selectedItem?.unit?.symbol || 'units';
+                        const secUnitSym = getLocalizedMasterSymbol(selectedItem?.sec_unit, locale) || selectedItem?.sec_unit?.symbol || 'pack';
 
                         return (
                           <div
@@ -652,13 +657,14 @@ export default function StoreIssuesPage() {
                                 required
                                 className="w-full rounded-md border border-stone-300 p-1.5 text-stone-900 bg-white focus:outline-none"
                               >
-                                <option value="">Select Item...</option>
+                                <option value="">{t('inventory.issues.selectItem')}</option>
                                 {selectableItems.map((it) => {
                                   const locQty =
                                     it.location_stocks?.find((ls: any) => ls.location_id === sourceLocationId)?.quantity || 0;
+                                  const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
                                   return (
                                     <option key={it.id} value={it.id}>
-                                      [{it.item_code}] {it.name} — ({locQty} {it.unit?.symbol || 'units'} in store)
+                                      [{it.item_code}] {it.name} — ({locQty} {itUnitSym} {t('inventory.issues.inStore')})
                                     </option>
                                   );
                                 })}
@@ -677,7 +683,7 @@ export default function StoreIssuesPage() {
                                   updated[idx].quantity = parseFloat(e.target.value) || 0;
                                   setLines(updated);
                                 }}
-                                placeholder="Qty"
+                                placeholder={t('inventory.issues.qtyPlaceholder')}
                                 required
                                 className="w-full rounded-md border border-stone-300 p-1.5 font-bold text-stone-900 bg-white text-right"
                               />
@@ -700,12 +706,12 @@ export default function StoreIssuesPage() {
                                   }`}
                                 >
                                   {line.use_pack_unit
-                                    ? `${selectedItem?.sec_unit?.symbol} (×${factor})`
-                                    : selectedItem?.unit?.symbol || 'units'}
+                                    ? `${secUnitSym} (×${factor})`
+                                    : baseUnitSym}
                                 </button>
                               ) : (
                                 <span className="text-stone-500 font-mono py-1.5 px-2 block">
-                                  {selectedItem?.unit?.symbol || 'units'}
+                                  {baseUnitSym}
                                 </span>
                               )}
                             </div>
@@ -739,14 +745,14 @@ export default function StoreIssuesPage() {
                   {/* Submit Button */}
                   <div className="flex items-center justify-between pt-3 border-t">
                     <div className="text-xs">
-                      <span className="text-stone-500">Estimated Value: </span>
+                      <span className="text-stone-500">{t('inventory.issues.estimatedValue')}{' '}</span>
                       <span className="font-bold text-base text-stone-900 font-mono">
                         {formatINR(calculateIssueTotal())}
                       </span>
                     </div>
 
                     <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                      {saving ? 'Processing...' : 'Approve & Issue'}
+                      {saving ? t('inventory.issues.processing') : t('inventory.issues.approveIssue')}
                     </Button>
                   </div>
                 </form>
@@ -759,7 +765,7 @@ export default function StoreIssuesPage() {
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">Recent Dispatches</CardTitle>
+                  <CardTitle className="text-sm">{t('inventory.issues.recentDispatches')}</CardTitle>
                   <div className="flex gap-1 bg-stone-100 p-0.5 rounded-md">
                     <button
                       type="button"
@@ -770,7 +776,7 @@ export default function StoreIssuesPage() {
                           : 'text-stone-500 hover:text-stone-800'
                       }`}
                     >
-                      All ({recentMovements.length})
+                      {t('common.all')} ({recentMovements.length})
                     </button>
                     <button
                       type="button"
@@ -781,7 +787,7 @@ export default function StoreIssuesPage() {
                           : 'text-stone-500 hover:text-stone-800'
                       }`}
                     >
-                      Issues ({recentMovements.filter((m) => m.movement_type !== 'transfer').length})
+                      {t('inventory.issues.filterIssues')} ({recentMovements.filter((m) => m.movement_type !== 'transfer').length})
                     </button>
                     <button
                       type="button"
@@ -792,7 +798,7 @@ export default function StoreIssuesPage() {
                           : 'text-stone-500 hover:text-stone-800'
                       }`}
                     >
-                      Transfers ({recentMovements.filter((m) => m.movement_type === 'transfer').length})
+                      {t('inventory.issues.filterTransfers')} ({recentMovements.filter((m) => m.movement_type === 'transfer').length})
                     </button>
                   </div>
                 </div>
@@ -813,6 +819,7 @@ export default function StoreIssuesPage() {
                             minute: '2-digit',
                           })
                         : '';
+                      const unitSym = getLocalizedMasterSymbol(m.item?.unit, locale) || m.item?.unit?.symbol || 'units';
 
                       return (
                         <div
@@ -841,14 +848,14 @@ export default function StoreIssuesPage() {
                               }
                               className="capitalize text-[10px] px-1.5 py-0.5 shrink-0"
                             >
-                              {isTransfer ? 'Transfer' : 'Issue'}
+                              {isTransfer ? t('inventory.issues.filterTransfers') : t('inventory.issues.filterIssues')}
                             </Badge>
                           </div>
 
                           {/* Quantity & Time */}
                           <div className="flex items-center justify-between text-xs text-stone-600">
                             <span className="font-bold text-stone-900 font-mono">
-                              {m.quantity} {m.item?.unit?.symbol || 'units'}
+                              {m.quantity} {unitSym}
                             </span>
                             <span className="text-[10px] text-stone-500 font-mono">
                               {m.business_date} {timeStr ? `• ${timeStr}` : ''}
@@ -858,22 +865,22 @@ export default function StoreIssuesPage() {
                           {/* Source to Destination Route */}
                           <div className="text-xs text-stone-700 bg-stone-50 p-2 rounded border border-stone-200/80 space-y-1">
                             <div className="flex items-center gap-1.5 font-medium">
-                              <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
+                              <span className="text-stone-600">{getLocalizedMasterName(m.source_loc, locale) || 'Store'}</span>
                               <span className="text-amber-600 font-bold">→</span>
                               <span className="text-stone-900 font-semibold">
                                 {isTransfer
-                                  ? m.dest_loc?.name || 'Destination'
-                                  : m.department?.name || 'Operations'}
+                                  ? getLocalizedMasterName(m.dest_loc, locale) || 'Destination'
+                                  : getLocalizedMasterName(m.department, locale) || 'Operations'}
                               </span>
                             </div>
 
                             {/* Receiving Team / Staff if Issue */}
                             {!isTransfer && (
                               <div className="text-[11px] text-stone-500 flex items-center gap-1 flex-wrap">
-                                {m.responsible_person?.team?.name && (
+                                {m.responsible_person?.team && (
                                   <>
                                     <span className="text-amber-600 font-bold">→</span>
-                                    <span className="text-stone-800">{m.responsible_person.team.name}</span>
+                                    <span className="text-stone-800">{getLocalizedMasterName(m.responsible_person.team, locale)}</span>
                                   </>
                                 )}
                                 {m.responsible_person?.name && (
@@ -881,7 +888,7 @@ export default function StoreIssuesPage() {
                                     <span className="text-amber-600 font-bold">→</span>
                                     <span className="text-stone-800 font-semibold">
                                       {m.responsible_person.name}
-                                      {m.responsible_person.role?.name ? ` (${m.responsible_person.role.name})` : ''}
+                                      {m.responsible_person.role ? ` (${getLocalizedMasterName(m.responsible_person.role, locale)})` : ''}
                                     </span>
                                   </>
                                 )}
@@ -894,7 +901,10 @@ export default function StoreIssuesPage() {
                             <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5 border-t border-stone-100">
                               {m.purpose && (
                                 <span className="truncate">
-                                  <span className="font-semibold text-stone-600">Purpose:</span> {m.purpose}
+                                  <span className="font-semibold text-stone-600">{t('inventory.issues.purpose')}:</span>{' '}
+                                  {t(`inventory.issues.purposeOptions.${m.purpose}` as any) !== `inventory.issues.purposeOptions.${m.purpose}`
+                                    ? t(`inventory.issues.purposeOptions.${m.purpose}` as any)
+                                    : m.purpose}
                                 </span>
                               )}
                               {m.notes && m.notes !== `Issued to ${m.department?.name}` && (
@@ -909,7 +919,7 @@ export default function StoreIssuesPage() {
                     })}
 
                   {recentMovements.length === 0 && (
-                    <div className="py-8 text-center text-stone-400">No recent store issues logged.</div>
+                    <div className="py-8 text-center text-stone-400">{t('inventory.issues.noRecentIssues')}</div>
                   )}
                 </div>
               </CardContent>
@@ -926,7 +936,7 @@ export default function StoreIssuesPage() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5 text-amber-600" />
-                Transfer Between Locations
+                {t('inventory.issues.transferTitle')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -934,7 +944,7 @@ export default function StoreIssuesPage() {
                 {/* Item Selection */}
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Select Item <span className="text-red-500">*</span>
+                    {t('inventory.issues.selectItem')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={transferItemId}
@@ -942,7 +952,7 @@ export default function StoreIssuesPage() {
                     required
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                   >
-                    <option value="">Select Item...</option>
+                    <option value="">{t('inventory.issues.selectItem')}</option>
                     {items.map((it) => (
                       <option key={it.id} value={it.id}>
                         [{it.item_code}] {it.name} ({it.inventory_class})
@@ -955,7 +965,7 @@ export default function StoreIssuesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-medium text-stone-700 mb-1">
-                      From Location (Source) <span className="text-red-500">*</span>
+                      {t('inventory.issues.fromLocation')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={transferSrcLoc}
@@ -963,13 +973,13 @@ export default function StoreIssuesPage() {
                       required
                       className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                     >
-                      <option value="">Select Source Location...</option>
+                      <option value="">{t('inventory.issues.selectSourceLocation')}</option>
                       {locations.map((loc) => {
                         const it = items.find((i) => i.id === transferItemId);
                         const avail = it?.location_stocks?.find((ls: any) => ls.location_id === loc.id)?.quantity || 0;
                         return (
                           <option key={loc.id} value={loc.id} disabled={transferItemId ? Number(avail) <= 0 : false}>
-                            {loc.name} {transferItemId ? `(${avail} available)` : ''}
+                            {getLocalizedMasterName(loc, locale)} {transferItemId ? `(${avail} ${t('inventory.issues.available')})` : ''}
                           </option>
                         );
                       })}
@@ -978,7 +988,7 @@ export default function StoreIssuesPage() {
 
                   <div>
                     <label className="block font-medium text-stone-700 mb-1">
-                      To Location (Destination) <span className="text-red-500">*</span>
+                      {t('inventory.issues.toLocation')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={transferDestLoc}
@@ -986,12 +996,12 @@ export default function StoreIssuesPage() {
                       required
                       className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                     >
-                      <option value="">Select Destination Location...</option>
+                      <option value="">{t('inventory.issues.selectDestLocation')}</option>
                       {locations
                         .filter((l) => l.id !== transferSrcLoc)
                         .map((loc) => (
                           <option key={loc.id} value={loc.id}>
-                            {loc.name} ({loc.location_type})
+                            {getLocalizedMasterName(loc, locale)} ({loc.location_type})
                           </option>
                         ))}
                     </select>
@@ -1003,12 +1013,14 @@ export default function StoreIssuesPage() {
                   const it = items.find((i) => i.id === transferItemId);
                   const factor = Number(it?.conversion_factor || 1);
                   const hasPack = it?.secondary_unit_id && factor > 1;
+                  const baseUnitSym = getLocalizedMasterSymbol(it?.unit, locale) || it?.unit?.symbol || 'units';
+                  const secUnitSym = getLocalizedMasterSymbol(it?.sec_unit, locale) || it?.sec_unit?.symbol || 'pack';
 
                   return (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block font-medium text-stone-700 mb-1">
-                          Quantity <span className="text-rose-500">*</span>
+                          {t('inventory.issues.quantity')} <span className="text-rose-500">*</span>
                         </label>
                         <div className="flex gap-2">
                           <input
@@ -1032,22 +1044,22 @@ export default function StoreIssuesPage() {
                               }`}
                             >
                               {transferUsePack
-                                ? `${it.sec_unit?.symbol} (×${factor})`
-                                : it.unit?.symbol || 'units'}
+                                ? `${secUnitSym} (×${factor})`
+                                : baseUnitSym}
                             </button>
                           )}
                         </div>
                       </div>
 
                       <div>
-                        <label className="block font-medium text-stone-700 mb-1">Calculated Base Units</label>
+                        <label className="block font-medium text-stone-700 mb-1">{t('inventory.issues.calculatedBaseUnits')}</label>
                         <div className="p-2 bg-stone-50 rounded-md border border-stone-200 text-stone-800 font-mono font-bold flex items-center justify-between">
                           <span>
-                            {transferQty * (transferUsePack ? factor : 1)} {it?.unit?.symbol || 'units'}
+                            {transferQty * (transferUsePack ? factor : 1)} {baseUnitSym}
                           </span>
                           {transferUsePack && (
                             <span className="text-[10px] text-amber-700 font-normal">
-                              ({transferQty} {it?.sec_unit?.symbol} × {factor})
+                              ({transferQty} {secUnitSym} × {factor})
                             </span>
                           )}
                         </div>
@@ -1058,19 +1070,19 @@ export default function StoreIssuesPage() {
 
                 {/* Transfer Remarks */}
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('common.notes')}</label>
                   <input
                     type="text"
                     value={transferNotes}
                     onChange={(e) => setTransferNotes(e.target.value)}
-                    placeholder="e.g. Replenishing front fridge for banquet dinner"
+                    placeholder={t('inventory.issues.transferNotesPlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none"
                   />
                 </div>
 
                 <div className="flex justify-end pt-3 border-t">
                   <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                    {saving ? 'Executing Transfer...' : 'Confirm Transfer'}
+                    {saving ? t('inventory.issues.executingTransfer') : t('inventory.issues.confirmTransfer')}
                   </Button>
                 </div>
               </form>
@@ -1083,7 +1095,7 @@ export default function StoreIssuesPage() {
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm">Recent Transfers</CardTitle>
+                  <CardTitle className="text-sm">{t('inventory.issues.recentTransfers')}</CardTitle>
                   <Badge variant="info" className="text-[10px]">
                     {recentMovements.filter((m) => m.movement_type === 'transfer').length}
                   </Badge>
@@ -1100,6 +1112,7 @@ export default function StoreIssuesPage() {
                             minute: '2-digit',
                           })
                         : '';
+                      const unitSym = getLocalizedMasterSymbol(m.item?.unit, locale) || m.item?.unit?.symbol || 'units';
                       return (
                         <div
                           key={m.id}
@@ -1117,13 +1130,13 @@ export default function StoreIssuesPage() {
                               )}
                             </div>
                             <Badge variant="info" className="capitalize text-[10px] px-1.5 py-0.5 shrink-0">
-                              Transfer
+                              {t('inventory.issues.filterTransfers')}
                             </Badge>
                           </div>
 
                           <div className="flex items-center justify-between text-xs text-stone-600">
                             <span className="font-bold text-stone-900 font-mono">
-                              {m.quantity} {m.item?.unit?.symbol || 'units'}
+                              {m.quantity} {unitSym}
                             </span>
                             <span className="text-[10px] text-stone-500 font-mono">
                               {m.business_date} {timeStr ? `• ${timeStr}` : ''}
@@ -1131,9 +1144,9 @@ export default function StoreIssuesPage() {
                           </div>
 
                           <div className="text-xs text-stone-700 bg-blue-50/50 p-2 rounded border border-blue-100 flex items-center gap-1.5 font-medium">
-                            <span className="text-stone-600">{m.source_loc?.name || 'Store'}</span>
+                            <span className="text-stone-600">{getLocalizedMasterName(m.source_loc, locale) || 'Store'}</span>
                             <span className="text-blue-600 font-bold">→</span>
-                            <span className="text-stone-900 font-semibold">{m.dest_loc?.name || 'Fridge'}</span>
+                            <span className="text-stone-900 font-semibold">{getLocalizedMasterName(m.dest_loc, locale) || 'Destination'}</span>
                           </div>
 
                           {m.notes && (
@@ -1145,7 +1158,7 @@ export default function StoreIssuesPage() {
                       );
                     })}
                   {recentMovements.filter((m) => m.movement_type === 'transfer').length === 0 && (
-                    <div className="py-8 text-center text-stone-400">No recent transfers logged.</div>
+                    <div className="py-8 text-center text-stone-400">{t('inventory.issues.noRecentTransfers')}</div>
                   )}
                 </div>
               </CardContent>

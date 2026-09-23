@@ -1,0 +1,21 @@
+{
+  "active": "सक्रिय",
+  "inactive": "निष्क्रिय",
+  "pending": "लंबित",
+  "approved": "स्वीकृत",
+  "rejected": "अस्वीकृत",
+  "closed": "पूर्ण / बंद",
+  "open": "खुला / जारी",
+  "reopened": "पुनः खोला गया",
+  "healthy": "संतोषजनक / सुरक्षित",
+  "atRisk": "जोखिम में",
+  "belowBreakEven": "ब्रेक-ईवन से नीचे",
+  "present": "उपस्थित",
+  "absent": "अनुपस्थित",
+  "weeklyOff": "साप्ताहिक अवकाश",
+  "leave": "अवकाश / छुट्टी",
+  "halfDay": "आधा दिन",
+  "doubleShift": "डबल शिफ्ट",
+  "reported": "दर्ज किया गया",
+  "notReported": "दर्ज नहीं हुआ"
+}

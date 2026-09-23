@@ -21,6 +21,8 @@ import {
   Search,
   Scale,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 interface CountItemRow {
   item_id: string;
@@ -36,6 +38,7 @@ interface CountItemRow {
 }
 
 export default function StockCountPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [itemsMaster, setItemsMaster] = useState<any[]>([]);
@@ -102,13 +105,16 @@ export default function StockCountPage() {
         expected = Number(locStock?.quantity) || 0;
       }
 
+      const unitSym = (locale === 'hi' && p.unit_symbol_hi) ? p.unit_symbol_hi : (p.unit_symbol || 'units');
+      const catName = (locale === 'hi' && p.category_name_hi) ? p.category_name_hi : (p.category_name || 'General');
+
       return {
         item_id: p.item_id,
         name: p.name,
         item_code: p.item_code,
         inventory_class: p.inventory_class || 'Food Raw Material',
-        category_name: p.category_name || 'General',
-        unit_symbol: p.unit_symbol || 'units',
+        category_name: catName,
+        unit_symbol: unitSym,
         expected_qty: expected,
         physical_qty: expected, // defaults to expected
         wac_cost: Number(p.wac_cost) || 0,
@@ -117,7 +123,7 @@ export default function StockCountPage() {
     });
 
     setRows(newRows);
-  }, [itemsMaster, selectedLocationId]);
+  }, [itemsMaster, selectedLocationId, locale]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
@@ -261,7 +267,7 @@ export default function StockCountPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ClipboardCheck className="h-6 w-6 text-amber-600" />
-            Physical Count
+            {t('inventory.count.title')}
           </h1>
         </div>
 
@@ -273,7 +279,7 @@ export default function StockCountPage() {
             className="px-3 py-1.5 border border-stone-300 rounded-lg text-xs font-mono bg-white text-stone-900"
           />
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-1.5">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> Refresh
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> {t('common.refresh')}
           </Button>
         </div>
       </div>
@@ -298,33 +304,37 @@ export default function StockCountPage() {
       {/* Variance Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4 bg-white border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Items</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{t('inventory.count.table.item')}</div>
           <div className="text-xl font-bold text-stone-900 mt-1">{filteredRows.length}</div>
         </Card>
 
         <Card className="p-4 bg-white border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Variances</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{t('inventory.count.variances')}</div>
           <div className="text-xl font-bold text-amber-700 mt-1">{variances.length}</div>
           <div className="text-[10px] text-stone-400 mt-0.5">
-            {shortagesCount} Shortages • {surplusCount} Excesses
+            {t('inventory.count.variancesSub', { shortages: shortagesCount, excesses: surplusCount })}
           </div>
         </Card>
 
         <Card className="p-4 bg-amber-50/50 border-amber-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Variance Value</div>
+          <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">{t('inventory.count.varianceVal')}</div>
           <div className={`text-xl font-bold mt-1 ${totalVarianceCost < 0 ? 'text-red-700' : totalVarianceCost > 0 ? 'text-emerald-700' : 'text-stone-900'}`}>
             {formatINR(totalVarianceCost)}
           </div>
         </Card>
 
         <Card className="p-4 bg-stone-50 border-stone-200 shadow-sm">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Count Target</div>
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{t('inventory.count.countTarget')}</div>
           <div className="text-base font-bold text-stone-800 mt-1 truncate">
             {selectedLocationId === 'ALL'
-              ? 'Consolidated'
-              : locations.find((l) => l.id === selectedLocationId)?.name || 'Store'}
+              ? t('inventory.count.consolidated')
+              : getLocalizedMasterName(locations.find((l) => l.id === selectedLocationId), locale) || 'Store'}
           </div>
-          <div className="text-[10px] text-stone-500 mt-0.5">Class: {selectedClass}</div>
+          <div className="text-[10px] text-stone-500 mt-0.5">
+            {t('inventory.count.classTarget', {
+              class: selectedClass === 'All' ? t('inventory.count.allClasses') : (t(`inventory.classes.${selectedClass}` as any) || selectedClass)
+            })}
+          </div>
         </Card>
       </div>
 
@@ -333,16 +343,16 @@ export default function StockCountPage() {
         {/* Location Filter */}
         <div className="flex items-center gap-2">
           <MapPin className="h-4 w-4 text-stone-400 shrink-0" />
-          <span className="font-semibold text-stone-700 whitespace-nowrap">Location:</span>
+          <span className="font-semibold text-stone-700 whitespace-nowrap">{t('inventory.count.locationFilter')}</span>
           <select
             value={selectedLocationId}
             onChange={(e) => setSelectedLocationId(e.target.value)}
             className="w-full rounded-md border border-stone-300 p-1.5 text-stone-900 bg-white font-medium focus:outline-none"
           >
-            <option value="ALL">All Locations</option>
+            <option value="ALL">{t('inventory.count.allLocations')}</option>
             {locations.map((loc) => (
               <option key={loc.id} value={loc.id}>
-                {loc.name} ({loc.location_type})
+                {getLocalizedMasterName(loc, locale)} ({loc.location_type})
               </option>
             ))}
           </select>
@@ -351,17 +361,17 @@ export default function StockCountPage() {
         {/* Class Filter */}
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-stone-400 shrink-0" />
-          <span className="font-semibold text-stone-700 whitespace-nowrap">Class:</span>
+          <span className="font-semibold text-stone-700 whitespace-nowrap">{t('inventory.count.classFilter')}</span>
           <select
             value={selectedClass}
             onChange={(e) => setSelectedClass(e.target.value)}
             className="w-full rounded-md border border-stone-300 p-1.5 text-stone-900 bg-white focus:outline-none"
           >
-            <option value="All">All Inventory Classes</option>
-            <option value="Food Raw Material">Food Raw Material</option>
-            <option value="Physical Asset">Physical Asset</option>
-            <option value="Uniform">Uniform</option>
-            <option value="Non-Food Consumable">Non-Food Consumable</option>
+            <option value="All">{t('inventory.count.allClasses')}</option>
+            <option value="Food Raw Material">{t('inventory.classes.Food Raw Material')}</option>
+            <option value="Physical Asset">{t('inventory.classes.Physical Asset')}</option>
+            <option value="Uniform">{t('inventory.classes.Uniform')}</option>
+            <option value="Non-Food Consumable">{t('inventory.classes.Non-Food Consumable')}</option>
           </select>
         </div>
 
@@ -372,7 +382,7 @@ export default function StockCountPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search items..."
+            placeholder={t('inventory.count.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-1.5 rounded-md border border-stone-300 text-stone-900 focus:outline-none"
           />
         </div>
@@ -384,7 +394,7 @@ export default function StockCountPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Physical Count</CardTitle>
+                <CardTitle>{t('inventory.count.title')}</CardTitle>
               </div>
               <Button
                 type="submit"
@@ -392,28 +402,28 @@ export default function StockCountPage() {
                 disabled={saving || loading || filteredRows.length === 0}
                 className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
               >
-                <Save className="h-4 w-4" /> {saving ? 'Reconciling...' : 'Save & Reconcile'}
+                <Save className="h-4 w-4" /> {saving ? t('inventory.count.reconciling') : t('inventory.count.saveReconcile')}
               </Button>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
               <div className="py-16 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-5 w-5 animate-spin text-amber-600" /> Loading stock balances...
+                <RefreshCw className="h-5 w-5 animate-spin text-amber-600" /> {t('inventory.count.loadingBalances')}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">SKU</th>
-                      <th className="py-2.5 px-3">Item</th>
-                      <th className="py-2.5 px-3">Class</th>
-                      <th className="py-2.5 px-3 text-right">Expected</th>
-                      <th className="py-2.5 px-3 text-right">Count</th>
-                      <th className="py-2.5 px-3 text-right">Variance</th>
-                      <th className="py-2.5 px-3 text-right">Value</th>
-                      <th className="py-2.5 px-3">Notes</th>
+                      <th className="py-2.5 px-3">{t('inventory.count.table.sku')}</th>
+                      <th className="py-2.5 px-3">{t('inventory.count.table.item')}</th>
+                      <th className="py-2.5 px-3">{t('inventory.count.table.class')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('inventory.count.table.expected')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('inventory.count.table.count')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('inventory.count.table.variance')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('inventory.count.table.value')}</th>
+                      <th className="py-2.5 px-3">{t('inventory.count.table.notes')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -436,7 +446,7 @@ export default function StockCountPage() {
                           </td>
                           <td className="py-2.5 px-3 text-stone-500">
                             <Badge variant="outline" className="text-[10px] py-0">
-                              {row.inventory_class}
+                              {t(`inventory.classes.${row.inventory_class}` as any) || row.inventory_class}
                             </Badge>
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold text-stone-600">
@@ -475,13 +485,13 @@ export default function StockCountPage() {
                               onChange={(e) => handleReasonChange(row.item_id, e.target.value)}
                               placeholder={
                                 varianceQuantity !== 0
-                                  ? 'Reason required for variance...'
-                                  : 'Optional notes'
+                                  ? t('inventory.count.reasonRequired')
+                                  : t('inventory.count.optionalNotes')
                               }
                               className={`w-full px-2 py-1 border rounded text-xs text-stone-900 bg-white focus:outline-none ${
                                 varianceQuantity !== 0 && !row.reason
-                                  ? 'border-amber-300 bg-amber-50/30'
-                                  : 'border-stone-300'
+                                    ? 'border-amber-300 bg-amber-50/30'
+                                    : 'border-stone-300'
                               }`}
                             />
                           </td>
@@ -491,7 +501,7 @@ export default function StockCountPage() {
                     {filteredRows.length === 0 && (
                       <tr>
                         <td colSpan={8} className="py-10 text-center text-stone-400">
-                          No items match the selected verification filters.
+                          {t('inventory.count.noMatchingItems')}
                         </td>
                       </tr>
                     )}

@@ -10,6 +10,8 @@ import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
 import { StaffLedgerDrawer } from '@/components/people/StaffLedgerDrawer';
 import { Users, Plus, RefreshCw, Network, Edit2, AlertCircle, CheckCircle, BookOpen } from 'lucide-react';
 import { EmploymentStatus } from '@/lib/types/database';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface Employee {
   id: string;
@@ -32,6 +34,7 @@ interface Employee {
 
 export default function EmployeesPage() {
   const supabase = createClient();
+  const { t, locale } = useI18n();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -55,7 +58,7 @@ export default function EmployeesPage() {
     try {
       const { data: empData, error: empErr } = await supabase
         .from('employees')
-        .select('*, department:departments(name), team:teams(name), role:employee_roles(name)')
+        .select('*, department:departments(name, name_hi), team:teams(name, name_hi), role:employee_roles(name, name_hi)')
         .order('name');
 
       if (empErr) throw empErr;
@@ -72,14 +75,14 @@ export default function EmployeesPage() {
       setEmployees(
         (empData || []).map((e: any) => ({
           ...e,
-          department_name: e.department?.name,
-          team_name: e.team?.name,
-          role_name: e.role?.name,
+          department_name: getLocalizedMasterName(e.department, locale),
+          team_name: getLocalizedMasterName(e.team, locale),
+          role_name: getLocalizedMasterName(e.role, locale),
         }))
       );
     } catch (err: any) {
       console.error('Error loading employees:', err);
-      setMessage({ type: 'error', text: 'Failed to load employee directory: ' + err.message });
+      setMessage({ type: 'error', text: t('people.employees.loadFailed', { error: err.message }) });
     } finally {
       setLoading(false);
     }
@@ -87,7 +90,7 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [locale]);
 
   const handleUpdateStatus = async (employeeId: string, nextStatus: EmploymentStatus) => {
     try {
@@ -100,13 +103,14 @@ export default function EmployeesPage() {
         .eq('id', employeeId);
 
       if (error) throw error;
+      const statusLabel = t(`people.employees.statuses.${nextStatus}` as any);
       setMessage({
         type: 'success',
-        text: `Employee status updated to "${nextStatus}".`,
+        text: t('people.employees.statusUpdated', { status: statusLabel }),
       });
       loadData();
     } catch (err: any) {
-      setMessage({ type: 'error', text: 'Failed to update status: ' + err.message });
+      setMessage({ type: 'error', text: t('people.employees.updateStatusFailed', { error: err.message }) });
     }
   };
 
@@ -136,7 +140,7 @@ export default function EmployeesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Users className="h-6 w-6 text-amber-600" />
-            Staff Directory
+            {t('people.employees.title')}
           </h1>
         </div>
 
@@ -150,7 +154,7 @@ export default function EmployeesPage() {
             }}
             className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
           >
-            <Plus className="h-4 w-4" /> Add Employee
+            <Plus className="h-4 w-4" /> {t('people.employees.addEmployee')}
           </Button>
 
           <Button
@@ -159,10 +163,10 @@ export default function EmployeesPage() {
             onClick={() => setOrgHierarchyModalOpen(true)}
             className="gap-1.5"
           >
-            <Network className="h-4 w-4 text-stone-500" /> Manage Org Structure
+            <Network className="h-4 w-4 text-stone-500" /> {t('people.employees.orgHierarchy')}
           </Button>
 
-          <Button variant="outline" size="sm" onClick={loadData} title="Refresh directory">
+          <Button variant="outline" size="sm" onClick={loadData} title={t('people.employees.refresh')}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -183,42 +187,42 @@ export default function EmployeesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Employees</CardDescription>
+            <CardDescription>{t('people.employees.kpi.employees')}</CardDescription>
             <div className="text-2xl font-bold text-stone-900 mt-1">
               {activeEmployees.length}{' '}
               {inactiveEmployees.length > 0 && (
                 <span className="text-xs font-normal text-stone-400">
-                  (+{inactiveEmployees.length} inactive)
+                  {t('people.employees.kpi.inactive', { count: inactiveEmployees.length })}
                 </span>
               )}
             </div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Across {departments.length} departments & {roles.length} operational roles
+            {t('people.employees.kpi.departmentsRoles', { departments: departments.length, roles: roles.length })}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Monthly Payroll</CardDescription>
+            <CardDescription>{t('people.employees.kpi.payroll')}</CardDescription>
             <div className="text-2xl font-bold text-amber-600 mt-1">
               {formatINR(totalMonthlyPayroll)}
             </div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Daily fixed cost allocation: {formatINR(totalMonthlyPayroll / 30)}/day
+            {t('people.employees.kpi.dailyCost', { cost: formatINR(totalMonthlyPayroll / 30) })}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Hierarchy</CardDescription>
+            <CardDescription>{t('people.employees.kpi.hierarchy')}</CardDescription>
             <div className="text-base font-semibold text-stone-800 mt-1">
-              Department → Team → Role
+              {t('people.employees.kpi.hierarchyFlow')}
             </div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Configurable organizational structure with store issue permissions
+            {t('people.employees.kpi.hierarchyDesc')}
           </CardContent>
         </Card>
       </div>
@@ -234,7 +238,7 @@ export default function EmployeesPage() {
                 : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
             }`}
           >
-            All Departments
+            {t('people.employees.allDepartments')}
           </button>
           {departments.map((d) => (
             <button
@@ -246,7 +250,7 @@ export default function EmployeesPage() {
                   : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
               }`}
             >
-              {d.name}
+              {getLocalizedMasterName(d, locale)}
             </button>
           ))}
         </div>
@@ -265,14 +269,14 @@ export default function EmployeesPage() {
                     : 'text-stone-500 hover:text-stone-800'
                 }`}
               >
-                {st}
+                {st === 'ALL' ? t('people.employees.allStatuses') : t(`people.employees.statuses.${st}` as any)}
               </button>
             ))}
           </div>
 
           <input
             type="text"
-            placeholder="Search staff..."
+            placeholder={t('people.employees.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full sm:w-56 rounded-lg border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
@@ -283,30 +287,30 @@ export default function EmployeesPage() {
       {/* Employees Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Staff ({filteredEmployees.length})</CardTitle>
+          <CardTitle>{t('people.employees.staffCount', { count: filteredEmployees.length })}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
             <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-              <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading staff directory...
+              <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> {t('people.employees.loading')}
             </div>
           ) : filteredEmployees.length === 0 ? (
             <div className="py-12 text-center text-stone-400 text-xs">
-              No employees found matching criteria. Click &quot;Add Employee&quot; to create staff records.
+              {t('people.employees.noEmployeesFound')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                    <th className="py-2.5 px-3">Code</th>
-                    <th className="py-2.5 px-3">Employee</th>
-                    <th className="py-2.5 px-3">Department / Team</th>
-                    <th className="py-2.5 px-3">Role</th>
-                    <th className="py-2.5 px-3">Phone</th>
-                    <th className="py-2.5 px-3 text-right">Monthly Salary</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
+                    <th className="py-2.5 px-3">{t('people.employees.table.code')}</th>
+                    <th className="py-2.5 px-3">{t('people.employees.table.name')}</th>
+                    <th className="py-2.5 px-3">{t('people.employees.table.department')}</th>
+                    <th className="py-2.5 px-3">{t('people.employees.table.role')}</th>
+                    <th className="py-2.5 px-3">{t('people.employees.table.phone')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('people.employees.table.salary')}</th>
+                    <th className="py-2.5 px-3 text-center">{t('people.employees.table.status')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('people.employees.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -325,12 +329,12 @@ export default function EmployeesPage() {
                         <td
                           className="py-3 px-3 font-medium text-stone-900 cursor-pointer hover:text-amber-700 hover:underline"
                           onClick={() => setDrawerEmpId(e.id)}
-                          title="Click to view staff ledger"
+                          title={t('people.employees.viewStaffLedger')}
                         >
                           <div>{e.name}</div>
                           {e.contractor_name && (
                             <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded font-normal">
-                              Contractor: {e.contractor_name}
+                              {t('people.employees.contractor', { name: e.contractor_name })}
                             </span>
                           )}
                         </td>
@@ -342,7 +346,7 @@ export default function EmployeesPage() {
                         <td className="py-3 px-3 text-right font-medium text-stone-900">
                           <div>{formatINR(Number(e.monthly_salary))}</div>
                           <span className="text-[10px] text-stone-400 font-normal">
-                            {e.allotted_weekly_off ?? 4} W/Off
+                            {t('people.employees.weeklyOff', { count: e.allotted_weekly_off ?? 4 })}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-center">
@@ -358,12 +362,12 @@ export default function EmployeesPage() {
                                 ? 'bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200'
                                 : 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100'
                             }`}
-                            title="Change employment status"
+                            title={t('people.employees.changeStatus')}
                           >
-                            <option value="Active">Active</option>
-                            <option value="On Leave">On Leave</option>
-                            <option value="Resigned">Resigned</option>
-                            <option value="Terminated">Terminated</option>
+                            <option value="Active">{t('people.employees.statuses.Active')}</option>
+                            <option value="On Leave">{t('people.employees.statuses.On Leave')}</option>
+                            <option value="Resigned">{t('people.employees.statuses.Resigned')}</option>
+                            <option value="Terminated">{t('people.employees.statuses.Terminated')}</option>
                           </select>
                         </td>
                         <td className="py-3 px-3 text-right">
@@ -373,9 +377,9 @@ export default function EmployeesPage() {
                               size="sm"
                               onClick={() => setDrawerEmpId(e.id)}
                               className="h-7 px-2 text-stone-700 hover:text-amber-700 gap-1 text-xs"
-                              title="View Financial & Uniform Ledger"
+                              title={t('people.drawer.title')}
                             >
-                              <BookOpen className="h-3.5 w-3.5" /> Ledger
+                              <BookOpen className="h-3.5 w-3.5" /> {t('people.employees.table.viewLedger')}
                             </Button>
                             <Button
                               variant="outline"
@@ -385,9 +389,9 @@ export default function EmployeesPage() {
                                 setEmployeeModalOpen(true);
                               }}
                               className="h-7 px-2 text-stone-600 hover:text-stone-900 gap-1 text-xs"
-                              title="Edit Employee"
+                              title={t('people.employees.table.edit')}
                             >
-                              <Edit2 className="h-3.5 w-3.5" /> Edit
+                              <Edit2 className="h-3.5 w-3.5" /> {t('people.employees.table.edit')}
                             </Button>
                           </div>
                         </td>

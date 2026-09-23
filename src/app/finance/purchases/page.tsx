@@ -10,6 +10,8 @@ import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { calculateNewWAC } from '@/lib/inventory-engine';
 import { VendorModal } from '@/components/vendors/VendorModal';
 import { ShoppingBag, Plus, CreditCard, RefreshCw, CheckCircle, AlertCircle, Trash2, Building2, ExternalLink } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 interface VendorSummary {
   vendor_id: string;
@@ -38,6 +40,7 @@ interface PurchaseLineForm {
 }
 
 export default function PurchasesPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
@@ -104,8 +107,8 @@ export default function PurchasesPage() {
         .from('inventory_items')
         .select(`
           id, item_code, name, unit_id, secondary_unit_id, conversion_factor, shelf_life_days, is_active, current_stock, current_weighted_average_cost,
-          unit:units!inventory_items_unit_id_fkey(symbol, name),
-          sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, name)
+          unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+          sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
         `)
         .order('name');
 
@@ -126,7 +129,7 @@ export default function PurchasesPage() {
       setPaymentMethods(pmData || []);
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: 'Failed to load purchase & vendor ledger.' });
+      setMessage({ type: 'error', text: t('purchases.bills.errLoad') });
     } finally {
       setLoading(false);
     }
@@ -163,13 +166,13 @@ export default function PurchasesPage() {
   const handleCreatePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedVendorId) {
-      alert('Please select a vendor.');
+      alert(t('purchases.bills.errSelectVendor'));
       return;
     }
 
     const vSelected = vendors.find((v) => v.vendor_id === selectedVendorId);
     if (vSelected && vSelected.is_active === false) {
-      alert('Selected vendor is inactive. Inactive vendors cannot receive new purchase invoices.');
+      alert(t('purchases.bills.errVendorInactive'));
       return;
     }
 
@@ -264,7 +267,7 @@ export default function PurchasesPage() {
         }
       }
 
-      setMessage({ type: 'success', text: `Purchase invoice ${purchaseNumber} recorded and stock inwarded to Central Store!` });
+      setMessage({ type: 'success', text: t('purchases.bills.invoiceRecorded', { number: purchaseNumber }) });
       setShowPurchaseModal(false);
       setLines([{ item_id: '', quantity: 1, rate: 0 }]);
       setInvoiceNumber('');
@@ -280,13 +283,13 @@ export default function PurchasesPage() {
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentVendorId || paymentAmount <= 0) {
-      alert('Please select a vendor and enter a valid payment amount.');
+      alert(t('purchases.bills.errSelectVendorAmount'));
       return;
     }
 
     const vPayment = vendors.find((v) => v.vendor_id === paymentVendorId);
     if (vPayment && vPayment.is_active === false) {
-      alert('Selected vendor is inactive. Payments cannot be disbursed to inactive vendor accounts.');
+      alert(t('purchases.bills.errPaymentInactive'));
       return;
     }
 
@@ -345,7 +348,7 @@ export default function PurchasesPage() {
         }
       }
 
-      setMessage({ type: 'success', text: `Vendor payment of ${formatINR(paymentAmount)} recorded!` });
+      setMessage({ type: 'success', text: t('purchases.bills.paymentRecorded', { amount: formatINR(paymentAmount) }) });
       setShowPaymentModal(false);
       setPaymentAmount(0);
       setPaymentRef('');
@@ -364,21 +367,21 @@ export default function PurchasesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ShoppingBag className="h-6 w-6 text-amber-600" />
-            Purchases & Bills
+            {t('purchases.bills.title')}
           </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/finance/vendors">
             <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <Building2 className="h-4 w-4 text-amber-600" /> Manage Vendors
+              <Building2 className="h-4 w-4 text-amber-600" /> {t('purchases.bills.manageVendors')}
             </Button>
           </Link>
           <Button variant="amber" size="sm" onClick={() => setShowPurchaseModal(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> New Purchase Invoice
+            <Plus className="h-4 w-4" /> {t('purchases.bills.newPurchaseInvoice')}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => setShowPaymentModal(true)} className="gap-1.5">
-            <CreditCard className="h-4 w-4" /> Record Payment
+            <CreditCard className="h-4 w-4" /> {t('purchases.bills.recordPayment')}
           </Button>
           <Button variant="outline" size="sm" onClick={loadData}>
             <RefreshCw className="h-4 w-4" />
@@ -388,20 +391,20 @@ export default function PurchasesPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Outstanding</CardDescription>
+          <CardDescription>{t('purchases.bills.outstanding')}</CardDescription>
           <div className="text-2xl font-bold text-rose-600 mt-1">
             {formatINR(totalOutstandingAllVendors)}
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Active Vendors</CardDescription>
+          <CardDescription>{t('purchases.bills.activeVendors')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{vendors.length}</div>
         </Card>
 
         <Card>
-          <CardDescription>Settlement Model</CardDescription>
-          <div className="text-lg font-bold text-stone-800 mt-1">FIFO Allocation</div>
+          <CardDescription>{t('purchases.bills.settlementModel')}</CardDescription>
+          <div className="text-lg font-bold text-stone-800 mt-1">{t('purchases.bills.fifoAllocation')}</div>
         </Card>
       </div>
 
@@ -416,20 +419,20 @@ export default function PurchasesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Vendor Balances</CardTitle>
+          <CardTitle>{t('purchases.bills.vendorBalances')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-stone-200 text-stone-500 font-semibold">
-                  <th className="py-2.5 px-3">Code</th>
-                  <th className="py-2.5 px-3">Vendor</th>
-                  <th className="py-2.5 px-3">Contact</th>
-                  <th className="py-2.5 px-3 text-right">Purchased</th>
-                  <th className="py-2.5 px-3 text-right">Paid</th>
-                  <th className="py-2.5 px-3 text-right">Outstanding</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3">{t('purchases.bills.table.code')}</th>
+                  <th className="py-2.5 px-3">{t('purchases.bills.table.vendor')}</th>
+                  <th className="py-2.5 px-3">{t('purchases.bills.table.contact')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('purchases.bills.table.purchased')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('purchases.bills.table.paid')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('purchases.bills.table.balance')}</th>
+                  <th className="py-2.5 px-3 text-center">{t('purchases.bills.table.status')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
@@ -461,11 +464,11 @@ export default function PurchasesPage() {
                       </td>
                       <td className="py-3 px-3 text-center">
                         {out <= 0 ? (
-                          <Badge variant="success">Settled</Badge>
+                          <Badge variant="success">{t('purchases.bills.settled')}</Badge>
                         ) : Number(v.total_paid) > 0 ? (
-                          <Badge variant="warning">Partial</Badge>
+                          <Badge variant="warning">{t('purchases.bills.partial')}</Badge>
                         ) : (
-                          <Badge variant="danger">Unpaid</Badge>
+                          <Badge variant="danger">{t('purchases.bills.unpaid')}</Badge>
                         )}
                       </td>
                     </tr>
@@ -481,7 +484,7 @@ export default function PurchasesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-lg font-bold text-stone-900">New Purchase</h2>
+              <h2 className="text-lg font-bold text-stone-900">{t('purchases.bills.newPurchaseInvoice')}</h2>
               <button onClick={() => setShowPurchaseModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
             </div>
 
@@ -489,13 +492,13 @@ export default function PurchasesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-medium text-stone-700">Vendor</label>
+                    <label className="block font-medium text-stone-700">{t('purchases.bills.vendor')}</label>
                     <button
                       type="button"
                       onClick={() => setShowQuickVendorModal(true)}
                       className="text-[11px] text-amber-600 hover:text-amber-800 font-semibold hover:underline flex items-center gap-0.5"
                     >
-                      <Plus className="h-3 w-3" /> Quick Add Vendor
+                      <Plus className="h-3 w-3" /> {t('purchases.bills.quickAddVendor')}
                     </button>
                   </div>
                   <select
@@ -504,7 +507,7 @@ export default function PurchasesPage() {
                     required
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">Select Vendor...</option>
+                    <option value="">{t('purchases.bills.selectVendor')}</option>
                     {vendors
                       .filter((v) => v.is_active !== false)
                       .map((v) => (
@@ -515,7 +518,7 @@ export default function PurchasesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Invoice / Bill #</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.invoiceNo')}</label>
                   <input
                     type="text"
                     value={invoiceNumber}
@@ -528,9 +531,9 @@ export default function PurchasesPage() {
 
               <div className="space-y-2 border-t pt-3">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-stone-800">Items</label>
+                  <label className="font-bold text-stone-800">{t('purchases.bills.items')}</label>
                   <Button type="button" variant="secondary" size="sm" onClick={handleAddLine} className="gap-1 text-xs">
-                    <Plus className="h-3 w-3" /> Add Item
+                    <Plus className="h-3 w-3" /> {t('purchases.bills.addItem')}
                   </Button>
                 </div>
 
@@ -550,6 +553,9 @@ export default function PurchasesPage() {
                   const deviationPct = line.previous_rate
                     ? Math.round(((lineBaseRate - line.previous_rate) / line.previous_rate) * 100)
                     : 0;
+
+                  const secUnitSymbol = getLocalizedMasterSymbol(currentItem?.sec_unit, locale) || currentItem?.sec_unit?.symbol || 'Packs';
+                  const baseUnitSymbol = getLocalizedMasterSymbol(currentItem?.unit, locale) || currentItem?.unit?.symbol || 'Units';
 
                   return (
                     <div key={idx} className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2">
@@ -585,12 +591,12 @@ export default function PurchasesPage() {
                           required
                           className="flex-1 min-w-[200px] rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
                         >
-                          <option value="">Select Item...</option>
+                          <option value="">{t('purchases.bills.selectItem')}</option>
                           {items
                             .filter((i) => i.is_active !== false || i.id === line.item_id)
                             .map((i) => (
                               <option key={i.id} value={i.id}>
-                                {i.name} ({i.item_code})
+                                {i.name_hi && locale === 'hi' ? i.name_hi : i.name} ({i.item_code})
                               </option>
                             ))}
                         </select>
@@ -614,9 +620,9 @@ export default function PurchasesPage() {
                                 ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-xs'
                                 : 'bg-white border-stone-300 text-stone-600 hover:bg-stone-100'
                             }`}
-                            title={`1 ${currentItem?.sec_unit?.symbol} = ${conv} ${currentItem?.unit?.symbol}`}
+                            title={`1 ${secUnitSymbol} = ${conv} ${baseUnitSymbol}`}
                           >
-                            📦 {line.use_pack ? `Pack (${currentItem?.sec_unit?.symbol} ×${conv})` : `Base (${currentItem?.unit?.symbol})`}
+                            📦 {line.use_pack ? `${t('purchases.bills.pack')} (${secUnitSymbol} ×${conv})` : `${t('purchases.bills.base')} (${baseUnitSymbol})`}
                           </button>
                         )}
 
@@ -636,12 +642,12 @@ export default function PurchasesPage() {
                               }
                               setLines(next);
                             }}
-                            placeholder="Qty"
+                            placeholder={t('purchases.bills.qty')}
                             required
                             className="w-16 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
                           />
                           <span className="px-1.5 py-1.5 bg-stone-200/80 border border-stone-300 rounded text-stone-700 font-mono text-[11px] font-bold">
-                            {line.use_pack ? currentItem?.sec_unit?.symbol || 'Packs' : currentItem?.unit?.symbol || 'Units'}
+                            {line.use_pack ? secUnitSymbol : baseUnitSymbol}
                           </span>
                         </div>
 
@@ -661,7 +667,7 @@ export default function PurchasesPage() {
                               }
                               setLines(next);
                             }}
-                            placeholder={line.use_pack ? `₹ / ${currentItem?.sec_unit?.symbol}` : "Rate (₹)"}
+                            placeholder={line.use_pack ? `₹ / ${secUnitSymbol}` : t('purchases.bills.rate')}
                             required
                             className={`w-24 rounded-md border p-2 text-right text-stone-900 text-xs focus:outline-none bg-white ${
                               isDeviation ? 'border-amber-400 bg-amber-50/50' : 'border-stone-300'
@@ -687,10 +693,10 @@ export default function PurchasesPage() {
                       {line.use_pack && hasPack && (
                         <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200 rounded px-2 py-1 font-mono flex items-center justify-between">
                           <span>
-                            Conversion: <strong>{line.pack_quantity || 0} {currentItem?.sec_unit?.symbol}</strong> × {conv} = <strong>{lineBaseQty.toFixed(2)} {currentItem?.unit?.symbol}</strong>
+                            {t('purchases.bills.conversion')} <strong>{line.pack_quantity || 0} {secUnitSymbol}</strong> × {conv} = <strong>{lineBaseQty.toFixed(2)} {baseUnitSymbol}</strong>
                           </span>
                           <span>
-                            Derived Rate: <strong>{formatINR(lineBaseRate)}</strong> / {currentItem?.unit?.symbol}
+                            {t('purchases.bills.derivedRate')} <strong>{formatINR(lineBaseRate)}</strong> / {baseUnitSymbol}
                           </span>
                         </div>
                       )}
@@ -700,7 +706,7 @@ export default function PurchasesPage() {
                         <div>
                           <input
                             type="text"
-                            placeholder="Batch / Lot #"
+                            placeholder={t('purchases.bills.batchLot')}
                             value={line.batch_number || ''}
                             onChange={(e) => {
                               const next = [...lines];
@@ -721,7 +727,7 @@ export default function PurchasesPage() {
                               setLines(next);
                             }}
                             className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
-                            title="Expiry Date"
+                            title={t('purchases.bills.expiryDate')}
                           />
                           {currentItem?.shelf_life_days && (
                             <button
@@ -751,10 +757,10 @@ export default function PurchasesPage() {
                             }}
                             className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
                           >
-                            <option value="">Store: Central Store Room</option>
+                            <option value="">{t('purchases.bills.centralStoreRoom')}</option>
                             {locations.map((loc) => (
                               <option key={loc.id} value={loc.id}>
-                                Store at {loc.name} ({loc.code})
+                                {t('purchases.bills.storeAt', { location: getLocalizedMasterName(loc, locale) || loc.name })} ({loc.code})
                               </option>
                             ))}
                           </select>
@@ -765,12 +771,12 @@ export default function PurchasesPage() {
                       {line.previous_rate !== undefined && line.previous_rate > 0 && (
                         <div className="flex items-center justify-between text-[11px] px-1 text-stone-500">
                           <span>
-                            Previous Base Purchase: <strong className="text-stone-700">{formatINR(line.previous_rate)}</strong>
-                            {line.previous_date && ` on ${line.previous_date}`}
+                            {t('purchases.bills.prevPurchase')} <strong className="text-stone-700">{formatINR(line.previous_rate)}</strong>
+                            {line.previous_date && ` ${t('purchases.bills.onDate', { date: line.previous_date })}`}
                           </span>
                           {isDeviation && (
                             <span className="text-amber-700 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
-                              ⚠️ {deviationPct > 0 ? `+${deviationPct}% higher` : `${deviationPct}% lower`} than previous rate
+                              ⚠️ {deviationPct > 0 ? t('purchases.bills.higherThanPrev', { pct: deviationPct }) : t('purchases.bills.lowerThanPrev', { pct: Math.abs(deviationPct) })}
                             </span>
                           )}
                         </div>
@@ -781,16 +787,16 @@ export default function PurchasesPage() {
               </div>
 
               <div className="flex items-center justify-between border-t pt-3">
-                <span className="font-bold text-stone-700 text-sm">Invoice Total:</span>
+                <span className="font-bold text-stone-700 text-sm">{t('purchases.bills.invoiceTotal')}</span>
                 <span className="font-extrabold text-amber-600 text-lg">
                   {formatINR(calculatePurchaseTotal())}
                 </span>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="secondary" onClick={() => setShowPurchaseModal(false)}>Cancel</Button>
+                <Button type="button" variant="secondary" onClick={() => setShowPurchaseModal(false)}>{t('purchases.bills.cancel')}</Button>
                 <Button type="submit" variant="amber" disabled={purchaseSaving}>
-                  {purchaseSaving ? 'Saving...' : 'Post Purchase'}
+                  {purchaseSaving ? t('purchases.bills.saving') : t('purchases.bills.postPurchase')}
                 </Button>
               </div>
             </form>
@@ -802,32 +808,32 @@ export default function PurchasesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
             <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-base font-bold text-stone-900">Record Payment</h2>
+              <h2 className="text-base font-bold text-stone-900">{t('purchases.bills.recordPayment')}</h2>
               <button onClick={() => setShowPaymentModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
             </div>
 
             <form onSubmit={handleRecordPayment} className="space-y-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Vendor</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.vendor')}</label>
                 <select
                   value={paymentVendorId}
                   onChange={(e) => setPaymentVendorId(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Vendor...</option>
+                  <option value="">{t('purchases.bills.selectVendor')}</option>
                   {vendors
                     .filter((v) => v.is_active !== false)
                     .map((v) => (
                       <option key={v.vendor_id} value={v.vendor_id}>
-                        {v.vendor_name} (Due: {formatINR(Number(v.outstanding_balance))})
+                        {v.vendor_name} ({t('purchases.bills.due')}: {formatINR(Number(v.outstanding_balance))})
                       </option>
                     ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Amount (₹)</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.amount')}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -840,23 +846,23 @@ export default function PurchasesPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Payment Method</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.paymentMethod')}</label>
                 <select
                   value={paymentMethodId}
                   onChange={(e) => setPaymentMethodId(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Method...</option>
+                  <option value="">{t('purchases.bills.selectMethod')}</option>
                   {paymentMethods.map((pm) => (
                     <option key={pm.id} value={pm.id}>
-                      {pm.name}
+                      {getLocalizedMasterName(pm, locale) || pm.name}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Reference #</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.referenceNo')}</label>
                 <input
                   type="text"
                   value={paymentRef}
@@ -867,9 +873,9 @@ export default function PurchasesPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="secondary" onClick={() => setShowPaymentModal(false)}>Cancel</Button>
+                <Button type="button" variant="secondary" onClick={() => setShowPaymentModal(false)}>{t('purchases.bills.cancel')}</Button>
                 <Button type="submit" variant="amber" disabled={paymentSaving}>
-                  {paymentSaving ? 'Saving...' : 'Record Payment'}
+                  {paymentSaving ? t('purchases.bills.saving') : t('purchases.bills.recordPayment')}
                 </Button>
               </div>
             </form>

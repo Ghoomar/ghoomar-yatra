@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatNumber } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import {
   Users,
-  Car,
-  Bike,
   Receipt,
   AlertTriangle,
   ClipboardList,
@@ -18,12 +18,9 @@ import {
   RefreshCw,
   CheckCircle2,
   ExternalLink,
-  ShieldCheck,
   Package,
   Wrench,
   MessageSquareWarning,
-  Flame,
-  ArrowRight,
 } from 'lucide-react';
 
 interface GateData {
@@ -44,15 +41,25 @@ interface SalesData {
   avgSpendPerPax: number;
 }
 
+interface IncidentItem {
+  id: string;
+  sourceKey: 'assetRegister' | 'stockCountAudit' | 'storeLoss' | 'kitchenWastage';
+  name: string;
+  quantity: string;
+  notes: string;
+  value?: number;
+}
+
 interface InventoryIncidents {
   missingCount: number;
-  missingItems: any[];
+  missingItems: IncidentItem[];
   breakageCount: number;
-  breakageItems: any[];
+  breakageItems: IncidentItem[];
 }
 
 export default function DailyOperationsPage() {
   const supabase = createClient();
+  const { t, locale } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [loading, setLoading] = useState(true);
   const [savingNotes, setSavingNotes] = useState(false);
@@ -171,37 +178,38 @@ export default function DailyOperationsPage() {
       const [{ data: assetLossEvents }, { data: stockMovs }] = await Promise.all([
         supabase
           .from('physical_asset_status_ledger')
-          .select('id, event_type, quantity, notes, item:inventory_items(name)')
+          .select('id, event_type, quantity, notes, item:inventory_items(name, name_hi)')
           .eq('business_date', businessDate),
         supabase
           .from('stock_movements')
           .select(`
             id, movement_type, purpose, quantity, total_value, notes,
-            item:inventory_items(name, unit:units!inventory_items_unit_id_fkey(symbol))
+            item:inventory_items(name, name_hi, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi))
           `)
           .eq('business_date', businessDate)
           .in('movement_type', ['breakage', 'loss', 'wastage', 'spoilage', 'count_adjustment']),
       ]);
 
-      const missing: any[] = [];
-      const breakage: any[] = [];
+      const missing: IncidentItem[] = [];
+      const breakage: IncidentItem[] = [];
 
       (assetLossEvents || []).forEach((ev: any) => {
+        const localizedName = getLocalizedMasterName(ev.item, locale) || 'Asset Item';
         if (ev.event_type === 'loss') {
           missing.push({
             id: ev.id,
-            source: 'Asset Register',
-            name: ev.item?.name || 'Asset Item',
+            sourceKey: 'assetRegister',
+            name: localizedName,
             quantity: `${ev.quantity} pcs`,
-            notes: ev.notes || 'Asset missing / lost',
+            notes: ev.notes || (locale === 'hi' ? 'एसेट गुम / अनुपलब्ध' : 'Asset missing / lost'),
           });
         } else if (ev.event_type === 'breakage') {
           breakage.push({
             id: ev.id,
-            source: 'Asset Register',
-            name: ev.item?.name || 'Asset Item',
+            sourceKey: 'assetRegister',
+            name: localizedName,
             quantity: `${ev.quantity} pcs`,
-            notes: ev.notes || 'Broken in service',
+            notes: ev.notes || (locale === 'hi' ? 'सेवा के दौरान टूटा' : 'Broken in service'),
           });
         }
       });
@@ -209,22 +217,24 @@ export default function DailyOperationsPage() {
       (stockMovs || []).forEach((m: any) => {
         const isLoss = m.movement_type === 'loss' || (m.movement_type === 'count_adjustment' && Number(m.quantity) < 0);
         const isBreak = ['breakage', 'wastage', 'spoilage'].includes(m.movement_type) || m.purpose === 'Breakage';
+        const localizedName = getLocalizedMasterName(m.item, locale) || 'Stock Item';
+        const unitSymbol = getLocalizedMasterSymbol(m.item?.unit, locale);
 
         if (isLoss) {
           missing.push({
             id: m.id,
-            source: m.movement_type === 'count_adjustment' ? 'Stock Count Audit' : 'Store Loss',
-            name: m.item?.name || 'Stock Item',
-            quantity: `${Math.abs(Number(m.quantity))} ${m.item?.unit?.symbol || ''}`,
+            sourceKey: m.movement_type === 'count_adjustment' ? 'stockCountAudit' : 'storeLoss',
+            name: localizedName,
+            quantity: `${Math.abs(Number(m.quantity))} ${unitSymbol}`,
             notes: m.notes || m.purpose,
             value: Number(m.total_value) || 0,
           });
         } else if (isBreak) {
           breakage.push({
             id: m.id,
-            source: 'Kitchen / Store Wastage',
-            name: m.item?.name || 'Stock Item',
-            quantity: `${m.quantity} ${m.item?.unit?.symbol || ''}`,
+            sourceKey: 'kitchenWastage',
+            name: localizedName,
+            quantity: `${m.quantity} ${unitSymbol}`,
             notes: m.notes || m.purpose,
             value: Number(m.total_value) || 0,
           });
@@ -260,11 +270,11 @@ export default function DailyOperationsPage() {
       }
     } catch (err: any) {
       console.error('Error loading daily operations data:', err);
-      setMessage({ type: 'error', text: 'Failed to load operational snapshot.' });
+      setMessage({ type: 'error', text: t('operations.daily.loadError') });
     } finally {
       setLoading(false);
     }
-  }, [businessDate, supabase]);
+  }, [businessDate, locale, supabase, t]);
 
   useEffect(() => {
     loadAllOperationalData();
@@ -297,10 +307,10 @@ export default function DailyOperationsPage() {
       if (error) throw error;
 
       setLastSavedAt(new Date().toISOString());
-      setMessage({ type: 'success', text: 'Daily operational notes saved successfully.' });
+      setMessage({ type: 'success', text: t('operations.daily.saveSuccess') });
     } catch (err: any) {
       console.error('Error saving operational notes:', err);
-      setMessage({ type: 'error', text: err.message || 'Error saving notes.' });
+      setMessage({ type: 'error', text: err.message || t('operations.daily.saveError') });
     } finally {
       setSavingNotes(false);
     }
@@ -316,16 +326,16 @@ export default function DailyOperationsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ClipboardList className="h-6 w-6 text-amber-600" />
-            Daily Operations Report
+            {t('operations.daily.title')}
           </h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
-            Single operational pane-of-glass pulling authoritative Gate, Petpooja, and Inventory records with shift handover logs.
+            {t('operations.daily.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('operations.daily.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -357,15 +367,15 @@ export default function DailyOperationsPage() {
         <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900">
-              <Users className="h-4 w-4 text-amber-600" /> Gate Footfall &amp; Vehicle Inward
+              <Users className="h-4 w-4 text-amber-600" /> {t('operations.daily.gate.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Auto-aggregated from raw Gate Counter entry taps for {businessDate}
+              {t('operations.daily.gate.subtitle', { date: businessDate })}
             </CardDescription>
           </div>
           <Link href="/operations/gate">
             <Button variant="ghost" size="sm" className="text-xs text-amber-700 hover:text-amber-800 gap-1 h-7">
-              <span>View Gate Counter</span>
+              <span>{t('operations.daily.gate.viewGate')}</span>
               <ExternalLink className="h-3 w-3" />
             </Button>
           </Link>
@@ -375,49 +385,49 @@ export default function DailyOperationsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
               <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                Total Entry PAX
+                {t('operations.daily.gate.entryPax')}
               </span>
               <span className="text-2xl font-black text-stone-900 block mt-1">
                 {formatNumber(gateData.entryPax)}
               </span>
-              <span className="text-[10px] text-stone-400">Visitors logged at gate</span>
+              <span className="text-[10px] text-stone-400">{t('operations.daily.gate.entryPaxDesc')}</span>
             </div>
 
             <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
               <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                Cars Inward
+                {t('operations.daily.gate.cars')}
               </span>
               <span className="text-2xl font-black text-sky-700 block mt-1">
                 {formatNumber(gateData.cars)}
               </span>
-              <span className="text-[10px] text-stone-400">Car registrations</span>
+              <span className="text-[10px] text-stone-400">{t('operations.daily.gate.carsDesc')}</span>
             </div>
 
             <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
               <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                Bikes Inward
+                {t('operations.daily.gate.bikes')}
               </span>
               <span className="text-2xl font-black text-emerald-700 block mt-1">
                 {formatNumber(gateData.bikes)}
               </span>
-              <span className="text-[10px] text-stone-400">Two-wheelers</span>
+              <span className="text-[10px] text-stone-400">{t('operations.daily.gate.bikesDesc')}</span>
             </div>
 
             <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
               <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                Total Vehicles
+                {t('operations.daily.gate.totalVehicles')}
               </span>
               <span className="text-2xl font-black text-stone-900 block mt-1">
                 {formatNumber(gateData.totalVehicles)}
               </span>
-              <span className="text-[10px] text-stone-400">Combined traffic</span>
+              <span className="text-[10px] text-stone-400">{t('operations.daily.gate.totalVehiclesDesc')}</span>
             </div>
           </div>
 
-          {/* Car Registration Prefixes Pills */}
+          {/* Car Registration Prefixes Pills (state codes remain English per Rule 6) */}
           {Object.keys(gateData.prefixes).length > 0 && (
             <div className="mt-3 pt-3 border-t border-stone-100 flex items-center gap-2 flex-wrap text-xs">
-              <span className="text-[11px] font-semibold text-stone-400">Car Origins:</span>
+              <span className="text-[11px] font-semibold text-stone-400">{t('operations.daily.gate.carOrigins')}</span>
               {Object.entries(gateData.prefixes).map(([pref, cnt]) => (
                 <span
                   key={pref}
@@ -437,15 +447,15 @@ export default function DailyOperationsPage() {
         <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900">
-              <Receipt className="h-4 w-4 text-emerald-600" /> Petpooja Restaurant Sales &amp; Dining PAX
+              <Receipt className="h-4 w-4 text-emerald-600" /> {t('operations.daily.sales.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Authoritative POS data pulled from Orders Master covers and Executive Summary
+              {t('operations.daily.sales.subtitle')}
             </CardDescription>
           </div>
           <Link href="/finance/sales">
             <Button variant="ghost" size="sm" className="text-xs text-amber-700 hover:text-amber-800 gap-1 h-7">
-              <span>View Sales Ingestion</span>
+              <span>{t('operations.daily.sales.viewSales')}</span>
               <ExternalLink className="h-3 w-3" />
             </Button>
           </Link>
@@ -456,11 +466,11 @@ export default function DailyOperationsPage() {
             <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200/70 text-xs text-amber-900 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
-                <span>No Petpooja reports imported yet for {businessDate}.</span>
+                <span>{t('operations.daily.sales.noData', { date: businessDate })}</span>
               </div>
               <Link href="/finance/sales">
                 <Button variant="outline" size="sm" className="h-7 text-xs bg-white text-amber-900 border-amber-300">
-                  Upload Petpooja Report
+                  {t('operations.daily.sales.uploadReport')}
                 </Button>
               </Link>
             </div>
@@ -468,44 +478,44 @@ export default function DailyOperationsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
                 <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                  Restaurant PAX (Covers)
+                  {t('operations.daily.sales.restaurantPax')}
                 </span>
                 <span className="text-2xl font-black text-amber-600 block mt-1">
                   {formatNumber(salesData.restaurantPax)}
                 </span>
                 <span className="text-[10px] text-stone-400">
-                  Across {salesData.billCount} bills ({dinerConversionRate}% of Gate Footfall)
+                  {t('operations.daily.sales.restaurantPaxDesc', { count: salesData.billCount, percent: dinerConversionRate })}
                 </span>
               </div>
 
               <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
                 <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                  Net Sales
+                  {t('operations.daily.sales.netSales')}
                 </span>
                 <span className="text-2xl font-black text-stone-900 block mt-1">
                   {formatINR(salesData.netSales)}
                 </span>
-                <span className="text-[10px] text-stone-400">Settled food &amp; beverage</span>
+                <span className="text-[10px] text-stone-400">{t('operations.daily.sales.netSalesDesc')}</span>
               </div>
 
               <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
                 <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                  Discounts Given
+                  {t('operations.daily.sales.discounts')}
                 </span>
                 <span className="text-2xl font-black text-rose-600 block mt-1">
                   {formatINR(salesData.discounts)}
                 </span>
-                <span className="text-[10px] text-stone-400">Bill &amp; item discounts</span>
+                <span className="text-[10px] text-stone-400">{t('operations.daily.sales.discountsDesc')}</span>
               </div>
 
               <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200/60">
                 <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
-                  Avg Spend / PAX
+                  {t('operations.daily.sales.avgSpend')}
                 </span>
                 <span className="text-2xl font-black text-stone-900 block mt-1">
                   {formatINR(salesData.avgSpendPerPax)}
                 </span>
-                <span className="text-[10px] text-stone-400">Revenue per dining guest</span>
+                <span className="text-[10px] text-stone-400">{t('operations.daily.sales.avgSpendDesc')}</span>
               </div>
             </div>
           )}
@@ -517,22 +527,22 @@ export default function DailyOperationsPage() {
         <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900">
-              <Package className="h-4 w-4 text-rose-600" /> Inventory Missing &amp; Breakage Incidents
+              <Package className="h-4 w-4 text-rose-600" /> {t('operations.daily.incidents.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Read automatically from Asset Status Ledger and Kitchen Stock Dispatches
+              {t('operations.daily.incidents.subtitle')}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/inventory/assets">
               <Button variant="ghost" size="sm" className="text-xs text-stone-600 hover:text-stone-900 gap-1 h-7">
-                <span>Asset Register</span>
+                <span>{t('operations.daily.incidents.assetRegister')}</span>
                 <ExternalLink className="h-3 w-3" />
               </Button>
             </Link>
             <Link href="/inventory/issues">
               <Button variant="ghost" size="sm" className="text-xs text-stone-600 hover:text-stone-900 gap-1 h-7">
-                <span>Store Issues</span>
+                <span>{t('operations.daily.incidents.storeIssues')}</span>
                 <ExternalLink className="h-3 w-3" />
               </Button>
             </Link>
@@ -545,16 +555,16 @@ export default function DailyOperationsPage() {
             <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/50 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Missing Stock Incidents
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> {t('operations.daily.incidents.missingStock')}
                 </span>
                 <Badge variant={inventoryIncidents.missingCount > 0 ? 'warning' : 'outline'}>
-                  {inventoryIncidents.missingCount} logged
+                  {t('operations.daily.incidents.loggedCount', { count: inventoryIncidents.missingCount })}
                 </Badge>
               </div>
 
               {inventoryIncidents.missingItems.length === 0 ? (
                 <div className="text-[11px] text-stone-400 py-3 text-center">
-                  No missing stock or inventory audit variances logged for {businessDate}.
+                  {t('operations.daily.incidents.noMissing', { date: businessDate })}
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
@@ -562,7 +572,9 @@ export default function DailyOperationsPage() {
                     <div key={idx} className="bg-white p-2 rounded-lg border border-stone-200/80 text-xs flex justify-between items-center">
                       <div>
                         <strong className="text-stone-900 block">{item.name}</strong>
-                        <span className="text-[10px] text-stone-500">{item.notes} ({item.source})</span>
+                        <span className="text-[10px] text-stone-500">
+                          {item.notes} ({t(`operations.daily.incidents.sources.${item.sourceKey}` as any)})
+                        </span>
                       </div>
                       <span className="font-bold text-rose-600 text-xs shrink-0 ml-2">{item.quantity}</span>
                     </div>
@@ -575,16 +587,16 @@ export default function DailyOperationsPage() {
             <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/50 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
-                  <Wrench className="h-3.5 w-3.5 text-rose-600" /> Breakage &amp; Spoilage Incidents
+                  <Wrench className="h-3.5 w-3.5 text-rose-600" /> {t('operations.daily.incidents.breakageWastage')}
                 </span>
                 <Badge variant={inventoryIncidents.breakageCount > 0 ? 'danger' : 'outline'}>
-                  {inventoryIncidents.breakageCount} logged
+                  {t('operations.daily.incidents.loggedCount', { count: inventoryIncidents.breakageCount })}
                 </Badge>
               </div>
 
               {inventoryIncidents.breakageItems.length === 0 ? (
                 <div className="text-[11px] text-stone-400 py-3 text-center">
-                  No asset breakage or kitchen spoilage incidents logged for {businessDate}.
+                  {t('operations.daily.incidents.noBreakage', { date: businessDate })}
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
@@ -592,7 +604,9 @@ export default function DailyOperationsPage() {
                     <div key={idx} className="bg-white p-2 rounded-lg border border-stone-200/80 text-xs flex justify-between items-center">
                       <div>
                         <strong className="text-stone-900 block">{item.name}</strong>
-                        <span className="text-[10px] text-stone-500">{item.notes} ({item.source})</span>
+                        <span className="text-[10px] text-stone-500">
+                          {item.notes} ({t(`operations.daily.incidents.sources.${item.sourceKey}` as any)})
+                        </span>
                       </div>
                       <span className="font-bold text-stone-900 text-xs shrink-0 ml-2">{item.quantity}</span>
                     </div>
@@ -609,15 +623,17 @@ export default function DailyOperationsPage() {
         <CardHeader className="pb-3 border-b border-stone-100 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900">
-              <MessageSquareWarning className="h-4 w-4 text-indigo-600" /> Shift Operational Log &amp; Incidents
+              <MessageSquareWarning className="h-4 w-4 text-indigo-600" /> {t('operations.daily.shiftLog.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Manual entries for operational items that have no existing automated source of truth
+              {t('operations.daily.shiftLog.subtitle')}
             </CardDescription>
           </div>
           {lastSavedAt && (
             <span className="text-[10px] text-stone-400">
-              Last saved: {new Date(lastSavedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              {t('operations.daily.lastSaved', {
+                time: new Date(lastSavedAt).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', { hour: '2-digit', minute: '2-digit' })
+              })}
             </span>
           )}
         </CardHeader>
@@ -629,13 +645,13 @@ export default function DailyOperationsPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-                  Guest Complaints
+                  {t('operations.daily.shiftLog.complaints')}
                 </label>
                 <textarea
                   rows={3}
                   value={complaints}
                   onChange={(e) => setComplaints(e.target.value)}
-                  placeholder="e.g. Table 14 food delay complaint resolved with dessert; air conditioning in banquet hall 2 reported low."
+                  placeholder={t('operations.daily.shiftLog.complaintsPlaceholder')}
                   className="w-full text-xs p-2.5 rounded-xl border border-stone-200 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
                 />
               </div>
@@ -644,13 +660,13 @@ export default function DailyOperationsPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                  Work Orders &amp; Maintenance
+                  {t('operations.daily.shiftLog.workOrders')}
                 </label>
                 <textarea
                   rows={3}
                   value={workOrders}
                   onChange={(e) => setWorkOrders(e.target.value)}
-                  placeholder="e.g. Dishwasher motor inspection requested; generator fuel filter service scheduled for tomorrow morning."
+                  placeholder={t('operations.daily.shiftLog.workOrdersPlaceholder')}
                   className="w-full text-xs p-2.5 rounded-xl border border-stone-200 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
                 />
               </div>
@@ -659,13 +675,13 @@ export default function DailyOperationsPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
-                  Store / Kitchen Requirements
+                  {t('operations.daily.shiftLog.requirements')}
                 </label>
                 <textarea
                   rows={3}
                   value={requirements}
                   onChange={(e) => setRequirements(e.target.value)}
-                  placeholder="e.g. Urgent mustard oil and dairy delivery required before lunch shift; 50 additional takeaway boxes needed."
+                  placeholder={t('operations.daily.shiftLog.requirementsPlaceholder')}
                   className="w-full text-xs p-2.5 rounded-xl border border-stone-200 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
                 />
               </div>
@@ -674,13 +690,13 @@ export default function DailyOperationsPage() {
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                  General Handover &amp; Incident Notes
+                  {t('operations.daily.shiftLog.operationalNotes')}
                 </label>
                 <textarea
                   rows={3}
                   value={operationalNotes}
                   onChange={(e) => setOperationalNotes(e.target.value)}
-                  placeholder="e.g. VIP party of 25 hosted at 8 PM smoothly; cash deposit handed over to night vault supervisor."
+                  placeholder={t('operations.daily.shiftLog.operationalNotesPlaceholder')}
                   className="w-full text-xs p-2.5 rounded-xl border border-stone-200 bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
                 />
               </div>
@@ -689,7 +705,7 @@ export default function DailyOperationsPage() {
             <div className="flex justify-end pt-2">
               <Button type="submit" disabled={savingNotes} className="gap-1.5 text-xs">
                 <Save className="h-3.5 w-3.5" />
-                {savingNotes ? 'Saving Notes...' : 'Save Shift Operational Log'}
+                {savingNotes ? t('operations.daily.saving') : t('operations.daily.saveAction')}
               </Button>
             </div>
           </form>

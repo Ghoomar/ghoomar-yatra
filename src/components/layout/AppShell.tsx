@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 import { hasPermission as evaluatePermission, getRequiredPermissionForPath } from '@/lib/rbac';
 import { ShieldAlert, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { I18nProvider, useI18n } from '@/lib/i18n/context';
 
 interface RoleContextType {
   role: RoleName;
@@ -304,6 +305,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // If on login route, render standalone clean layout without sidebar & header
   if (pathname === '/login') {
     return (
+      <I18nProvider userId={user?.id} profileLocale={profile?.locale}>
+        <RoleContext.Provider
+          value={{
+            role: activeRole,
+            actualRole,
+            user,
+            profile,
+            permissions,
+            hasPermission: checkPermission,
+            loading,
+            setRole: handleRoleChange,
+            signOut: handleSignOut,
+          }}
+        >
+          <ServiceWorkerRegister />
+          <main className="min-h-screen bg-[#FAF7F2] text-[#1C1917] flex flex-col justify-center">
+            {children}
+          </main>
+        </RoleContext.Provider>
+      </I18nProvider>
+    );
+  }
+
+  // Loading state: strictly do NOT render AppShell or dashboard content
+  if (loading) {
+    return (
+      <I18nProvider userId={user?.id} profileLocale={profile?.locale}>
+        <AppShellLoading />
+      </I18nProvider>
+    );
+  }
+
+  // Direct URL route permission check
+  const requiredPermission = getRequiredPermissionForPath(pathname);
+  const isAuthorized = !requiredPermission || checkPermission(requiredPermission);
+
+  return (
+    <I18nProvider userId={user?.id} profileLocale={profile?.locale}>
       <RoleContext.Provider
         value={{
           role: activeRole,
@@ -318,98 +357,96 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
       >
         <ServiceWorkerRegister />
-        <main className="min-h-screen bg-[#FAF7F2] text-[#1C1917] flex flex-col justify-center">
-          {children}
-        </main>
-      </RoleContext.Provider>
-    );
-  }
-
-  // Loading state: strictly do NOT render AppShell or dashboard content
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
-        <div className="p-4 bg-stone-800 border border-stone-700 rounded-2xl shadow-2xl max-w-sm w-full flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500">
-            <RefreshCw className="h-5 w-5 animate-spin" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-white tracking-wide">Ghoomar Yatra Security</div>
-            <div className="text-xs text-stone-400 mt-0.5">Verifying authenticated session &amp; RBAC authorizations...</div>
+        <div className="min-h-screen bg-[#FAF7F2] text-[#1C1917]">
+          <Sidebar
+            currentRole={activeRole}
+            onRoleChange={handleRoleChange}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+          />
+          <div className="lg:pl-64 flex flex-col min-h-screen">
+            <Header
+              currentRole={activeRole}
+              actualRole={actualRole}
+              onRoleChange={handleRoleChange}
+              onOpenSidebar={() => setSidebarOpen(true)}
+              onSignOut={handleSignOut}
+            />
+            <main className="flex-1 p-3 sm:p-4 md:p-6 max-w-7xl w-full mx-auto min-w-0">
+              {!isAuthorized ? (
+                <AccessRestrictedNotice
+                  activeRole={activeRole}
+                  pathname={pathname}
+                  requiredPermission={requiredPermission}
+                />
+              ) : (
+                children
+              )}
+            </main>
           </div>
         </div>
-      </div>
-    );
-  }
+      </RoleContext.Provider>
+    </I18nProvider>
+  );
+}
 
-  // Direct URL route permission check
-  const requiredPermission = getRequiredPermissionForPath(pathname);
-  const isAuthorized = !requiredPermission || checkPermission(requiredPermission);
+function AppShellLoading() {
+  const { t } = useI18n();
+  return (
+    <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center p-4 text-center">
+      <div className="p-4 bg-stone-800 border border-stone-700 rounded-2xl shadow-2xl max-w-sm w-full flex flex-col items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500">
+          <RefreshCw className="h-5 w-5 animate-spin" />
+        </div>
+        <div>
+          <div className="text-sm font-bold text-white tracking-wide">{t('common.app.security')}</div>
+          <div className="text-xs text-stone-400 mt-0.5">{t('common.app.verifyingSession')}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessRestrictedNotice({
+  activeRole,
+  pathname,
+  requiredPermission,
+}: {
+  activeRole: string;
+  pathname: string;
+  requiredPermission?: string | null;
+}) {
+  const { t } = useI18n();
+  const router = useRouter();
 
   return (
-    <RoleContext.Provider
-      value={{
-        role: activeRole,
-        actualRole,
-        user,
-        profile,
-        permissions,
-        hasPermission: checkPermission,
-        loading,
-        setRole: handleRoleChange,
-        signOut: handleSignOut,
-      }}
-    >
-      <ServiceWorkerRegister />
-      <div className="min-h-screen bg-[#FAF7F2] text-[#1C1917]">
-        <Sidebar
-          currentRole={activeRole}
-          onRoleChange={handleRoleChange}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-        <div className="lg:pl-64 flex flex-col min-h-screen">
-          <Header
-            currentRole={activeRole}
-            actualRole={actualRole}
-            onRoleChange={handleRoleChange}
-            onOpenSidebar={() => setSidebarOpen(true)}
-            onSignOut={handleSignOut}
-          />
-          <main className="flex-1 p-3 sm:p-4 md:p-6 max-w-7xl w-full mx-auto min-w-0">
-            {!isAuthorized ? (
-              <div className="min-h-[60vh] flex items-center justify-center">
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-xl p-8 max-w-md w-full text-center space-y-4">
-                  <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
-                    <ShieldAlert className="h-8 w-8" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-stone-900">Access Restricted</h2>
-                    <p className="text-xs text-stone-500 mt-1">
-                      Your assigned role (<span className="font-semibold text-stone-700">{activeRole}</span>) does not have permission to access <span className="font-mono text-stone-700">{pathname}</span>.
-                    </p>
-                    <p className="text-[11px] text-stone-400 mt-2">
-                      Required permission: <code className="bg-stone-100 px-1.5 py-0.5 rounded text-stone-600 font-mono">{requiredPermission}</code>
-                    </p>
-                  </div>
-                  <div className="pt-2">
-                    <Button
-                      variant="amber"
-                      size="sm"
-                      onClick={() => router.push('/dashboard')}
-                      className="gap-2 mx-auto"
-                    >
-                      <ArrowLeft className="h-4 w-4" /> Return to Command Center
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              children
-            )}
-          </main>
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-xl p-8 max-w-md w-full text-center space-y-4">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-stone-900">{t('common.app.accessRestricted')}</h2>
+          <p className="text-xs text-stone-500 mt-1">
+            {t('common.app.accessRestrictedDesc', { role: activeRole, path: pathname })}
+          </p>
+          {requiredPermission && (
+            <p className="text-[11px] text-stone-400 mt-2">
+              {t('common.app.requiredPermission', { permission: requiredPermission })}
+            </p>
+          )}
+        </div>
+        <div className="pt-2">
+          <Button
+            variant="amber"
+            size="sm"
+            onClick={() => router.push('/dashboard')}
+            className="gap-2 mx-auto"
+          >
+            <ArrowLeft className="h-4 w-4" /> {t('common.app.returnToCommandCenter')}
+          </Button>
         </div>
       </div>
-    </RoleContext.Provider>
+    </div>
   );
 }

@@ -5,8 +5,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { getTodayBusinessDate, formatINR } from '@/lib/utils';
 import { ClipboardCheck, CheckCircle, AlertCircle, Save, RefreshCw, UserCheck } from 'lucide-react';
+import { getTodayBusinessDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface AttendanceRow {
   employee_id: string;
@@ -22,6 +24,7 @@ interface AttendanceRow {
 
 export default function AttendancePage() {
   const supabase = createClient();
+  const { t, locale, formatDate } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +39,7 @@ export default function AttendancePage() {
       // 1. Fetch active employees
       const { data: emps } = await supabase
         .from('employees')
-        .select('id, name, department:departments(name), role:employee_roles(name)')
+        .select('id, name, department:departments(name, name_hi), role:employee_roles(name, name_hi)')
         .eq('employment_status', 'Active')
         .order('name');
 
@@ -67,8 +70,8 @@ export default function AttendancePage() {
           return {
             employee_id: emp.id,
             name: emp.name,
-            department_name: emp.department?.name,
-            role_name: emp.role?.name,
+            department_name: getLocalizedMasterName(emp.department, locale),
+            role_name: getLocalizedMasterName(emp.role, locale),
             status: st,
             shift_multiplier: defaultMult,
             overtime_hours: existing ? Number(existing.overtime_hours) : 0,
@@ -79,7 +82,7 @@ export default function AttendancePage() {
       );
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: 'Failed to load attendance register.' });
+      setMessage({ type: 'error', text: t('attendance.messages.loadFailed') });
     } finally {
       setLoading(false);
     }
@@ -87,7 +90,7 @@ export default function AttendancePage() {
 
   useEffect(() => {
     loadData();
-  }, [businessDate]);
+  }, [businessDate, locale]);
 
   const handleMarkAllPresent = () => {
     setRows(rows.map((r) => ({ ...r, status: 'Present', shift_multiplier: 1.0 })));
@@ -115,10 +118,10 @@ export default function AttendancePage() {
       }
 
       setIsReported(true);
-      setMessage({ type: 'success', text: `Attendance for ${rows.length} staff members saved successfully.` });
+      setMessage({ type: 'success', text: t('attendance.messages.savedSuccess', { count: rows.length }) });
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Failed to save attendance.' });
+      setMessage({ type: 'error', text: t('attendance.messages.saveFailed', { error: err.message || '' }) });
     } finally {
       setSaving(false);
     }
@@ -137,16 +140,16 @@ export default function AttendancePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <ClipboardCheck className="h-6 w-6 text-amber-600" />
-            Daily Staff Attendance Register
+            {t('attendance.title')}
           </h1>
           <p className="text-sm text-stone-500">
-            Digital muster roll recorded from physical attendance register for midnight operational reporting.
+            {t('attendance.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('common.labels.date')}:</span>
             <input
               type="date"
               value={businessDate}
@@ -163,24 +166,24 @@ export default function AttendancePage() {
       {/* Status Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white border border-stone-200/80 rounded-xl text-xs shadow-2xs">
         <div className="flex items-center gap-2">
-          <span className="text-stone-500 font-medium">Attendance Status:</span>
+          <span className="text-stone-500 font-medium">{t('attendance.statusLabel')}</span>
           {isReported ? (
             <Badge variant="success" className="gap-1">
-              <CheckCircle className="h-3 w-3" /> RECORDED
+              <CheckCircle className="h-3 w-3" /> {t('attendance.recorded')}
             </Badge>
           ) : (
             <Badge variant="danger" className="gap-1">
-              <AlertCircle className="h-3 w-3" /> NOT SUBMITTED FOR TODAY
+              <AlertCircle className="h-3 w-3" /> {t('attendance.notSubmitted')}
             </Badge>
           )}
         </div>
 
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={handleMarkAllPresent} className="text-xs gap-1.5">
-            <UserCheck className="h-3.5 w-3.5 text-emerald-600" /> Mark All Present
+            <UserCheck className="h-3.5 w-3.5 text-emerald-600" /> {t('attendance.markAllPresent')}
           </Button>
           <Button variant="amber" size="sm" onClick={handleSaveAttendance} disabled={saving} className="text-xs gap-1.5">
-            <Save className="h-3.5 w-3.5" /> {saving ? 'Saving...' : 'Save Register'}
+            <Save className="h-3.5 w-3.5" /> {saving ? t('attendance.saving') : t('attendance.saveRegister')}
           </Button>
         </div>
       </div>
@@ -195,23 +198,23 @@ export default function AttendancePage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="p-3">
-          <div className="text-xs text-stone-500 font-medium">Present</div>
+          <div className="text-xs text-stone-500 font-medium">{t('attendance.stats.present')}</div>
           <div className="text-2xl font-bold text-emerald-600 mt-1">{presentCount}</div>
         </Card>
         <Card className="p-3">
-          <div className="text-xs text-stone-500 font-medium">Absent</div>
+          <div className="text-xs text-stone-500 font-medium">{t('attendance.stats.absent')}</div>
           <div className="text-2xl font-bold text-rose-600 mt-1">{absentCount}</div>
         </Card>
         <Card className="p-3">
-          <div className="text-xs text-stone-500 font-medium">Weekly Off</div>
+          <div className="text-xs text-stone-500 font-medium">{t('attendance.stats.weeklyOff')}</div>
           <div className="text-2xl font-bold text-stone-600 mt-1">{weeklyOffCount}</div>
         </Card>
         <Card className="p-3">
-          <div className="text-xs text-stone-500 font-medium">Leave</div>
+          <div className="text-xs text-stone-500 font-medium">{t('attendance.stats.leave')}</div>
           <div className="text-2xl font-bold text-amber-600 mt-1">{leaveCount}</div>
         </Card>
         <Card className="p-3">
-          <div className="text-xs text-stone-500 font-medium">Overtime Hours</div>
+          <div className="text-xs text-stone-500 font-medium">{t('attendance.stats.overtimeHours')}</div>
           <div className="text-2xl font-bold text-sky-600 mt-1">{totalOvertime}h</div>
         </Card>
       </div>
@@ -219,25 +222,25 @@ export default function AttendancePage() {
       {/* Attendance Grid */}
       <Card>
         <CardHeader>
-          <CardTitle>Attendance Roster ({rows.length} Staff)</CardTitle>
-          <CardDescription>Rapid status selection with overtime and penalty logging</CardDescription>
+          <CardTitle>{t('attendance.rosterTitle', { count: rows.length })}</CardTitle>
+          <CardDescription>{t('attendance.rosterSubtitle')}</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           {rows.length === 0 ? (
             <div className="py-12 text-center text-stone-400 text-xs">
-              No active employees found. Please register employees first.
+              {t('attendance.noStaffFound')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold">
-                    <th className="py-2 px-3">Staff Member</th>
-                    <th className="py-2 px-3">Dept / Role</th>
-                    <th className="py-2 px-3 text-center">Attendance Status</th>
-                    <th className="py-2 px-3 text-center">OT (Hrs)</th>
-                    <th className="py-2 px-3 text-center">Penalty (₹)</th>
-                    <th className="py-2 px-3">Notes</th>
+                    <th className="py-2 px-3">{t('attendance.table.staffMember')}</th>
+                    <th className="py-2 px-3">{t('attendance.table.deptRole')}</th>
+                    <th className="py-2 px-3 text-center">{t('attendance.table.status')}</th>
+                    <th className="py-2 px-3 text-center">{t('attendance.table.otHours')}</th>
+                    <th className="py-2 px-3 text-center">{t('attendance.table.penalty')}</th>
+                    <th className="py-2 px-3">{t('attendance.table.notes')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -251,13 +254,13 @@ export default function AttendancePage() {
                         <div className="flex items-center justify-center gap-1">
                           {(
                             [
-                              { st: 'Present', label: 'P', mult: 1.0, color: 'bg-emerald-600 text-white' },
-                              { st: 'Absent', label: 'A', mult: 0, color: 'bg-rose-600 text-white' },
-                              { st: 'Weekly Off', label: 'WO', mult: 0, color: 'bg-stone-700 text-white' },
-                              { st: 'Half Day', label: 'HD', mult: 0.5, color: 'bg-amber-600 text-white' },
-                              { st: 'Double Shift', label: '2P', mult: 2.0, color: 'bg-indigo-600 text-white' },
+                              { st: 'Present', label: 'P', key: 'present', mult: 1.0, color: 'bg-emerald-600 text-white' },
+                              { st: 'Absent', label: 'A', key: 'absent', mult: 0, color: 'bg-rose-600 text-white' },
+                              { st: 'Weekly Off', label: 'WO', key: 'weeklyOff', mult: 0, color: 'bg-stone-700 text-white' },
+                              { st: 'Half Day', label: 'HD', key: 'halfDay', mult: 0.5, color: 'bg-amber-600 text-white' },
+                              { st: 'Double Shift', label: '2P', key: 'doubleShift', mult: 2.0, color: 'bg-indigo-600 text-white' },
                             ] as const
-                          ).map(({ st, label, mult, color }) => (
+                          ).map(({ st, label, key, mult, color }) => (
                             <button
                               key={st}
                               type="button"
@@ -272,7 +275,7 @@ export default function AttendancePage() {
                                   ? color
                                   : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                               }`}
-                              title={`${st} (${mult} shift unit)`}
+                              title={`${t(`attendance.statusOptions.${key}`)} (${mult})`}
                             >
                               {label}
                             </button>
@@ -316,7 +319,7 @@ export default function AttendancePage() {
                             next[idx].notes = e.target.value;
                             setRows(next);
                           }}
-                          placeholder="Remarks..."
+                          placeholder={t('attendance.table.remarksPlaceholder')}
                           className="w-full rounded border border-stone-300 p-1 text-xs focus:outline-none focus:border-amber-500"
                         />
                       </td>

@@ -1,0 +1,57 @@
+{
+  "sections": {
+    "commandCenter": "Command Center",
+    "operations": "Operations",
+    "finance": "Finance",
+    "inventory": "Inventory & Store",
+    "people": "People & Attendance",
+    "uniforms": "Uniforms",
+    "reports": "Intelligence & Reports",
+    "system": "System"
+  },
+  "items": {
+    "dashboard": "Dashboard",
+    "dailyOperations": "Daily Operations",
+    "gateCounter": "Gate Counter",
+    "dailyClosing": "Daily Closing",
+    "dailySales": "Daily Sales",
+    "purchases": "Purchases & Bills",
+    "vendors": "Vendors",
+    "expenses": "Expenses",
+    "utilities": "Utilities & Fuel",
+    "profitability": "Daily P&L",
+    "inventory": "Stock & Items",
+    "storeIssues": "Store Issues & Transfers",
+    "physicalAssets": "Physical Assets",
+    "physicalCount": "Physical Count",
+    "staffDirectory": "Staff Directory",
+    "attendance": "Attendance",
+    "staffFinancials": "Staff Financials",
+    "tips": "Tips Tracker",
+    "uniforms": "Uniforms",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "header": {
+    "dateLabel": "Date:",
+    "closedBadge": "CLOSED",
+    "gateCounterButton": "Gate Counter",
+    "roleLabel": "Role:",
+    "activeRole": "Active Role",
+    "previewMode": "(preview mode)",
+    "preview": "(preview)",
+    "signOut": "Sign Out",
+    "openSidebar": "Open navigation sidebar"
+  },
+  "roles": {
+    "Admin": "Admin",
+    "Owner": "Owner",
+    "General Manager": "General Manager",
+    "Accountant": "Accountant",
+    "Cashier": "Cashier",
+    "Storekeeper": "Storekeeper",
+    "Department Head": "Department Head",
+    "Gate Staff": "Gate Staff",
+    "Viewer": "Viewer"
+  }
+}

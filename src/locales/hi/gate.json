@@ -1,0 +1,47 @@
+{
+  "title": "गेट काउंटर",
+  "enrolled": "नामांकित",
+  "enrollGuardDevice": "गार्ड डिवाइस दर्ज करें",
+  "syncStatus": {
+    "syncing": "सिंक हो रहा है ({count})",
+    "offline": "ऑफ़लाइन ({count})",
+    "failed": "विफल ({count})",
+    "synced": "सिंक हुआ"
+  },
+  "refreshTitle": "रिकॉर्ड ताज़ा व सिंक करें",
+  "kpi": {
+    "todaysVisitors": "आज के आगंतुक",
+    "todaysVehicles": "आज के वाहन"
+  },
+  "visitors": {
+    "title": "आगंतुक",
+    "lastAction": "पिछला: {action}",
+    "undoLastTap": "पिछला टैप पूर्ववत करें",
+    "person": "व्यक्ति",
+    "group": "समूह"
+  },
+  "vehicles": {
+    "title": "वाहन",
+    "car": "कार",
+    "bike": "बाइक",
+    "others": "अन्य"
+  },
+  "regions": {
+    "DL": "DL",
+    "UP16": "UP16",
+    "UP22": "UP22",
+    "UP23": "UP23",
+    "HR": "HR",
+    "UK": "UK",
+    "Others": "अन्य"
+  },
+  "messages": {
+    "addedVisitors": "+{count} आगंतुक दर्ज किए गए",
+    "addedVehicle": "वाहन दर्ज ({location})",
+    "undoneVisitor": "पिछला आगंतुक रिकॉर्ड हटाया गया",
+    "undoneVehicle": "पिछला वाहन रिकॉर्ड ({location}) हटाया गया",
+    "noEventsToUndo": "आज पूर्ववत करने के लिए कोई रिकॉर्ड नहीं है",
+    "syncComplete": "डेटा सफलतापूर्वक सिंक हुआ",
+    "syncFailed": "सिंक विफल: {error}"
+  }
+}

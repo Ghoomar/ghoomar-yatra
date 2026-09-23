@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate, formatINR } from '@/lib/utils';
 import { useAppRole } from '@/components/layout/AppShell';
-import { Lock, Unlock, CheckCircle, AlertCircle, RefreshCw, ShieldAlert, FileText, CheckCheck, Clock } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { Lock, Unlock, CheckCircle, AlertCircle, RefreshCw, ShieldAlert, FileText, Clock } from 'lucide-react';
 
 interface ChecklistItem {
   key: string;
@@ -21,6 +22,7 @@ interface ChecklistItem {
 export default function DailyClosingPage() {
   const supabase = createClient();
   const { role } = useAppRole();
+  const { t, locale } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [dayStatus, setDayStatus] = useState<'open' | 'closed' | 'reopened'>('open');
@@ -31,7 +33,7 @@ export default function DailyClosingPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Check business_days record
@@ -82,67 +84,88 @@ export default function DailyClosingPage() {
       const items: ChecklistItem[] = [
         {
           key: 'sales',
-          label: 'Petpooja Sales',
+          label: t('operations.closing.checklist.salesLabel'),
           isComplete: isSalesVerified,
           statusText: isSalesVerified && sales
-            ? `Verified: ${formatINR(Number(sales.net_sales || 0))} (${sales.bill_count || 0} bills)`
-            : 'Not Reported / Not Uploaded',
+            ? t('operations.closing.checklist.salesVerified', {
+                amount: formatINR(Number(sales.net_sales || 0)),
+                bills: sales.bill_count || 0,
+              })
+            : t('operations.closing.checklist.salesNotReported'),
           isRequired: true,
         },
         {
           key: 'attendance',
-          label: 'Attendance',
+          label: t('operations.closing.checklist.attendanceLabel'),
           isComplete: Boolean(attendance && attendance.length > 0),
-          statusText: attendance && attendance.length > 0 ? 'Muster roll submitted' : 'Not submitted',
+          statusText: attendance && attendance.length > 0
+            ? t('operations.closing.checklist.attendanceSubmitted')
+            : t('operations.closing.checklist.attendanceNotSubmitted'),
           isRequired: true,
         },
         {
           key: 'visitors',
-          label: 'Footfall',
+          label: t('operations.closing.checklist.visitorsLabel'),
           isComplete: Boolean(visitors && visitors.length > 0),
-          statusText: visitors && visitors.length > 0 ? `${visitorTotal} Visitors logged` : 'No events logged',
+          statusText: visitors && visitors.length > 0
+            ? t('operations.closing.checklist.visitorsLogged', { count: visitorTotal })
+            : t('operations.closing.checklist.visitorsNone'),
           isRequired: true,
         },
         {
           key: 'vehicles',
-          label: 'Vehicle Count',
+          label: t('operations.closing.checklist.vehiclesLabel'),
           isComplete: Boolean(cars && cars.length > 0),
-          statusText: cars && cars.length > 0 ? `${vehicleTotal} Vehicles logged` : 'No vehicles logged',
+          statusText: cars && cars.length > 0
+            ? t('operations.closing.checklist.vehiclesLogged', { count: vehicleTotal })
+            : t('operations.closing.checklist.vehiclesNone'),
           isRequired: true,
         },
         {
           key: 'expenses',
-          label: 'Expenses & Petty Cash',
+          label: t('operations.closing.checklist.expensesLabel'),
           isComplete: true, // Expenses may legitimately be zero
-          statusText: `${expenses?.length || 0} vouchers (${formatINR(expenseTotal)})`,
+          statusText: t('operations.closing.checklist.expensesCount', {
+            count: expenses?.length || 0,
+            amount: formatINR(expenseTotal),
+          }),
           isRequired: false,
         },
         {
           key: 'purchases',
-          label: 'Purchases & Bills',
+          label: t('operations.closing.checklist.purchasesLabel'),
           isComplete: true,
-          statusText: `${purchases?.length || 0} bills recorded (${formatINR(purchaseTotal)})`,
+          statusText: t('operations.closing.checklist.purchasesCount', {
+            count: purchases?.length || 0,
+            amount: formatINR(purchaseTotal),
+          }),
           isRequired: false,
         },
         {
           key: 'inventory_issues',
-          label: 'Store Issues',
+          label: t('operations.closing.checklist.storeIssuesLabel'),
           isComplete: Boolean(issues && issues.length > 0),
-          statusText: issues && issues.length > 0 ? 'Store issues logged' : 'No store issues logged',
+          statusText: issues && issues.length > 0
+            ? t('operations.closing.checklist.storeIssuesLogged')
+            : t('operations.closing.checklist.storeIssuesNone'),
           isRequired: false,
         },
         {
           key: 'activities',
-          label: 'Activities (Petpooja)',
+          label: t('operations.closing.checklist.activitiesLabel'),
           isComplete: Boolean(activities && activities.length > 0),
-          statusText: activities && activities.length > 0 ? `${activities.length} activity items recorded` : 'None recorded today',
+          statusText: activities && activities.length > 0
+            ? t('operations.closing.checklist.activitiesLogged', { count: activities.length })
+            : t('operations.closing.checklist.activitiesNone'),
           isRequired: false,
         },
         {
           key: 'utilities',
-          label: 'Utilities & Fuel',
+          label: t('operations.closing.checklist.utilitiesLabel'),
           isComplete: Boolean(utilities && utilities.length > 0),
-          statusText: utilities && utilities.length > 0 ? 'Meter readings logged' : 'No readings entered',
+          statusText: utilities && utilities.length > 0
+            ? t('operations.closing.checklist.utilitiesLogged')
+            : t('operations.closing.checklist.utilitiesNone'),
           isRequired: false,
         },
       ];
@@ -150,15 +173,15 @@ export default function DailyClosingPage() {
       setChecklist(items);
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: 'Failed to verify closing status.' });
+      setMessage({ type: 'error', text: t('operations.closing.loadError') });
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessDate, supabase, t]);
 
   useEffect(() => {
     loadData();
-  }, [businessDate]);
+  }, [loadData]);
 
   const completedCount = checklist.filter((i) => i.isComplete).length;
   const completionPercent = checklist.length > 0 ? Math.round((completedCount / checklist.length) * 100) : 0;
@@ -166,7 +189,7 @@ export default function DailyClosingPage() {
 
   const handleCloseDay = async () => {
     if (requiredIncomplete.length > 0) {
-      alert(`Cannot close day: Missing required entries:\n- ${requiredIncomplete.map((i) => i.label).join('\n- ')}`);
+      alert(`${t('operations.closing.statusCard.cannotCloseAlert')}\n- ${requiredIncomplete.map((i) => i.label).join('\n- ')}`);
       return;
     }
 
@@ -187,9 +210,9 @@ export default function DailyClosingPage() {
 
       setDayStatus('closed');
       setClosedAt(new Date().toISOString());
-      setMessage({ type: 'success', text: `Business Day ${businessDate} is officially CLOSED and locked.` });
+      setMessage({ type: 'success', text: t('operations.closing.closedSuccess', { date: businessDate }) });
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Error closing day.' });
+      setMessage({ type: 'error', text: err.message || t('operations.closing.closeError') });
     } finally {
       setSaving(false);
     }
@@ -216,10 +239,10 @@ export default function DailyClosingPage() {
       setDayStatus('reopened');
       setShowReopenModal(false);
       setReopenReason('');
-      setMessage({ type: 'success', text: `Business Day ${businessDate} reopened for administrative correction.` });
+      setMessage({ type: 'success', text: t('operations.closing.reopenedSuccess', { date: businessDate }) });
       loadData();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Error reopening day.' });
+      setMessage({ type: 'error', text: err.message || t('operations.closing.reopenError') });
     } finally {
       setSaving(false);
     }
@@ -231,13 +254,13 @@ export default function DailyClosingPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Lock className="h-6 w-6 text-amber-600" />
-            Daily Closing
+            {t('operations.closing.title')}
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('operations.closing.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -245,8 +268,8 @@ export default function DailyClosingPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
@@ -267,35 +290,43 @@ export default function DailyClosingPage() {
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Business Day Status</div>
+              <div className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+                {t('operations.closing.statusCard.title')}
+              </div>
               <div className="text-2xl font-black text-stone-900 mt-1 flex items-center gap-2">
                 {dayStatus === 'closed' ? (
                   <>
                     <Lock className="h-6 w-6 text-stone-700" />
-                    <span className="text-stone-800">CLOSED & LOCKED</span>
+                    <span className="text-stone-800">{t('operations.closing.statusCard.statusClosed')}</span>
                   </>
                 ) : dayStatus === 'reopened' ? (
                   <>
                     <Unlock className="h-6 w-6 text-amber-600" />
-                    <span className="text-amber-700">REOPENED (Admin Edit Active)</span>
+                    <span className="text-amber-700">{t('operations.closing.statusCard.statusReopened')}</span>
                   </>
                 ) : (
                   <>
                     <Unlock className="h-6 w-6 text-emerald-600" />
-                    <span className="text-emerald-700">OPEN FOR DATA ENTRY</span>
+                    <span className="text-emerald-700">{t('operations.closing.statusCard.statusOpen')}</span>
                   </>
                 )}
               </div>
               <div className="text-xs text-stone-500 mt-1 flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 text-stone-400" />
-                {closedAt ? `Closed at ${new Date(closedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Operational data entry in progress'}
+                {closedAt
+                  ? t('operations.closing.statusCard.closedAt', {
+                      time: new Date(closedAt).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', { hour: '2-digit', minute: '2-digit' }),
+                    })
+                  : t('operations.closing.statusCard.inProgress')}
               </div>
             </div>
 
             <div className="text-right">
-              <div className="text-xs font-semibold text-stone-500">Closing Completeness</div>
+              <div className="text-xs font-semibold text-stone-500">{t('operations.closing.statusCard.completeness')}</div>
               <div className="text-3xl font-black text-stone-900 mt-0.5">{completionPercent}%</div>
-              <div className="text-[11px] text-stone-400">{completedCount} / {checklist.length} modules verified</div>
+              <div className="text-[11px] text-stone-400">
+                {t('operations.closing.statusCard.modulesVerified', { completed: completedCount, total: checklist.length })}
+              </div>
             </div>
           </div>
 
@@ -311,10 +342,10 @@ export default function DailyClosingPage() {
           <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between">
             {dayStatus === 'closed' ? (
               <div className="flex items-center gap-2">
-                <Badge variant="success">Financial records locked</Badge>
+                <Badge variant="success">{t('operations.closing.statusCard.recordsLocked')}</Badge>
                 {role === 'Admin' && (
                   <Button variant="outline" size="sm" onClick={() => setShowReopenModal(true)} className="gap-1 text-xs">
-                    <Unlock className="h-3.5 w-3.5 text-amber-600" /> Reopen Business Day (Admin)
+                    <Unlock className="h-3.5 w-3.5 text-amber-600" /> {t('operations.closing.statusCard.reopenAction')}
                   </Button>
                 )}
               </div>
@@ -326,13 +357,13 @@ export default function DailyClosingPage() {
                 disabled={saving || requiredIncomplete.length > 0}
                 className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
               >
-                <Lock className="h-4 w-4" /> {saving ? 'Closing...' : 'Close Business Day & Lock Records'}
+                <Lock className="h-4 w-4" /> {saving ? t('operations.closing.statusCard.closing') : t('operations.closing.statusCard.closeAction')}
               </Button>
             )}
 
             {requiredIncomplete.length > 0 && (
               <span className="text-xs font-medium text-rose-600 flex items-center gap-1">
-                <AlertCircle className="h-3.5 w-3.5" /> {requiredIncomplete.length} mandatory checks incomplete
+                <AlertCircle className="h-3.5 w-3.5" /> {t('operations.closing.statusCard.mandatoryIncomplete', { count: requiredIncomplete.length })}
               </span>
             )}
           </div>
@@ -342,7 +373,7 @@ export default function DailyClosingPage() {
       {/* Detailed Checklist Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Closing Checklist</CardTitle>
+          <CardTitle>{t('operations.closing.checklist.title')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="divide-y divide-stone-100">
@@ -368,7 +399,7 @@ export default function DailyClosingPage() {
                       {item.label}
                       {item.isRequired && (
                         <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded font-semibold">
-                          Required
+                          {t('operations.closing.checklist.required')}
                         </span>
                       )}
                     </div>
@@ -378,7 +409,11 @@ export default function DailyClosingPage() {
 
                 <div>
                   <Badge variant={item.isComplete ? 'success' : item.isRequired ? 'danger' : 'outline'}>
-                    {item.isComplete ? 'Verified' : item.isRequired ? 'Missing' : 'Optional'}
+                    {item.isComplete
+                      ? t('operations.closing.checklist.verified')
+                      : item.isRequired
+                      ? t('operations.closing.checklist.missing')
+                      : t('operations.closing.checklist.optional')}
                   </Badge>
                 </div>
               </div>
@@ -393,22 +428,24 @@ export default function DailyClosingPage() {
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
             <div className="flex items-center justify-between border-b pb-3">
               <h2 className="text-base font-bold text-stone-900 flex items-center gap-1.5">
-                <ShieldAlert className="h-4 w-4 text-amber-600" /> Reopen Closed Business Day
+                <ShieldAlert className="h-4 w-4 text-amber-600" /> {t('operations.closing.reopenModal.title')}
               </h2>
               <button onClick={() => setShowReopenModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
             </div>
 
             <form onSubmit={handleReopenDay} className="space-y-3">
               <p className="text-stone-600">
-                Reopening a closed day is an auditable action. Normal users cannot alter posted data. Please provide the operational justification for reopening:
+                {t('operations.closing.reopenModal.explanation')}
               </p>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Reason for Reopening</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('operations.closing.reopenModal.reasonLabel')}
+                </label>
                 <textarea
                   value={reopenReason}
                   onChange={(e) => setReopenReason(e.target.value)}
-                  placeholder="e.g. Petpooja sales missing late midnight settlement voucher"
+                  placeholder={t('operations.closing.reopenModal.reasonPlaceholder')}
                   required
                   rows={3}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
@@ -416,9 +453,11 @@ export default function DailyClosingPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" onClick={() => setShowReopenModal(false)}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => setShowReopenModal(false)}>
+                  {t('operations.closing.reopenModal.cancel')}
+                </Button>
                 <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                  {saving ? 'Reopening...' : 'Confirm Reopen'}
+                  {saving ? t('operations.closing.statusCard.reopening') : t('operations.closing.reopenModal.confirm')}
                 </Button>
               </div>
             </form>
@@ -428,4 +467,3 @@ export default function DailyClosingPage() {
     </div>
   );
 }
-

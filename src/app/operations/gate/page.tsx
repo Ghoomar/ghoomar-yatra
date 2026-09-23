@@ -35,6 +35,7 @@ import {
   Smartphone,
   Bike,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 interface VehicleLocation {
   id: string;
@@ -59,6 +60,7 @@ const PREFIX_ORDER = ['DL', 'UP16', 'UP22', 'UP23', 'HR', 'UK', 'Others'];
 
 export default function GateCounterPage() {
   const supabase = createClient();
+  const { t, formatDate } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [totalVisitors, setTotalVisitors] = useState<number>(0);
   const [totalCars, setTotalCars] = useState<number>(0);
@@ -207,7 +209,7 @@ export default function GateCounterPage() {
   // 3. Instant Touch Handlers (< 5ms local IndexedDB commit)
   const handleAddVisitors = async (increment: number) => {
     setTotalVisitors((prev) => prev + increment);
-    setLastAction(`+${increment} Visitors`);
+    setLastAction(t('gate.messages.addedVisitors', { count: increment }));
     setLastUpdatedAt(new Date().toISOString());
 
     try {
@@ -228,7 +230,10 @@ export default function GateCounterPage() {
     setLocations((prev) =>
       prev.map((l) => (l.id === locationId ? { ...l, count: l.count + 1 } : l))
     );
-    setLastAction(locationName === 'Bike' ? '+1 Bike' : `+1 ${locationName}`);
+    const locDisplay = locationName === 'Bike' 
+      ? t('gate.vehicles.bike') 
+      : (locationName.toLowerCase() === 'others' ? t('gate.regions.Others') : locationName);
+    setLastAction(t('gate.messages.addedVehicle', { location: locDisplay }));
     setLastUpdatedAt(new Date().toISOString());
 
     try {
@@ -251,7 +256,7 @@ export default function GateCounterPage() {
       if (undone) {
         if (undone.event_type === 'visitor') {
           setTotalVisitors((prev) => Math.max(0, prev - undone.increment));
-          setLastAction(`Undone +${undone.increment} Visitors`);
+          setLastAction(t('gate.messages.undoneVisitor'));
         } else {
           setTotalCars((prev) => Math.max(0, prev - 1));
           setLocations((prev) =>
@@ -260,10 +265,13 @@ export default function GateCounterPage() {
           const isBike =
             undone.location_id === BIKE_LOCATION_ID ||
             undone.location_name?.toLowerCase() === 'bike';
-          setLastAction(isBike ? 'Undone +1 Bike' : `Undone +1 ${undone.location_name}`);
+          const locDisplay = isBike 
+            ? t('gate.vehicles.bike') 
+            : (undone.location_name?.toLowerCase() === 'others' ? t('gate.regions.Others') : (undone.location_name || ''));
+          setLastAction(t('gate.messages.undoneVehicle', { location: locDisplay }));
         }
       } else {
-        setLastAction('No recent entries to undo');
+        setLastAction(t('gate.messages.noEventsToUndo'));
       }
     } catch (err) {
       console.error('Error undoing event:', err);
@@ -309,19 +317,19 @@ export default function GateCounterPage() {
       <div className="bg-stone-900 text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
           <h1 className="text-base sm:text-lg font-black tracking-tight">
-            Gate Counter
+            {t('gate.title')}
           </h1>
           {enrollment ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-stone-800 text-stone-300 px-2 py-0.5 rounded-md border border-stone-700">
               <Smartphone className="h-3 w-3 text-amber-400" />
-              Enrolled
+              {t('gate.enrolled')}
             </span>
           ) : (
             <Link
               href="/login"
               className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 px-2 py-0.5 rounded-md border border-amber-500/40"
             >
-              <ShieldCheck className="h-3 w-3" /> Enroll Guard Device
+              <ShieldCheck className="h-3 w-3" /> {t('gate.enrollGuardDevice')}
             </Link>
           )}
         </div>
@@ -332,12 +340,12 @@ export default function GateCounterPage() {
           {syncState.status === 'syncing' ? (
             <div className="flex items-center gap-1 bg-sky-950/80 border border-sky-600/50 text-sky-300 px-2 py-0.5 rounded-md font-medium">
               <RotateCw className="h-3 w-3 animate-spin text-sky-400" />
-              <span>Syncing ({syncState.pendingCount})</span>
+              <span>{t('gate.syncStatus.syncing', { count: syncState.pendingCount })}</span>
             </div>
           ) : syncState.status === 'offline_pending' ? (
             <div className="flex items-center gap-1 bg-amber-950/80 border border-amber-600/50 text-amber-300 px-2 py-0.5 rounded-md font-medium">
               <WifiOff className="h-3 w-3 text-amber-400" />
-              <span>Offline ({syncState.pendingCount})</span>
+              <span>{t('gate.syncStatus.offline', { count: syncState.pendingCount })}</span>
             </div>
           ) : syncState.status === 'failed' ? (
             <button
@@ -345,24 +353,24 @@ export default function GateCounterPage() {
               className="flex items-center gap-1 bg-rose-950/80 border border-rose-600/50 text-rose-300 px-2 py-0.5 rounded-md font-medium hover:bg-rose-900 cursor-pointer"
             >
               <AlertTriangle className="h-3 w-3 text-rose-400" />
-              <span>Failed ({syncState.pendingCount})</span>
+              <span>{t('gate.syncStatus.failed', { count: syncState.pendingCount })}</span>
             </button>
           ) : (
             <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-600/50 text-emerald-300 px-2 py-0.5 rounded-md font-medium">
               <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-              <span>Synced</span>
+              <span>{t('gate.syncStatus.synced')}</span>
             </div>
           )}
 
           {/* Date Badge */}
           <div className="bg-stone-800 border border-stone-700 rounded-md px-2 py-0.5 text-stone-300">
-            {businessDate}
+            {formatDate(businessDate, 'short')}
           </div>
 
           {/* Refresh Action */}
           <button
             onClick={handleManualSync}
-            title="Refresh and sync transactions"
+            title={t('gate.refreshTitle')}
             className="p-1 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-300 active:scale-95 transition-transform cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -374,7 +382,7 @@ export default function GateCounterPage() {
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
         <div className="bg-white border border-stone-200 rounded-xl p-2.5 sm:p-3.5 text-center shadow-xs">
           <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-            <Users className="h-3.5 w-3.5 text-amber-600" /> Today's Visitors
+            <Users className="h-3.5 w-3.5 text-amber-600" /> {t('gate.kpi.todaysVisitors')}
           </div>
           <div
             data-testid="visitors-count"
@@ -386,7 +394,7 @@ export default function GateCounterPage() {
 
         <div className="bg-white border border-stone-200 rounded-xl p-2.5 sm:p-3.5 text-center shadow-xs">
           <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-            <Car className="h-3.5 w-3.5 text-sky-600" /> Today's Vehicles
+            <Car className="h-3.5 w-3.5 text-sky-600" /> {t('gate.kpi.todaysVehicles')}
           </div>
           <div
             data-testid="vehicles-count"
@@ -401,14 +409,14 @@ export default function GateCounterPage() {
       <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between">
           <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-amber-600" /> Visitors
+            <Users className="h-4 w-4 text-amber-600" /> {t('gate.visitors.title')}
           </h2>
 
           {/* Integrated Compact Undo Action */}
           <div className="flex items-center gap-2">
             {lastAction && (
               <span className="text-[11px] text-stone-500 truncate max-w-[120px] sm:max-w-[200px]">
-                Last: <strong className="text-stone-800">{lastAction}</strong>
+                {t('gate.visitors.lastAction', { action: lastAction })}
               </span>
             )}
             <button
@@ -418,7 +426,7 @@ export default function GateCounterPage() {
               className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 border border-stone-300 active:scale-95 transition-transform cursor-pointer shadow-2xs"
             >
               <Undo2 className="h-3.5 w-3.5 text-amber-600" />
-              <span>Undo Last Tap</span>
+              <span>{t('gate.visitors.undoLastTap')}</span>
             </button>
           </div>
         </div>
@@ -433,7 +441,7 @@ export default function GateCounterPage() {
             >
               <span>+{inc}</span>
               <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-950/75 mt-0.5">
-                {inc === 1 ? 'Person' : 'Group'}
+                {inc === 1 ? t('gate.visitors.person') : t('gate.visitors.group')}
               </span>
             </button>
           ))}
@@ -444,7 +452,7 @@ export default function GateCounterPage() {
       <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between">
           <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
-            <Car className="h-4 w-4 text-sky-600" /> Vehicles
+            <Car className="h-4 w-4 text-sky-600" /> {t('gate.vehicles.title')}
           </h2>
         </div>
 
@@ -452,6 +460,7 @@ export default function GateCounterPage() {
         <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
           {carLocations.map((loc) => {
             const isOthers = loc.name.toLowerCase() === 'others';
+            const displayName = isOthers ? t('gate.regions.Others') : loc.name;
             return (
               <button
                 key={loc.id}
@@ -466,7 +475,7 @@ export default function GateCounterPage() {
                     isOthers ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
                   }`}
                 >
-                  {loc.name}
+                  {displayName}
                 </div>
                 <div className="text-[11px] font-bold text-amber-950/75 mt-1">+1</div>
               </button>
@@ -482,7 +491,7 @@ export default function GateCounterPage() {
           className="w-full h-12 sm:h-13 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-base sm:text-lg shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer touch-manipulation"
         >
           <Bike className="h-5 w-5" />
-          <span>+1 Bike</span>
+          <span>+1 {t('gate.vehicles.bike')}</span>
         </button>
       </div>
     </div>

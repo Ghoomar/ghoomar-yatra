@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
 import { useAppRole } from '@/components/layout/AppShell';
+import { useI18n } from '@/lib/i18n/context';
 
 interface SidebarProps {
   currentRole: RoleName;
@@ -40,67 +41,68 @@ interface SidebarProps {
 export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { hasPermission, signOut, actualRole } = useAppRole();
+  const { t } = useI18n();
 
   const navSections = [
     {
-      title: 'Command Center',
+      titleKey: 'navigation.sections.commandCenter',
       items: [
-        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
+        { href: '/dashboard', labelKey: 'navigation.items.dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
       ]
     },
     {
-      title: 'Operations',
+      titleKey: 'navigation.sections.operations',
       items: [
-        { href: '/operations/daily', label: 'Daily Operations', icon: ClipboardList, permission: 'operations.closing' },
-        { href: '/operations/gate', label: 'Gate Counter', icon: Car, permission: 'operations.gate' },
-        { href: '/operations/closing', label: 'Daily Closing', icon: Lock, permission: 'operations.closing' },
+        { href: '/operations/daily', labelKey: 'navigation.items.dailyOperations', icon: ClipboardList, permission: 'operations.closing' },
+        { href: '/operations/gate', labelKey: 'navigation.items.gateCounter', icon: Car, permission: 'operations.gate' },
+        { href: '/operations/closing', labelKey: 'navigation.items.dailyClosing', icon: Lock, permission: 'operations.closing' },
       ]
     },
     {
-      title: 'Finance',
+      titleKey: 'navigation.sections.finance',
       items: [
-        { href: '/finance/sales', label: 'Daily Sales', icon: Receipt, permission: 'finance.sales' },
-        { href: '/finance/purchases', label: 'Purchases & Bills', icon: ShoppingBag, permission: 'finance.purchases' },
-        { href: '/finance/vendors', label: 'Vendors', icon: Building2, permission: 'finance.vendors' },
-        { href: '/finance/expenses', label: 'Expenses', icon: IndianRupee, permission: 'finance.expenses' },
-        { href: '/finance/utilities', label: 'Utilities & Fuel', icon: Zap, permission: 'finance.utilities' },
-        { href: '/finance/profitability', label: 'Daily P&L', icon: TrendingUp, permission: 'finance.profitability' },
+        { href: '/finance/sales', labelKey: 'navigation.items.dailySales', icon: Receipt, permission: 'finance.sales' },
+        { href: '/finance/purchases', labelKey: 'navigation.items.purchases', icon: ShoppingBag, permission: 'finance.purchases' },
+        { href: '/finance/vendors', labelKey: 'navigation.items.vendors', icon: Building2, permission: 'finance.vendors' },
+        { href: '/finance/expenses', labelKey: 'navigation.items.expenses', icon: IndianRupee, permission: 'finance.expenses' },
+        { href: '/finance/utilities', labelKey: 'navigation.items.utilities', icon: Zap, permission: 'finance.utilities' },
+        { href: '/finance/profitability', labelKey: 'navigation.items.profitability', icon: TrendingUp, permission: 'finance.profitability' },
       ]
     },
     {
-      title: 'Inventory & Store',
+      titleKey: 'navigation.sections.inventory',
       items: [
-        { href: '/inventory', label: 'Stock & Items', icon: Package, permission: 'inventory.stock' },
-        { href: '/inventory/issues', label: 'Store Issues & Transfers', icon: ArrowRightLeft, permission: 'inventory.issues' },
-        { href: '/inventory/assets', label: 'Physical Assets', icon: Layers, permission: 'inventory.assets' },
-        { href: '/inventory/count', label: 'Physical Count', icon: ClipboardCheck, permission: 'inventory.count' },
+        { href: '/inventory', labelKey: 'navigation.items.inventory', icon: Package, permission: 'inventory.stock' },
+        { href: '/inventory/issues', labelKey: 'navigation.items.storeIssues', icon: ArrowRightLeft, permission: 'inventory.issues' },
+        { href: '/inventory/assets', labelKey: 'navigation.items.physicalAssets', icon: Layers, permission: 'inventory.assets' },
+        { href: '/inventory/count', labelKey: 'navigation.items.physicalCount', icon: ClipboardCheck, permission: 'inventory.count' },
       ]
     },
     {
-      title: 'People & Attendance',
+      titleKey: 'navigation.sections.people',
       items: [
-        { href: '/people/employees', label: 'Staff Directory', icon: Users, permission: 'people.employees' },
-        { href: '/people/attendance', label: 'Attendance', icon: ClipboardCheck, permission: 'people.attendance' },
-        { href: '/people/financials', label: 'Staff Financials', icon: Wallet, permission: 'people.financials' },
-        { href: '/people/tips', label: 'Tips Tracker', icon: Sparkles, permission: 'people.tips' },
+        { href: '/people/employees', labelKey: 'navigation.items.staffDirectory', icon: Users, permission: 'people.employees' },
+        { href: '/people/attendance', labelKey: 'navigation.items.attendance', icon: ClipboardCheck, permission: 'people.attendance' },
+        { href: '/people/financials', labelKey: 'navigation.items.staffFinancials', icon: Wallet, permission: 'people.financials' },
+        { href: '/people/tips', labelKey: 'navigation.items.tips', icon: Sparkles, permission: 'people.tips' },
       ]
     },
     {
-      title: 'Uniforms',
+      titleKey: 'navigation.sections.uniforms',
       items: [
-        { href: '/uniforms', label: 'Uniforms', icon: Shirt, permission: 'uniforms.ledger' },
+        { href: '/uniforms', labelKey: 'navigation.items.uniforms', icon: Shirt, permission: 'uniforms.ledger' },
       ]
     },
     {
-      title: 'Intelligence & Reports',
+      titleKey: 'navigation.sections.reports',
       items: [
-        { href: '/reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
+        { href: '/reports', labelKey: 'navigation.items.reports', icon: BarChart3, permission: 'reports.view' },
       ]
     },
     {
-      title: 'System',
+      titleKey: 'navigation.sections.system',
       items: [
-        { href: '/admin', label: 'Settings', icon: Settings, permission: 'admin.manage' },
+        { href: '/admin', labelKey: 'navigation.items.settings', icon: Settings, permission: 'admin.manage' },
       ]
     }
   ];
@@ -125,13 +127,14 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
               GY
             </div>
             <div>
-              <div className="font-bold text-white text-sm tracking-tight leading-none">Ghoomar Yatra</div>
-              <div className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase mt-1">Village &amp; Resort</div>
+              <div className="font-bold text-white text-sm tracking-tight leading-none">{t('common.app.brandName')}</div>
+              <div className="text-[10px] text-amber-400 font-semibold tracking-wider uppercase mt-1">{t('common.app.brandSubtitle')}</div>
             </div>
           </div>
           <button 
             onClick={onClose}
             className="lg:hidden p-1.5 rounded-lg text-[#A393B7] hover:text-white hover:bg-[#2C1842]"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -148,9 +151,9 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
             const allNavHrefs = navSections.flatMap((s) => s.items.map((i) => i.href));
 
             return (
-              <div key={section.title}>
+              <div key={section.titleKey}>
                 <div className="text-[10px] font-bold text-[#A393B7]/75 uppercase tracking-wider px-3 mb-1.5">
-                  {section.title}
+                  {t(section.titleKey)}
                 </div>
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => {
@@ -177,7 +180,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
                         `}
                       >
                         <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#190F24]' : 'text-[#A393B7]'}`} />
-                        <span className="truncate">{item.label}</span>
+                        <span className="truncate">{t(item.labelKey)}</span>
                       </Link>
                     );
                   })}
@@ -190,20 +193,21 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
         {/* User Identity & Logout */}
         <div className="p-3 border-t border-[#2C1842] bg-[#130A1D]">
           <div className="text-[10px] text-[#A393B7] uppercase font-semibold mb-1 px-1 flex items-center justify-between">
-            <span>Active Role</span>
+            <span>{t('navigation.header.activeRole')}</span>
             {actualRole === 'Admin' && currentRole !== 'Admin' && (
-              <span className="text-amber-400 text-[9px] lowercase font-normal">(preview mode)</span>
+              <span className="text-amber-400 text-[9px] lowercase font-normal">{t('navigation.header.previewMode')}</span>
             )}
           </div>
           <div className="font-medium text-white flex items-center justify-between text-xs bg-[#241436] px-2.5 py-1.5 rounded-md border border-[#3A1F54]">
             <span className="flex items-center gap-1.5 truncate">
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0"></span>
-              <span className="truncate">{currentRole}</span>
+              <span className="truncate">{t(`navigation.roles.${currentRole}`)}</span>
             </span>
             <button
               onClick={signOut}
-              title="Sign Out"
+              title={t('navigation.header.signOut')}
               className="p-1 rounded text-[#A393B7] hover:text-rose-400 hover:bg-[#2C1842] transition-colors shrink-0"
+              aria-label={t('navigation.header.signOut')}
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>

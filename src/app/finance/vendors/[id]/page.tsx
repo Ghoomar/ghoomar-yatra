@@ -32,6 +32,8 @@ import {
   ChevronDown,
   ChevronRight
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 interface PurchaseHeaderWithLines {
   id: string;
@@ -81,6 +83,7 @@ export default function VendorDetailPage({
 }) {
   const resolvedParams = use(params);
   const vendorId = resolvedParams.id;
+  const { t, locale } = useI18n();
   const supabase = createClient();
 
   const [vendor, setVendor] = useState<Vendor | null>(null);
@@ -121,10 +124,10 @@ export default function VendorDetailPage({
       if (vData.preferred_payment_method_id) {
         const { data: pm } = await supabase
           .from('payment_methods')
-          .select('name')
+          .select('name, name_hi')
           .eq('id', vData.preferred_payment_method_id)
           .single();
-        if (pm) setPreferredMethodName(pm.name);
+        if (pm) setPreferredMethodName(getLocalizedMasterName(pm, locale) || pm.name);
       }
 
       // 2. Fetch Purchases with Lines
@@ -145,6 +148,7 @@ export default function VendorDetailPage({
             total_amount,
             inventory_items (
               name,
+              name_hi,
               item_code
             )
           ),
@@ -163,7 +167,7 @@ export default function VendorDetailPage({
         const lines = (p.purchase_lines || []).map((l: any) => ({
           id: l.id,
           item_id: l.item_id,
-          item_name: l.inventory_items?.name || 'Unknown Item',
+          item_name: (locale === 'hi' && l.inventory_items?.name_hi) ? l.inventory_items.name_hi : (l.inventory_items?.name || 'Unknown Item'),
           item_code: l.inventory_items?.item_code || '',
           quantity: Number(l.quantity) || 0,
           rate: Number(l.rate) || 0,
@@ -194,7 +198,8 @@ export default function VendorDetailPage({
           reference_number,
           notes,
           payment_methods (
-            name
+            name,
+            name_hi
           )
         `)
         .eq('vendor_id', vendorId)
@@ -206,7 +211,7 @@ export default function VendorDetailPage({
         payment_date: p.payment_date,
         amount: Number(p.amount) || 0,
         reference_number: p.reference_number,
-        payment_method_name: p.payment_methods?.name || 'Cash / Direct',
+        payment_method_name: p.payment_methods ? (getLocalizedMasterName(p.payment_methods, locale) || p.payment_methods.name) : 'Cash / Direct',
         notes: p.notes,
       }));
       setPayments(parsedPayments);
@@ -222,9 +227,10 @@ export default function VendorDetailPage({
           is_preferred,
           inventory_items (
             name,
+            name_hi,
             item_code,
-            inventory_categories (name),
-            units!inventory_items_unit_id_fkey (symbol)
+            inventory_categories (name, name_hi),
+            units!inventory_items_unit_id_fkey (symbol, symbol_hi, name, name_hi)
           )
         `)
         .eq('vendor_id', vendorId);
@@ -237,9 +243,9 @@ export default function VendorDetailPage({
         id: vi.id,
         inventory_item_id: vi.inventory_item_id,
         item_code: vi.inventory_items?.item_code || 'SKU',
-        item_name: vi.inventory_items?.name || 'Item',
-        category_name: vi.inventory_items?.inventory_categories?.name,
-        unit_symbol: vi.inventory_items?.units?.symbol,
+        item_name: (locale === 'hi' && vi.inventory_items?.name_hi) ? vi.inventory_items.name_hi : (vi.inventory_items?.name || 'Item'),
+        category_name: getLocalizedMasterName(vi.inventory_items?.inventory_categories, locale) || vi.inventory_items?.inventory_categories?.name,
+        unit_symbol: getLocalizedMasterSymbol(vi.inventory_items?.units, locale) || vi.inventory_items?.units?.symbol,
         last_purchase_rate: Number(vi.last_purchase_rate) || 0,
         last_purchase_date: vi.last_purchase_date,
         is_preferred: vi.is_preferred,
@@ -249,13 +255,13 @@ export default function VendorDetailPage({
       // 5. Fetch all inventory items for linking modal
       const { data: itemCatalog } = await supabase
         .from('inventory_items')
-        .select('id, name, item_code, current_weighted_average_cost')
+        .select('id, name, name_hi, item_code, current_weighted_average_cost')
         .eq('is_active', true)
         .order('name');
       setAllItems(itemCatalog || []);
     } catch (err: any) {
       console.error('Error loading vendor:', err);
-      setMessage({ type: 'error', text: 'Failed to load vendor details: ' + err.message });
+      setMessage({ type: 'error', text: t('purchases.bills.errLoad') + ': ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -446,10 +452,10 @@ export default function VendorDetailPage({
   if (!vendor) {
     return (
       <div className="p-8 text-center space-y-4">
-        <div className="text-stone-600 font-semibold text-base">Vendor record not found.</div>
+        <div className="text-stone-600 font-semibold text-base">{t('purchases.vendors.noVendors')}</div>
         <Link href="/finance/vendors">
           <Button variant="secondary" size="sm" className="gap-1.5">
-            <ArrowLeft className="h-4 w-4" /> Back to Vendor Master
+            <ArrowLeft className="h-4 w-4" /> {t('purchases.vendors.detail.backToVendors')}
           </Button>
         </Link>
       </div>
@@ -465,7 +471,7 @@ export default function VendorDetailPage({
             href="/finance/vendors"
             className="text-xs text-stone-500 hover:text-amber-600 flex items-center gap-1 font-medium transition-colors"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Vendors
+            <ArrowLeft className="h-3.5 w-3.5" /> {t('purchases.vendors.title')}
           </Link>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2 break-words">
@@ -476,7 +482,7 @@ export default function VendorDetailPage({
               {vendor.vendor_code || 'VEND'}
             </span>
             <Badge variant={vendor.is_active ? 'success' : 'default'} className="shrink-0">
-              {vendor.is_active ? 'Active' : 'Inactive'}
+              {vendor.is_active ? t('purchases.vendors.status.active') : t('purchases.vendors.status.inactive')}
             </Badge>
           </div>
         </div>
@@ -493,7 +499,7 @@ export default function VendorDetailPage({
             }`}
           >
             <Power className="h-4 w-4" />
-            {vendor.is_active ? 'Deactivate' : 'Activate'}
+            {vendor.is_active ? t('purchases.vendors.actions.deactivateVendor') : t('purchases.vendors.actions.activateVendor')}
           </Button>
 
           <Button
@@ -503,7 +509,7 @@ export default function VendorDetailPage({
             className="gap-1.5"
           >
             <Edit2 className="h-4 w-4" />
-            Edit Vendor
+            {t('purchases.vendors.detail.editVendor')}
           </Button>
 
           <Button variant="outline" size="sm" onClick={loadVendorData} title="Refresh">
@@ -533,35 +539,35 @@ export default function VendorDetailPage({
       {/* Summary Metrics Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         <Card className="min-w-0 overflow-hidden">
-          <CardDescription className="truncate">Purchased</CardDescription>
+          <CardDescription className="truncate">{t('purchases.vendors.detail.kpi.totalPurchased')}</CardDescription>
           <div className="text-lg sm:text-xl font-bold text-stone-900 mt-1 truncate">
             {formatINR(summaryMetrics.purchasedThisMonth)}
           </div>
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
-          <CardDescription className="truncate">Paid</CardDescription>
+          <CardDescription className="truncate">{t('purchases.vendors.detail.kpi.totalPaid')}</CardDescription>
           <div className="text-lg sm:text-xl font-bold text-emerald-700 mt-1 truncate">
             {formatINR(summaryMetrics.paidThisMonth)}
           </div>
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
-          <CardDescription className="truncate">Outstanding</CardDescription>
+          <CardDescription className="truncate">{t('purchases.vendors.detail.kpi.balanceDue')}</CardDescription>
           <div className="text-lg sm:text-xl font-bold text-rose-600 mt-1 truncate">
             {formatINR(summaryMetrics.outstandingBalance)}
           </div>
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
-          <CardDescription className="truncate">Payment Terms</CardDescription>
+          <CardDescription className="truncate">{t('purchases.vendors.modal.paymentTerms')}</CardDescription>
           <div className="text-sm sm:text-base font-bold text-stone-800 mt-1 truncate">
             {vendor.payment_terms || 'Net 7 Days'}
           </div>
         </Card>
 
         <Card className="min-w-0 overflow-hidden col-span-2 sm:col-span-1">
-          <CardDescription className="truncate">Status</CardDescription>
+          <CardDescription className="truncate">{t('purchases.bills.table.status')}</CardDescription>
           <div className="mt-1">
             <span
               className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -571,7 +577,7 @@ export default function VendorDetailPage({
               }`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${vendor.is_active ? 'bg-emerald-600' : 'bg-stone-400'}`} />
-              {vendor.is_active ? 'Active' : 'Inactive'}
+              {vendor.is_active ? t('purchases.vendors.status.active') : t('purchases.vendors.status.inactive')}
             </span>
           </div>
         </Card>
@@ -589,7 +595,7 @@ export default function VendorDetailPage({
             }`}
           >
             <Building2 className="h-4 w-4" />
-            Overview
+            {t('purchases.vendors.detail.tabs.overview')}
           </button>
 
           <button
@@ -601,7 +607,7 @@ export default function VendorDetailPage({
             }`}
           >
             <ShoppingBag className="h-4 w-4" />
-            Purchases ({purchases.length})
+            {t('purchases.vendors.detail.tabs.purchases')} ({purchases.length})
           </button>
 
           <button
@@ -613,7 +619,7 @@ export default function VendorDetailPage({
             }`}
           >
             <CreditCard className="h-4 w-4" />
-            Payments ({payments.length})
+            {t('purchases.vendors.detail.tabs.payments')} ({payments.length})
           </button>
 
           <button
@@ -625,7 +631,7 @@ export default function VendorDetailPage({
             }`}
           >
             <FileText className="h-4 w-4" />
-            Ledger ({ledgerEntries.length})
+            {t('purchases.vendors.detail.tabs.ledger')} ({ledgerEntries.length})
           </button>
 
           <button
@@ -637,7 +643,7 @@ export default function VendorDetailPage({
             }`}
           >
             <Package className="h-4 w-4" />
-            Items ({vendorItems.length})
+            {t('purchases.vendors.detail.tabs.items')} ({vendorItems.length})
           </button>
         </nav>
       </div>
@@ -648,18 +654,18 @@ export default function VendorDetailPage({
           {/* Contact Details Card */}
           <Card>
             <CardHeader className="pb-3 border-b border-stone-100">
-              <CardTitle className="text-sm">Contact</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.primaryContact')}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-4 text-xs">
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Contact Person:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.modal.contactPerson')}:</span>
                 <span className="col-span-2 text-stone-900 font-semibold">
                   {vendor.contact_person || 'Not specified'}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Primary Phone:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.modal.phone')}:</span>
                 <span className="col-span-2 text-stone-900 font-mono">
                   {vendor.phone ? (
                     <a href={`tel:${vendor.phone}`} className="hover:text-amber-600 flex items-center gap-1">
@@ -673,7 +679,7 @@ export default function VendorDetailPage({
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Alternate Phone:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.modal.altPhone')}:</span>
                 <span className="col-span-2 text-stone-900 font-mono">
                   {vendor.alternate_phone ? (
                     <a href={`tel:${vendor.alternate_phone}`} className="hover:text-amber-600 flex items-center gap-1">
@@ -687,7 +693,7 @@ export default function VendorDetailPage({
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Address:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.modal.address')}:</span>
                 <span className="col-span-2 text-stone-800 leading-relaxed">
                   {vendor.address || 'No physical address recorded.'}
                 </span>
@@ -698,32 +704,32 @@ export default function VendorDetailPage({
           {/* Commercial Terms Card */}
           <Card>
             <CardHeader className="pb-3 border-b border-stone-100">
-              <CardTitle className="text-sm">Payment Terms</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.paymentPreferences')}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-4 text-xs">
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Payment Terms:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.modal.paymentTerms')}:</span>
                 <span className="col-span-2 text-stone-900 font-semibold">
                   {vendor.payment_terms || 'Net 7 Days'}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Payment Frequency:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.detail.frequency')}:</span>
                 <span className="col-span-2 text-stone-900">
                   {vendor.payment_frequency || 'Weekly'}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Payment Method:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.detail.preferredMethod')}:</span>
                 <span className="col-span-2 text-stone-900">
                   {preferredMethodName || 'Direct Bank / Any'}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                <span className="text-stone-500 font-medium">Categories:</span>
+                <span className="text-stone-500 font-medium">{t('purchases.vendors.table.categories')}:</span>
                 <div className="col-span-2 flex flex-wrap gap-1">
                   {vendor.supplier_categories && vendor.supplier_categories.length > 0 ? (
                     vendor.supplier_categories.map((c) => (
@@ -735,7 +741,7 @@ export default function VendorDetailPage({
                       </span>
                     ))
                   ) : (
-                    <span className="text-stone-400 italic">General Supply</span>
+                    <span className="text-stone-400 italic">{t('purchases.vendors.general')}</span>
                   )}
                 </div>
               </div>
@@ -745,7 +751,7 @@ export default function VendorDetailPage({
           {/* Internal Notes Card */}
           <Card className="md:col-span-2">
             <CardHeader className="pb-3 border-b border-stone-100">
-              <CardTitle className="text-sm">Notes</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.notes')}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 text-xs text-stone-700">
               {vendor.notes ? (
@@ -765,11 +771,11 @@ export default function VendorDetailPage({
         <Card className="overflow-hidden">
           <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <CardTitle className="text-sm">Purchases</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.tabs.purchases')}</CardTitle>
             </div>
             <Link href="/finance/purchases" className="shrink-0">
               <Button variant="outline" size="sm" className="gap-1 text-xs w-full sm:w-auto">
-                <Plus className="h-3.5 w-3.5" /> New Purchase
+                <Plus className="h-3.5 w-3.5" /> {t('purchases.bills.newPurchaseInvoice')}
               </Button>
             </Link>
           </CardHeader>
@@ -784,14 +790,14 @@ export default function VendorDetailPage({
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                       <th className="py-2.5 px-3"></th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Purchase #</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Invoice #</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Items</th>
-                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Total</th>
-                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Paid</th>
-                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Balance</th>
-                      <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.table.invoice')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.invoiceNo')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.table.date')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.table.items')}</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">{t('purchases.bills.table.total')}</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">{t('purchases.bills.table.paid')}</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">{t('purchases.bills.table.balance')}</th>
+                      <th className="py-2.5 px-3 text-center whitespace-nowrap">{t('purchases.bills.table.status')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -818,7 +824,7 @@ export default function VendorDetailPage({
                               {p.invoice_number || '—'}
                             </td>
                             <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{p.purchase_date}</td>
-                            <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{p.lines.length} items</td>
+                            <td className="py-3 px-3 text-stone-600 whitespace-nowrap">{p.lines.length} {t('purchases.bills.items')}</td>
                             <td className="py-3 px-3 text-right font-semibold text-stone-900 whitespace-nowrap">
                               {formatINR(p.net_amount)}
                             </td>
@@ -830,11 +836,11 @@ export default function VendorDetailPage({
                             </td>
                             <td className="py-3 px-3 text-center whitespace-nowrap">
                               {balanceDue <= 0 ? (
-                                <Badge variant="success">Settled</Badge>
+                                <Badge variant="success">{t('purchases.bills.settled')}</Badge>
                               ) : p.allocated_amount > 0 ? (
-                                <Badge variant="warning">Partial</Badge>
+                                <Badge variant="warning">{t('purchases.bills.partial')}</Badge>
                               ) : (
-                                <Badge variant="danger">Unpaid</Badge>
+                                <Badge variant="danger">{t('purchases.bills.unpaid')}</Badge>
                               )}
                             </td>
                           </tr>
@@ -845,16 +851,16 @@ export default function VendorDetailPage({
                               <td colSpan={9} className="p-2 sm:p-3 sm:pl-10">
                                 <div className="p-2.5 sm:p-3 bg-white rounded-lg border border-stone-200 space-y-2 overflow-x-auto">
                                   <div className="font-semibold text-stone-800 text-xs">
-                                    Invoice Line Items
+                                    {t('purchases.bills.items')}
                                   </div>
                                   <table className="w-full text-left text-xs">
                                     <thead>
                                       <tr className="border-b border-stone-200 text-stone-500">
-                                        <th className="py-1 px-2 whitespace-nowrap">Code</th>
-                                        <th className="py-1 px-2 min-w-[120px]">Item</th>
-                                        <th className="py-1 px-2 text-right whitespace-nowrap">Quantity</th>
-                                        <th className="py-1 px-2 text-right whitespace-nowrap">Rate</th>
-                                        <th className="py-1 px-2 text-right whitespace-nowrap">Total</th>
+                                        <th className="py-1 px-2 whitespace-nowrap">{t('purchases.bills.table.code')}</th>
+                                        <th className="py-1 px-2 min-w-[120px]">{t('purchases.bills.items')}</th>
+                                        <th className="py-1 px-2 text-right whitespace-nowrap">{t('purchases.bills.qty')}</th>
+                                        <th className="py-1 px-2 text-right whitespace-nowrap">{t('purchases.bills.rate')}</th>
+                                        <th className="py-1 px-2 text-right whitespace-nowrap">{t('purchases.bills.table.total')}</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-100">
@@ -899,11 +905,11 @@ export default function VendorDetailPage({
         <Card className="overflow-hidden">
           <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <CardTitle className="text-sm">Payments</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.tabs.payments')}</CardTitle>
             </div>
             <Link href="/finance/purchases" className="shrink-0">
               <Button variant="outline" size="sm" className="gap-1 text-xs w-full sm:w-auto">
-                <CreditCard className="h-3.5 w-3.5" /> Record Payment
+                <CreditCard className="h-3.5 w-3.5" /> {t('purchases.bills.recordPayment')}
               </Button>
             </Link>
           </CardHeader>
@@ -917,12 +923,12 @@ export default function VendorDetailPage({
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3 whitespace-nowrap">Voucher #</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Payment Method</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Reference #</th>
-                      <th className="py-2.5 px-3 min-w-[120px]">Notes</th>
-                      <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.referenceNo')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.table.date')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.paymentMethod')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.referenceNo')}</th>
+                      <th className="py-2.5 px-3 min-w-[120px]">{t('purchases.vendors.modal.notes')}</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">{t('purchases.bills.amount')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -961,10 +967,10 @@ export default function VendorDetailPage({
         <Card className="overflow-hidden">
           <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
-              <CardTitle className="text-sm">Ledger</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.ledger')}</CardTitle>
             </div>
             <div className="sm:text-right shrink-0">
-              <span className="text-[11px] text-stone-500">Outstanding: </span>
+              <span className="text-[11px] text-stone-500">{t('purchases.bills.outstanding')}: </span>
               <span className="font-bold text-rose-600 text-sm">
                 {formatINR(summaryMetrics.outstandingBalance)}
               </span>
@@ -980,14 +986,14 @@ export default function VendorDetailPage({
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Type</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Reference #</th>
-                      <th className="py-2.5 px-3 min-w-[150px]">Description</th>
-                      <th className="py-2.5 px-3 text-right text-emerald-700 whitespace-nowrap">Debit (Paid)</th>
-                      <th className="py-2.5 px-3 text-right text-stone-900 whitespace-nowrap">Credit (Invoiced)</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.vendors.detail.ledgerTable.date')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.vendors.detail.ledgerTable.type')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.vendors.detail.ledgerTable.reference')}</th>
+                      <th className="py-2.5 px-3 min-w-[150px]">{t('purchases.vendors.detail.ledgerTable.description')}</th>
+                      <th className="py-2.5 px-3 text-right text-emerald-700 whitespace-nowrap">{t('purchases.vendors.detail.ledgerTable.debit')}</th>
+                      <th className="py-2.5 px-3 text-right text-stone-900 whitespace-nowrap">{t('purchases.vendors.detail.ledgerTable.credit')}</th>
                       <th className="py-2.5 px-3 text-right font-bold text-stone-800 whitespace-nowrap">
-                        Balance
+                        {t('purchases.vendors.detail.ledgerTable.balance')}
                       </th>
                     </tr>
                   </thead>
@@ -998,11 +1004,11 @@ export default function VendorDetailPage({
                         <td className="py-3 px-3 font-sans whitespace-nowrap">
                           {entry.type === 'purchase' ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-stone-800 bg-stone-100 px-2 py-0.5 rounded">
-                              <ShoppingBag className="h-3 w-3 text-amber-600" /> Purchase
+                              <ShoppingBag className="h-3 w-3 text-amber-600" /> {t('purchases.vendors.detail.tabs.purchases')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
-                              <CreditCard className="h-3 w-3 text-emerald-600" /> Payment
+                              <CreditCard className="h-3 w-3 text-emerald-600" /> {t('purchases.vendors.detail.tabs.payments')}
                             </span>
                           )}
                         </td>
@@ -1038,7 +1044,7 @@ export default function VendorDetailPage({
         <Card className="overflow-hidden">
           <CardHeader className="pb-3 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <CardTitle className="text-sm">Items</CardTitle>
+              <CardTitle className="text-sm">{t('purchases.vendors.detail.tabs.items')}</CardTitle>
             </div>
             <Button
               variant="amber"
@@ -1046,7 +1052,7 @@ export default function VendorDetailPage({
               onClick={() => setShowLinkItemModal(true)}
               className="gap-1 text-xs w-full sm:w-auto shrink-0"
             >
-              <Plus className="h-3.5 w-3.5" /> Link Item
+              <Plus className="h-3.5 w-3.5" /> {t('purchases.vendors.detail.linkItem')}
             </Button>
           </CardHeader>
           <CardContent className="p-0 sm:p-6 sm:pt-0 overflow-hidden">
@@ -1059,13 +1065,13 @@ export default function VendorDetailPage({
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3 whitespace-nowrap">Code</th>
-                      <th className="py-2.5 px-3 min-w-[140px]">Item</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Category</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.table.code')}</th>
+                      <th className="py-2.5 px-3 min-w-[140px]">{t('purchases.bills.items')}</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.vendors.table.categories')}</th>
                       <th className="py-2.5 px-3 whitespace-nowrap">Unit</th>
                       <th className="py-2.5 px-3 text-right whitespace-nowrap">Last Rate</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">Last Date</th>
-                      <th className="py-2.5 px-3 text-center whitespace-nowrap">Preferred</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">{t('purchases.bills.table.date')}</th>
+                      <th className="py-2.5 px-3 text-center whitespace-nowrap">{t('purchases.bills.table.status')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -1119,7 +1125,7 @@ export default function VendorDetailPage({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl border border-stone-200 text-xs">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-stone-900">Link Item</h3>
+              <h3 className="text-base font-bold text-stone-900">{t('purchases.vendors.detail.linkItemTitle')}</h3>
               <button
                 onClick={() => setShowLinkItemModal(false)}
                 className="text-stone-400 hover:text-stone-700 text-lg"
@@ -1131,7 +1137,7 @@ export default function VendorDetailPage({
             <form onSubmit={handleLinkItem} className="space-y-4">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Item <span className="text-rose-500">*</span>
+                  {t('purchases.bills.items')} <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -1145,12 +1151,12 @@ export default function VendorDetailPage({
                   }}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
                 >
-                  <option value="">Select Item...</option>
+                  <option value="">{t('purchases.vendors.detail.selectCatalogItem')}</option>
                   {allItems.map((i) => {
                     const isAlreadyLinked = vendorItems.some((vi) => vi.inventory_item_id === i.id);
                     return (
                       <option key={i.id} value={i.id}>
-                        {i.name} ({i.item_code}){isAlreadyLinked ? ' — [Already Linked]' : ''}
+                        {i.name_hi && locale === 'hi' ? i.name_hi : i.name} ({i.item_code}){isAlreadyLinked ? ' — [Already Linked]' : ''}
                       </option>
                     );
                   })}
@@ -1159,7 +1165,7 @@ export default function VendorDetailPage({
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Agreed Rate (₹)
+                  {t('purchases.vendors.detail.agreedRate')}
                 </label>
                 <input
                   type="number"
@@ -1177,10 +1183,10 @@ export default function VendorDetailPage({
                   variant="secondary"
                   onClick={() => setShowLinkItemModal(false)}
                 >
-                  Cancel
+                  {t('purchases.vendors.detail.cancel')}
                 </Button>
                 <Button type="submit" variant="amber" disabled={linkingItem}>
-                  {linkingItem ? 'Linking...' : 'Link Item'}
+                  {linkingItem ? t('purchases.vendors.detail.saving') : t('purchases.vendors.detail.saveLink')}
                 </Button>
               </div>
             </form>

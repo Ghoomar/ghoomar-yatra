@@ -18,6 +18,8 @@ import {
   History,
   X,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 interface AssetDetailModalProps {
   asset: any | null;
@@ -36,6 +38,7 @@ export function AssetDetailModal({
   onRefresh,
   businessDate,
 }: AssetDetailModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'overview' | 'transfer' | 'breakage' | 'history'>('overview');
   const [loading, setLoading] = useState(false);
@@ -73,13 +76,13 @@ export function AssetDetailModal({
       const [{ data: mData }, { data: sData }] = await Promise.all([
         supabase
           .from('stock_movements')
-          .select('*, src:inventory_locations!stock_movements_source_location_id_fkey(name), dest:inventory_locations!stock_movements_destination_location_id_fkey(name)')
+          .select('*, src:inventory_locations!stock_movements_source_location_id_fkey(name, name_hi), dest:inventory_locations!stock_movements_destination_location_id_fkey(name, name_hi)')
           .eq('item_id', asset.id)
           .order('created_at', { ascending: false })
           .limit(20),
         supabase
           .from('physical_asset_status_ledger')
-          .select('*, loc:inventory_locations(name)')
+          .select('*, loc:inventory_locations(name, name_hi)')
           .eq('item_id', asset.id)
           .order('created_at', { ascending: false })
           .limit(20),
@@ -256,11 +259,11 @@ export function AssetDetailModal({
                 {asset.item_code || 'AST'}
               </span>
               <h2 className="text-lg font-bold text-stone-900">{asset.name}</h2>
-              <Badge variant="outline">{asset.category?.name || 'Equipment'}</Badge>
+              <Badge variant="outline">{getLocalizedMasterName(asset.category, locale) || 'Equipment'}</Badge>
             </div>
             <p className="text-stone-500 mt-1">
-              Rate: {formatINR(Number(asset.current_weighted_average_cost || 0))} / {asset.unit?.symbol || 'pcs'} •
-              Unit: {asset.unit?.symbol || 'pcs'}
+              {t('inventory.assets.rate')} {formatINR(Number(asset.current_weighted_average_cost || 0))} / {getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs'} •{' '}
+              {t('inventory.assets.unit')} {getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs'}
             </p>
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1">
@@ -287,32 +290,37 @@ export function AssetDetailModal({
         )}
 
         {/* KPI Metrics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
-            <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">Total</div>
-            <div className="text-base font-bold text-stone-900 mt-0.5">
-              {totalOwned} <span className="text-[10px] text-stone-500 font-normal">{asset.unit?.symbol || 'pcs'}</span>
+        {(() => {
+          const unitSym = getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs';
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
+                <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.assets.table.total')}</div>
+                <div className="text-base font-bold text-stone-900 mt-0.5">
+                  {totalOwned} <span className="text-[10px] text-stone-500 font-normal">{unitSym}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-200">
+                <div className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold">{t('inventory.assets.inService')}</div>
+                <div className="text-base font-bold text-emerald-900 mt-0.5">
+                  {totalInService} <span className="text-[10px] text-emerald-600 font-normal">{unitSym}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-200">
+                <div className="text-[10px] text-amber-700 uppercase tracking-wider font-semibold">{t('inventory.assets.brokenRepair')}</div>
+                <div className="text-base font-bold text-amber-900 mt-0.5">
+                  {brokenQty} <span className="text-[10px] text-amber-600 font-normal">{unitSym}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-red-50/50 rounded-lg border border-red-200">
+                <div className="text-[10px] text-red-700 uppercase tracking-wider font-semibold">{t('inventory.assets.missingLost')}</div>
+                <div className="text-base font-bold text-red-900 mt-0.5">
+                  {lostQty} <span className="text-[10px] text-red-600 font-normal">{unitSym}</span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-200">
-            <div className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold">In Service</div>
-            <div className="text-base font-bold text-emerald-900 mt-0.5">
-              {totalInService} <span className="text-[10px] text-emerald-600 font-normal">{asset.unit?.symbol || 'pcs'}</span>
-            </div>
-          </div>
-          <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-200">
-            <div className="text-[10px] text-amber-700 uppercase tracking-wider font-semibold">Broken / Repair</div>
-            <div className="text-base font-bold text-amber-900 mt-0.5">
-              {brokenQty} <span className="text-[10px] text-amber-600 font-normal">{asset.unit?.symbol || 'pcs'}</span>
-            </div>
-          </div>
-          <div className="p-3 bg-red-50/50 rounded-lg border border-red-200">
-            <div className="text-[10px] text-red-700 uppercase tracking-wider font-semibold">Missing / Lost</div>
-            <div className="text-base font-bold text-red-900 mt-0.5">
-              {lostQty} <span className="text-[10px] text-red-600 font-normal">{asset.unit?.symbol || 'pcs'}</span>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Tab Navigation */}
         <div className="flex border-b border-stone-200 gap-4 text-xs font-semibold">
@@ -324,7 +332,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <MapPin className="h-3.5 w-3.5" /> Locations
+            <MapPin className="h-3.5 w-3.5" /> {t('inventory.assets.tabs.locations')}
           </button>
           <button
             onClick={() => setActiveTab('transfer')}
@@ -334,7 +342,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer
+            <ArrowRightLeft className="h-3.5 w-3.5" /> {t('inventory.assets.tabs.transfer')}
           </button>
           <button
             onClick={() => setActiveTab('breakage')}
@@ -344,7 +352,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <AlertTriangle className="h-3.5 w-3.5" /> Damage / Repair
+            <AlertTriangle className="h-3.5 w-3.5" /> {t('inventory.assets.tabs.breakage')}
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -354,7 +362,7 @@ export function AssetDetailModal({
                 : 'text-stone-500 hover:text-stone-800'
             }`}
           >
-            <History className="h-3.5 w-3.5" /> Movements
+            <History className="h-3.5 w-3.5" /> {t('inventory.assets.tabs.movements')}
           </button>
         </div>
 
@@ -365,42 +373,45 @@ export function AssetDetailModal({
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-semibold">
-                    <th className="py-2.5 px-3">Location</th>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3 text-right">In Service</th>
-                    <th className="py-2.5 px-3 text-right">Action</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.tableLocations.location')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.tableLocations.type')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('inventory.assets.tableLocations.inService')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('inventory.assets.tableLocations.action')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {locationAllocations.map((la: any) => (
-                    <tr key={la.location_id} className="hover:bg-stone-50/50">
-                      <td className="py-2.5 px-3 font-medium text-stone-900 flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-stone-400" />
-                        {la.location?.name || 'Unknown Location'}
-                      </td>
-                      <td className="py-2.5 px-3 text-stone-500 capitalize">
-                        {la.location?.location_type?.replace('_', ' ') || 'Zone'}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-bold text-stone-900">
-                        {la.quantity} {asset.unit?.symbol || 'pcs'}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <button
-                          onClick={() => {
-                            setTransferFromLoc(la.location_id);
-                            setActiveTab('transfer');
-                          }}
-                          className="text-amber-700 hover:text-amber-900 font-semibold underline text-[11px]"
-                        >
-                          Transfer Out
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {locationAllocations.map((la: any) => {
+                    const unitSym = getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs';
+                    return (
+                      <tr key={la.location_id} className="hover:bg-stone-50/50">
+                        <td className="py-2.5 px-3 font-medium text-stone-900 flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-stone-400" />
+                          {getLocalizedMasterName(la.location, locale) || 'Unknown Location'}
+                        </td>
+                        <td className="py-2.5 px-3 text-stone-500 capitalize">
+                          {la.location?.location_type?.replace('_', ' ') || 'Zone'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold text-stone-900">
+                          {la.quantity} {unitSym}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            onClick={() => {
+                              setTransferFromLoc(la.location_id);
+                              setActiveTab('transfer');
+                            }}
+                            className="text-amber-700 hover:text-amber-900 font-semibold underline text-[11px]"
+                          >
+                            {t('inventory.assets.tableLocations.transferOut')}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {locationAllocations.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-6 text-center text-stone-400">
-                        No in-service stock allocated to any room yet.
+                        {t('inventory.assets.tableLocations.noStockAllocated')}
                       </td>
                     </tr>
                   )}
@@ -415,7 +426,7 @@ export function AssetDetailModal({
                 onClick={() => setActiveTab('transfer')}
                 className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
               >
-                <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer
+                <ArrowRightLeft className="h-3.5 w-3.5" /> {t('inventory.assets.tabs.transfer')}
               </Button>
             </div>
           </div>
@@ -425,24 +436,25 @@ export function AssetDetailModal({
         {activeTab === 'transfer' && (
           <form onSubmit={handleExecuteTransfer} className="space-y-3 bg-stone-50/50 p-4 rounded-lg border border-stone-200">
             <h3 className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
-              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> Transfer Asset
+              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> {t('inventory.assets.transfer.title')}
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">From <span className="text-rose-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.assets.transfer.from')} <span className="text-rose-500">*</span></label>
                 <select
                   value={transferFromLoc}
                   onChange={(e) => setTransferFromLoc(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
                 >
-                  <option value="">Select Location...</option>
+                  <option value="">{t('inventory.assets.transfer.selectLocation')}</option>
                   {locations.map((loc) => {
                     const avail = asset.location_stocks?.find((ls: any) => ls.location_id === loc.id)?.quantity || 0;
+                    const unitSym = getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs';
                     return (
                       <option key={loc.id} value={loc.id} disabled={Number(avail) <= 0}>
-                        {loc.name} ({avail} {asset.unit?.symbol || 'pcs'} available)
+                        {getLocalizedMasterName(loc, locale)} ({avail} {unitSym} {t('inventory.assets.transfer.available')})
                       </option>
                     );
                   })}
@@ -450,19 +462,19 @@ export function AssetDetailModal({
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">To <span className="text-rose-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.assets.transfer.to')} <span className="text-rose-500">*</span></label>
                 <select
                   value={transferToLoc}
                   onChange={(e) => setTransferToLoc(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
                 >
-                  <option value="">Select Location...</option>
+                  <option value="">{t('inventory.assets.transfer.selectLocation')}</option>
                   {locations
                     .filter((l) => l.id !== transferFromLoc)
                     .map((loc) => (
                       <option key={loc.id} value={loc.id}>
-                        {loc.name}
+                        {getLocalizedMasterName(loc, locale)}
                       </option>
                     ))}
                 </select>
@@ -471,7 +483,7 @@ export function AssetDetailModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Quantity <span className="text-rose-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.assets.transfer.quantity')} <span className="text-rose-500">*</span></label>
                 <input
                   type="number"
                   min="1"
@@ -485,12 +497,12 @@ export function AssetDetailModal({
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('common.notes')}</label>
                 <input
                   type="text"
                   value={transferNotes}
                   onChange={(e) => setTransferNotes(e.target.value)}
-                  placeholder="e.g. Reallocated for special event setup"
+                  placeholder={t('inventory.assets.transfer.notesPlaceholder')}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
                 />
               </div>
@@ -498,10 +510,10 @@ export function AssetDetailModal({
 
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-200">
               <Button type="button" variant="outline" onClick={() => setActiveTab('overview')}>
-                Cancel
+                {t('inventory.assets.cancel')}
               </Button>
               <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                {saving ? 'Transferring...' : 'Transfer Asset'}
+                {saving ? t('inventory.assets.transfer.transferring') : t('inventory.assets.transfer.transferBtn')}
               </Button>
             </div>
           </form>
@@ -511,11 +523,11 @@ export function AssetDetailModal({
         {activeTab === 'breakage' && (
           <form onSubmit={handleExecuteStatusAction} className="space-y-3 bg-stone-50/50 p-4 rounded-lg border border-stone-200">
             <h3 className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600" /> Damage / Repair
+              <AlertTriangle className="h-4 w-4 text-amber-600" /> {t('inventory.assets.damage.title')}
             </h3>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Type <span className="text-rose-500">*</span></label>
+              <label className="block font-medium text-stone-700 mb-1">{t('inventory.assets.damage.type')} <span className="text-rose-500">*</span></label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -526,7 +538,7 @@ export function AssetDetailModal({
                       : 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
                   }`}
                 >
-                  Broken / Damaged
+                  {t('inventory.assets.damage.brokenDamaged')}
                 </button>
                 <button
                   type="button"
@@ -537,7 +549,7 @@ export function AssetDetailModal({
                       : 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
                   }`}
                 >
-                  Missing / Lost
+                  {t('inventory.assets.damage.missingLost')}
                 </button>
                 <button
                   type="button"
@@ -548,7 +560,7 @@ export function AssetDetailModal({
                       : 'bg-white border-stone-300 text-stone-700 hover:bg-stone-50'
                   }`}
                 >
-                  Repaired & Restored
+                  {t('inventory.assets.damage.repairedRestored')}
                 </button>
               </div>
             </div>
@@ -556,7 +568,7 @@ export function AssetDetailModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Location <span className="text-rose-500">*</span>
+                  {t('inventory.assets.damage.location')} <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={actionLoc}
@@ -564,12 +576,12 @@ export function AssetDetailModal({
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
                 >
-                  <option value="">Select Location...</option>
+                  <option value="">{t('inventory.assets.transfer.selectLocation')}</option>
                   {locations.map((loc) => {
                     const avail = asset.location_stocks?.find((ls: any) => ls.location_id === loc.id)?.quantity || 0;
                     return (
                       <option key={loc.id} value={loc.id} disabled={actionType !== 'repair' && Number(avail) <= 0}>
-                        {loc.name} {actionType !== 'repair' ? `(${avail} available)` : ''}
+                        {getLocalizedMasterName(loc, locale)} {actionType !== 'repair' ? `(${avail} ${t('inventory.assets.transfer.available')})` : ''}
                       </option>
                     );
                   })}
@@ -577,7 +589,7 @@ export function AssetDetailModal({
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Quantity <span className="text-rose-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.assets.transfer.quantity')} <span className="text-rose-500">*</span></label>
                 <input
                   type="number"
                   min="1"
@@ -591,22 +603,22 @@ export function AssetDetailModal({
             </div>
 
             <div>
-              <label className="block font-medium text-stone-700 mb-1">Notes</label>
+              <label className="block font-medium text-stone-700 mb-1">{t('common.notes')}</label>
               <input
                 type="text"
                 value={actionNotes}
                 onChange={(e) => setActionNotes(e.target.value)}
-                placeholder="e.g. Dropped during dinner cleanup, missing from table setup"
+                placeholder={t('inventory.assets.damage.notesPlaceholder')}
                 className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none bg-white"
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-200">
               <Button type="button" variant="outline" onClick={() => setActiveTab('overview')}>
-                Cancel
+                {t('inventory.assets.cancel')}
               </Button>
               <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                {saving ? 'Recording...' : 'Record'}
+                {saving ? t('inventory.assets.damage.recording') : t('inventory.assets.damage.recordBtn')}
               </Button>
             </div>
           </form>
@@ -619,54 +631,58 @@ export function AssetDetailModal({
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 font-semibold">
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Quantity</th>
-                    <th className="py-2.5 px-3">Route</th>
-                    <th className="py-2.5 px-3">Notes</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.history.date')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.history.type')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.history.quantity')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.history.route')}</th>
+                    <th className="py-2.5 px-3">{t('inventory.assets.history.notes')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {historyMovements.map((m) => (
-                    <tr key={m.id} className="hover:bg-stone-50/50">
-                      <td className="py-2.5 px-3 font-mono text-stone-600 whitespace-nowrap">{m.business_date}</td>
-                      <td className="py-2.5 px-3">
-                        <Badge
-                          variant={
-                            m.movement_type === 'purchase' || m.movement_type === 'opening' || m.movement_type === 'return'
-                              ? 'success'
-                              : m.movement_type === 'transfer'
-                              ? 'info'
-                              : 'danger'
-                          }
-                          className="capitalize text-[10px]"
-                        >
-                          {m.movement_type}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono font-bold">
-                        {m.quantity} {asset.unit?.symbol || 'pcs'}
-                      </td>
-                      <td className="py-2.5 px-3 text-stone-600">
-                        {m.movement_type === 'transfer' ? (
-                          <span>
-                            {m.src?.name || 'Store'} → {m.dest?.name || 'Room'}
-                          </span>
-                        ) : m.dest?.name ? (
-                          <span>Inward to {m.dest.name}</span>
-                        ) : m.src?.name ? (
-                          <span>Deducted from {m.src.name}</span>
-                        ) : (
-                          m.purpose || '—'
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-stone-500 truncate max-w-xs">{m.notes || '—'}</td>
-                    </tr>
-                  ))}
+                  {historyMovements.map((m) => {
+                    const unitSym = getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs';
+                    const badgeText = t(`inventory.stock.movementBadges.${m.movement_type}` as any) || m.movement_type;
+                    return (
+                      <tr key={m.id} className="hover:bg-stone-50/50">
+                        <td className="py-2.5 px-3 font-mono text-stone-600 whitespace-nowrap">{m.business_date}</td>
+                        <td className="py-2.5 px-3">
+                          <Badge
+                            variant={
+                              m.movement_type === 'purchase' || m.movement_type === 'opening' || m.movement_type === 'return'
+                                ? 'success'
+                                : m.movement_type === 'transfer'
+                                ? 'info'
+                                : 'danger'
+                            }
+                            className="capitalize text-[10px]"
+                          >
+                            {badgeText}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold">
+                          {m.quantity} {unitSym}
+                        </td>
+                        <td className="py-2.5 px-3 text-stone-600">
+                          {m.movement_type === 'transfer' ? (
+                            <span>
+                              {getLocalizedMasterName(m.src, locale) || 'Store'} → {getLocalizedMasterName(m.dest, locale) || 'Room'}
+                            </span>
+                          ) : m.dest?.name ? (
+                            <span>{t('inventory.assets.history.inwardTo', { dest: getLocalizedMasterName(m.dest, locale) || m.dest.name })}</span>
+                          ) : m.src?.name ? (
+                            <span>{t('inventory.assets.history.deductedFrom', { src: getLocalizedMasterName(m.src, locale) || m.src.name })}</span>
+                          ) : (
+                            m.purpose || '—'
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-stone-500 truncate max-w-xs">{m.notes || '—'}</td>
+                      </tr>
+                    );
+                  })}
                   {historyMovements.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-stone-400">
-                        No movement history recorded for this asset yet.
+                        {t('inventory.assets.history.noMovements')}
                       </td>
                     </tr>
                   )}
@@ -678,7 +694,7 @@ export function AssetDetailModal({
 
         <div className="flex justify-end pt-3 border-t">
           <Button variant="outline" onClick={onClose}>
-            Close
+            {t('inventory.assets.close')}
           </Button>
         </div>
       </div>

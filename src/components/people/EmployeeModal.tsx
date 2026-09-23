@@ -7,6 +7,8 @@ import { Department, Team, EmployeeRole, EmploymentStatus } from '@/lib/types/da
 import { X, User, Plus, AlertCircle, Phone, Calendar, IndianRupee } from 'lucide-react';
 import { OrgHierarchyModal } from '@/components/admin/OrgHierarchyModal';
 import { getTodayBusinessDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface EmployeeModalProps {
   isOpen: boolean;
@@ -19,6 +21,7 @@ const EMPLOYMENT_STATUSES: EmploymentStatus[] = ['Active', 'On Leave', 'Resigned
 
 export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeModalProps) {
   const supabase = createClient();
+  const { t, locale } = useI18n();
   const isEdit = Boolean(employee?.id);
 
   const [employeeCode, setEmployeeCode] = useState('');
@@ -134,7 +137,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('Employee name is required.');
+      setErrorMessage(t('people.modal.nameRequired'));
       return;
     }
 
@@ -188,7 +191,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
       if (onSaved) onSaved(result);
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save employee.');
+      setErrorMessage(t('people.modal.saveFailed', { error: err.message || '' }));
     } finally {
       setSaving(false);
     }
@@ -208,7 +211,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
               </div>
               <div>
                 <h2 className="text-base font-bold text-stone-900">
-                  {isEdit ? `Edit Employee: ${employee?.name}` : 'Add Employee'}
+                  {isEdit ? t('people.modal.editTitle', { name: employee?.name }) : t('people.modal.addTitle')}
                 </h2>
               </div>
             </div>
@@ -234,20 +237,20 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block font-medium text-stone-700 mb-1">
-                    Full Name <span className="text-rose-500">*</span>
+                    {t('people.modal.fullName')} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Ramesh Kumar"
+                    placeholder={t('people.modal.fullNamePlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Employee Code</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('people.modal.empCode')}</label>
                   <input
                     type="text"
                     value={employeeCode}
@@ -259,18 +262,18 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Contact Phone</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('people.modal.phone')}</label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 98765 43210"
+                    placeholder={t('people.modal.phonePlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Joining Date</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('people.modal.joiningDate')}</label>
                   <input
                     type="date"
                     required
@@ -284,12 +287,12 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
             {/* Org Structure with Quick-Add */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
-              <h3 className="font-semibold text-stone-800">Department &amp; Role</h3>
+              <h3 className="font-semibold text-stone-800">{t('people.modal.deptAndRole')}</h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="font-medium text-stone-700">Department</label>
+                    <label className="font-medium text-stone-700">{t('people.modal.department')}</label>
                     <button
                       type="button"
                       onClick={() => {
@@ -298,7 +301,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                       }}
                       className="text-[10px] text-amber-600 hover:text-amber-800 font-semibold"
                     >
-                      + Add Dept
+                      {t('people.modal.quickAddDept')}
                     </button>
                   </div>
                   <select
@@ -310,12 +313,12 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                     }}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">Select Department...</option>
+                    <option value="">{t('people.modal.selectDepartment')}</option>
                     {departments
                       .filter((d) => d.is_active || d.id === departmentId)
                       .map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.name}
+                          {getLocalizedMasterName(d, locale)}
                         </option>
                       ))}
                   </select>
@@ -323,7 +326,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="font-medium text-stone-700">Team / Function</label>
+                    <label className="font-medium text-stone-700">{t('people.modal.team')}</label>
                     <button
                       type="button"
                       onClick={() => {
@@ -332,7 +335,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                       }}
                       className="text-[10px] text-amber-600 hover:text-amber-800 font-semibold"
                     >
-                      + Add Team
+                      {t('people.modal.quickAddTeam')}
                     </button>
                   </div>
                   <select
@@ -343,10 +346,10 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                     }}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">Select Team...</option>
-                    {filteredTeams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    <option value="">{t('people.modal.selectTeam')}</option>
+                    {filteredTeams.map((tItem) => (
+                      <option key={tItem.id} value={tItem.id}>
+                        {getLocalizedMasterName(tItem, locale)}
                       </option>
                     ))}
                   </select>
@@ -354,7 +357,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="font-medium text-stone-700">Operational Role</label>
+                    <label className="font-medium text-stone-700">{t('people.modal.role')}</label>
                     <button
                       type="button"
                       onClick={() => {
@@ -363,7 +366,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                       }}
                       className="text-[10px] text-amber-600 hover:text-amber-800 font-semibold"
                     >
-                      + Add Role
+                      {t('people.modal.quickAddRole')}
                     </button>
                   </div>
                   <select
@@ -371,10 +374,10 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                     onChange={(e) => setRoleId(e.target.value)}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
-                    <option value="">Select Role...</option>
+                    <option value="">{t('people.modal.selectRole')}</option>
                     {filteredRoles.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {r.name} {r.can_receive_store_issues ? ' (Issue Receiver)' : ''}
+                        {getLocalizedMasterName(r, locale)}{r.can_receive_store_issues ? t('people.modal.issueReceiver') : ''}
                       </option>
                     ))}
                   </select>
@@ -384,11 +387,11 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
             {/* Compensation & Status */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
-              <h3 className="font-semibold text-stone-800">Employment &amp; Pay</h3>
+              <h3 className="font-semibold text-stone-800">{t('people.modal.employmentAndPay')}</h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Monthly Gross Salary (₹)</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('people.modal.monthlySalary')}</label>
                   <input
                     type="number"
                     step="500"
@@ -400,7 +403,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Employment Status</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('people.modal.employmentStatus')}</label>
                   <select
                     value={employmentStatus}
                     onChange={(e) => setEmploymentStatus(e.target.value)}
@@ -408,7 +411,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                   >
                     {EMPLOYMENT_STATUSES.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {t(`people.employees.statuses.${s}` as any)}
                       </option>
                     ))}
                   </select>
@@ -416,7 +419,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Allotted Weekly Off <span className="text-xs text-stone-400 font-normal">(Days/Mo)</span>
+                    {t('people.modal.allottedWeeklyOff')} <span className="text-xs text-stone-400 font-normal">{t('people.modal.daysPerMonth')}</span>
                   </label>
                   <input
                     type="number"
@@ -431,13 +434,13 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Contractor / Agency <span className="text-xs text-stone-400 font-normal">(Optional)</span>
+                    {t('people.modal.contractor')} <span className="text-xs text-stone-400 font-normal">{t('people.modal.optional')}</span>
                   </label>
                   <input
                     type="text"
                     value={contractorName}
                     onChange={(e) => setContractorName(e.target.value)}
-                    placeholder="e.g. Maghe Singh or Security Agency"
+                    placeholder={t('people.modal.contractorPlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   />
                 </div>
@@ -447,32 +450,32 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
             {/* Bank Details */}
             <div className="space-y-3 pt-2 border-t border-stone-100">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-stone-800">Bank Details (Optional)</h3>
+                <h3 className="font-semibold text-stone-800">{t('people.modal.bankDetails')}</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
                   <label className="block font-medium text-stone-700 mb-1">
-                    Account Number <span className="text-stone-400 font-normal">(Optional)</span>
+                    {t('people.modal.accountNumber')} <span className="text-stone-400 font-normal">{t('people.modal.optional')}</span>
                   </label>
                   <input
                     type="text"
                     value={bankAccount}
                     onChange={(e) => setBankAccount(e.target.value)}
-                    placeholder="e.g. 5010049281729"
+                    placeholder={t('people.modal.accountNumberPlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 font-mono focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    IFSC Code <span className="text-stone-400 font-normal">(Optional)</span>
+                    {t('people.modal.ifscCode')} <span className="text-stone-400 font-normal">{t('people.modal.optional')}</span>
                   </label>
                   <input
                     type="text"
                     value={bankIfsc}
                     onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
-                    placeholder="e.g. HDFC0001234"
+                    placeholder={t('people.modal.ifscCodePlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 font-mono uppercase focus:outline-none focus:border-amber-500"
                   />
                 </div>
@@ -482,10 +485,10 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
             {/* Actions */}
             <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
               <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-                Cancel
+                {t('people.modal.cancel')}
               </Button>
               <Button type="submit" variant="amber" disabled={saving}>
-                {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Employee'}
+                {saving ? t('people.modal.saving') : isEdit ? t('people.modal.saveChanges') : t('people.modal.save')}
               </Button>
             </div>
           </form>

@@ -1,0 +1,47 @@
+{
+  "title": "Gate Counter",
+  "enrolled": "Enrolled",
+  "enrollGuardDevice": "Enroll Guard Device",
+  "syncStatus": {
+    "syncing": "Syncing ({count})",
+    "offline": "Offline ({count})",
+    "failed": "Failed ({count})",
+    "synced": "Synced"
+  },
+  "refreshTitle": "Refresh and sync transactions",
+  "kpi": {
+    "todaysVisitors": "Today's Visitors",
+    "todaysVehicles": "Today's Vehicles"
+  },
+  "visitors": {
+    "title": "Visitors",
+    "lastAction": "Last: {action}",
+    "undoLastTap": "Undo Last Tap",
+    "person": "Person",
+    "group": "Group"
+  },
+  "vehicles": {
+    "title": "Vehicles",
+    "car": "Car",
+    "bike": "Bike",
+    "others": "Others"
+  },
+  "regions": {
+    "DL": "DL",
+    "UP16": "UP16",
+    "UP22": "UP22",
+    "UP23": "UP23",
+    "HR": "HR",
+    "UK": "UK",
+    "Others": "Others"
+  },
+  "messages": {
+    "addedVisitors": "Added +{count} visitor(s)",
+    "addedVehicle": "Added vehicle ({location})",
+    "undoneVisitor": "Undid visitor event",
+    "undoneVehicle": "Undid vehicle event ({location})",
+    "noEventsToUndo": "No actions to undo for today",
+    "syncComplete": "Sync completed successfully",
+    "syncFailed": "Sync failed: {error}"
+  }
+}

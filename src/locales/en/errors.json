@@ -1,0 +1,9 @@
+{
+  "generic": "Something went wrong. Please try again.",
+  "unauthorized": "You are not authorized to perform this action.",
+  "forbidden": "Access restricted. You do not have sufficient permissions.",
+  "notFound": "Requested resource not found.",
+  "networkError": "Network connection error. Working in offline mode.",
+  "syncFailed": "Unable to synchronize with central server. Check internet connection.",
+  "validationFailed": "Please correct the highlighted errors before submitting."
+}
