@@ -6,33 +6,39 @@ import { Locale } from '@/locales';
  */
 
 export interface BilingualNamedEntity {
-  name: string;
+  name?: string | null;
   name_hi?: string | null;
 }
 
-export interface BilingualUnitEntity extends BilingualNamedEntity {
-  symbol: string;
+export interface BilingualUnitEntity {
+  symbol?: string | null;
   symbol_hi?: string | null;
+  name?: string | null;
+  name_hi?: string | null;
 }
 
 export function getLocalizedMasterName(
-  entity: BilingualNamedEntity | null | undefined,
+  entity: BilingualNamedEntity | BilingualNamedEntity[] | null | undefined,
   locale: Locale = 'en'
 ): string {
   if (!entity) return '';
-  if (locale === 'hi' && entity.name_hi && entity.name_hi.trim() !== '') {
-    return entity.name_hi;
+  const target = Array.isArray(entity) ? entity[0] : entity;
+  if (!target) return '';
+  if (locale === 'hi' && target.name_hi && target.name_hi.trim() !== '') {
+    return target.name_hi;
   }
-  return entity.name || '';
+  return target.name || '';
 }
 
 export function getLocalizedMasterSymbol(
-  unit: BilingualUnitEntity | null | undefined,
+  unit: BilingualUnitEntity | BilingualUnitEntity[] | null | undefined,
   locale: Locale = 'en'
 ): string {
   if (!unit) return '';
-  if (locale === 'hi' && unit.symbol_hi && unit.symbol_hi.trim() !== '') {
-    return unit.symbol_hi;
+  const target = Array.isArray(unit) ? unit[0] : unit;
+  if (!target) return '';
+  if (locale === 'hi' && target.symbol_hi && target.symbol_hi.trim() !== '') {
+    return target.symbol_hi;
   }
-  return unit.symbol || '';
+  return target.symbol || '';
 }

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Locale, DEFAULT_LOCALE, translations, LOCALES } from '@/locales';
 import { recordMissingKey } from './missing-keys';
 import { formatDisplayDateLocalized, formatTimeAgoLocalized } from './dates';
+import { interpolateTranslation } from './interpolation';
 import { createClient } from '@/lib/supabase/client';
 
 export interface I18nContextType {
@@ -145,18 +146,25 @@ export function I18nProvider({
         if (fallbackValue !== undefined && typeof fallbackValue === 'string') {
           value = fallbackValue;
         } else {
+          // Secondary fallback for common namespace: e.g. common.refresh <-> common.actions.refresh
+          if (keys[0] === 'common' && keys.length === 2) {
+            const subKey = keys[1];
+            const actionVal = dict?.common?.actions?.[subKey] || fallbackDict?.common?.actions?.[subKey];
+            const labelVal = dict?.common?.labels?.[subKey] || fallbackDict?.common?.labels?.[subKey];
+            if (typeof actionVal === 'string') return interpolateTranslation(actionVal, params, locale);
+            if (typeof labelVal === 'string') return interpolateTranslation(labelVal, params, locale);
+          }
+          if (keys[0] === 'common' && keys.length === 3) {
+            const subKey = keys[2];
+            const rootVal = dict?.common?.[subKey] || fallbackDict?.common?.[subKey];
+            if (typeof rootVal === 'string') return interpolateTranslation(rootVal, params, locale);
+          }
           return `[MISSING: ${path}]`;
         }
       }
 
-      // Variable interpolation
-      if (params) {
-        return value.replace(/\{(\w+)\}/g, (_: string, match: string) => {
-          return params[match] !== undefined ? String(params[match]) : `{${match}}`;
-        });
-      }
-
-      return value;
+      // Variable & ICU plural interpolation
+      return interpolateTranslation(value, params, locale);
     },
     [locale]
   );

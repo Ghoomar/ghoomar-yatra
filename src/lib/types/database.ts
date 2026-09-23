@@ -26,11 +26,14 @@ export interface InventoryItemPosition {
   item_id: string;
   item_code: string;
   name: string;
+  name_hi?: string | null;
   category_id: string;
   category_name?: string;
+  category_name_hi?: string | null;
   inventory_class: 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
   unit_id: string;
   unit_symbol?: string;
+  unit_symbol_hi?: string | null;
   minimum_stock: number;
   preferred_stock: number;
   replenishment_frequency: string;
@@ -40,6 +43,29 @@ export interface InventoryItemPosition {
   current_stock_value: number;
   last_movement_at?: string;
   is_active?: boolean;
+}
+
+export interface InventoryItem {
+  id: string;
+  item_code: string;
+  name: string;
+  name_hi?: string | null;
+  category_id: string;
+  inventory_class: 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
+  unit_id: string;
+  secondary_unit_id?: string | null;
+  conversion_factor?: number | null;
+  shelf_life_days?: number | null;
+  minimum_stock: number;
+  preferred_stock: number;
+  replenishment_frequency: string;
+  storage_type: string;
+  notes?: string | null;
+  is_active: boolean;
+  current_stock?: number;
+  current_weighted_average_cost?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface VendorCategory {

@@ -45,7 +45,8 @@
       "On Leave": "On Leave",
       "Resigned": "Resigned",
       "Terminated": "Terminated"
-    }
+    },
+    "staff": "Staff"
   },
   "modal": {
     "addTitle": "Add Employee",
@@ -266,5 +267,6 @@
     "tipLogged": "Tip of {amount} logged.",
     "tipFailed": "Failed to record tip: {error}",
     "validAmount": "Please enter a valid tip amount."
-  }
+  },
+  "staff": "Staff"
 }

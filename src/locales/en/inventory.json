@@ -430,5 +430,11 @@
       "actions": "Actions",
       "action": "Action"
     }
+  },
+  "classes": {
+    "Food Raw Material": "Food Raw Material",
+    "Non-Food Consumable": "Non-Food Consumable",
+    "Physical Asset": "Physical Asset",
+    "Uniform": "Uniform"
   }
 }

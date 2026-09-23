@@ -430,5 +430,11 @@
       "actions": "कार्रवाई",
       "action": "कार्रवाई"
     }
+  },
+  "classes": {
+    "Food Raw Material": "खाद्य कच्ची सामग्री",
+    "Non-Food Consumable": "गैर-खाद्य उपभोज्य",
+    "Physical Asset": "भौतिक संपत्ति",
+    "Uniform": "वर्दी"
   }
 }

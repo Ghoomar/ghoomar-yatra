@@ -902,9 +902,10 @@ export default function StoreIssuesPage() {
                               {m.purpose && (
                                 <span className="truncate">
                                   <span className="font-semibold text-stone-600">{t('inventory.issues.purpose')}:</span>{' '}
-                                  {t(`inventory.issues.purposeOptions.${m.purpose}` as any) !== `inventory.issues.purposeOptions.${m.purpose}`
-                                    ? t(`inventory.issues.purposeOptions.${m.purpose}` as any)
-                                    : m.purpose}
+                                  {(() => {
+                                    const translated = t(`inventory.issues.purposeOptions.${m.purpose}` as any);
+                                    return translated.startsWith('[MISSING:') ? m.purpose : translated;
+                                  })()}
                                 </span>
                               )}
                               {m.notes && m.notes !== `Issued to ${m.department?.name}` && (
