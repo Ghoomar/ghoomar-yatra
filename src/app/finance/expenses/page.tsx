@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 import { IndianRupee, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface ExpenseItem {
@@ -15,6 +17,7 @@ interface ExpenseItem {
   expense_date: string;
   category_id: string;
   category_name?: string;
+  category_name_hi?: string;
   description: string;
   amount: number;
   payment_method_name?: string;
@@ -28,6 +31,7 @@ interface ExpenseItem {
 
 export default function ExpensesPage() {
   const supabase = createClient();
+  const { t, locale } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -49,7 +53,7 @@ export default function ExpensesPage() {
     setLoading(true);
     try {
       const [{ data: catData }, { data: pmData }, { data: profData }] = await Promise.all([
-        supabase.from('expense_categories').select('*').order('display_order'),
+        supabase.from('expense_categories').select('id, name, name_hi, display_order').order('display_order'),
         supabase.from('payment_methods').select('*').order('name'),
         supabase
           .from('profiles')
@@ -62,7 +66,7 @@ export default function ExpensesPage() {
         .from('expenses')
         .select(`
           *,
-          category:expense_categories(name),
+          category:expense_categories(name, name_hi),
           payment_method:payment_methods(name),
           approver:profiles!expenses_approved_by_id_fkey(full_name, role:roles(name))
         `)
@@ -79,12 +83,13 @@ export default function ExpensesPage() {
         (expData || []).map((e: any) => ({
           ...e,
           category_name: e.category?.name,
+          category_name_hi: e.category?.name_hi,
           payment_method_name: e.payment_method?.name,
         }))
       );
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: 'Failed to load expenses.' });
+      setMessage({ type: 'error', text: t('finance.expenses.expenseLogFailed') });
     } finally {
       setLoading(false);
     }
@@ -139,7 +144,10 @@ export default function ExpensesPage() {
         },
       });
 
-      setMessage({ type: 'success', text: `Expense of ${formatINR(amount)} logged successfully.` });
+      setMessage({
+        type: 'success',
+        text: t('finance.expenses.expenseLoggedSuccess', { amount: formatINR(amount) }),
+      });
       setDescription('');
       setAmount(0);
       setPaidTo('');
@@ -147,7 +155,7 @@ export default function ExpensesPage() {
       loadData();
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Failed to record expense.' });
+      setMessage({ type: 'error', text: err.message || t('finance.expenses.expenseLogFailed') });
     } finally {
       setSaving(false);
     }
@@ -161,13 +169,13 @@ export default function ExpensesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <IndianRupee className="h-6 w-6 text-amber-600" />
-            Operational Expenses
+            {t('finance.expenses.title')}
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('finance.expenses.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -175,16 +183,20 @@ export default function ExpensesPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
       </div>
 
       {message && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
-          message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
-        }`}>
+        <div
+          className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
+            message.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
           {message.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           {message.text}
         </div>
@@ -192,60 +204,72 @@ export default function ExpensesPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Today's Expenses</CardDescription>
+          <CardDescription>{t('finance.expenses.todayExpenses')}</CardDescription>
           <div className="text-2xl font-bold text-rose-600 mt-1">
             {formatINR(totalDayExpenses)}
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Vouchers</CardDescription>
+          <CardDescription>{t('finance.expenses.vouchers')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1">{expenses.length}</div>
         </Card>
 
         <Card>
-          <CardDescription>Approval</CardDescription>
-          <div className="text-base font-semibold text-stone-800 mt-1">Pre-Approved Vouchers Only</div>
-          <div className="text-[11px] text-stone-500 mt-1">Spend approved before payment</div>
+          <CardDescription>{t('finance.expenses.approval')}</CardDescription>
+          <div className="text-base font-semibold text-stone-800 mt-1">
+            {t('finance.expenses.approvalNotice')}
+          </div>
+          <div className="text-[11px] text-stone-500 mt-1">
+            {t('finance.expenses.approvalSub')}
+          </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1">
           <CardHeader>
-            <CardTitle>Add Expense</CardTitle>
+            <CardTitle>{t('finance.expenses.addExpense')}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <form onSubmit={handleAddExpense} className="space-y-3 text-xs">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Category</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('finance.expenses.category')}
+                </label>
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  <option value="">Select Category...</option>
+                  <option value="">{t('finance.expenses.selectCategory')}</option>
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {getLocalizedMasterName(c, locale)}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Description</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('finance.expenses.description')}
+                </label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. Highway Banner Printing, Floor Cleaner"
+                  placeholder={t('finance.expenses.descPlaceholder')}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Amount (₹)</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('finance.expenses.amount')}
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -259,39 +283,45 @@ export default function ExpensesPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Paid Via</label>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    {t('finance.expenses.paidVia')}
+                  </label>
                   <select
                     value={paymentMethodId}
                     onChange={(e) => setPaymentMethodId(e.target.value)}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                   >
-                    <option value="">Select...</option>
+                    <option value="">{t('finance.expenses.select')}</option>
                     {paymentMethods.map((pm) => (
                       <option key={pm.id} value={pm.id}>{pm.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Paid To</label>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    {t('finance.expenses.paidTo')}
+                  </label>
                   <input
                     type="text"
                     value={paidTo}
                     onChange={(e) => setPaidTo(e.target.value)}
-                    placeholder="Recipient / Vendor"
+                    placeholder={t('finance.expenses.paidToPlaceholder')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Approved By *</label>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('finance.expenses.approvedBy')}
+                </label>
                 <select
                   value={approvedById}
                   onChange={(e) => setApprovedById(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
                 >
-                  <option value="">Select Authorizing Profile...</option>
+                  <option value="">{t('finance.expenses.selectApprover')}</option>
                   {approvers.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.full_name} ({a.role?.name || 'Staff'})
@@ -301,7 +331,7 @@ export default function ExpensesPage() {
               </div>
 
               <Button type="submit" variant="amber" disabled={saving} className="w-full mt-2">
-                {saving ? 'Recording...' : 'Record Expense'}
+                {saving ? t('finance.expenses.recording') : t('finance.expenses.recordExpense')}
               </Button>
             </form>
           </CardContent>
@@ -309,30 +339,32 @@ export default function ExpensesPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Expense Register</CardTitle>
+            <CardTitle>{t('finance.expenses.registerTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             {expenses.length === 0 ? (
               <div className="py-12 text-center text-stone-400 text-xs">
-                No expenses logged for {businessDate}.
+                {t('finance.expenses.noExpenses', { date: businessDate })}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold">
-                      <th className="py-2 px-2">Category</th>
-                      <th className="py-2 px-2">Description</th>
-                      <th className="py-2 px-2">Paid To</th>
-                      <th className="py-2 px-2">Approved By</th>
-                      <th className="py-2 px-2 text-right">Amount</th>
+                      <th className="py-2 px-2">{t('finance.expenses.colCategory')}</th>
+                      <th className="py-2 px-2">{t('finance.expenses.colDescription')}</th>
+                      <th className="py-2 px-2">{t('finance.expenses.colPaidTo')}</th>
+                      <th className="py-2 px-2">{t('finance.expenses.colApprovedBy')}</th>
+                      <th className="py-2 px-2 text-right">{t('finance.expenses.colAmount')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {expenses.map((e) => (
                       <tr key={e.id} className="hover:bg-stone-50/80 transition-colors">
                         <td className="py-2.5 px-2 font-medium text-stone-800">
-                          <Badge variant="outline">{e.category_name || 'General'}</Badge>
+                          <Badge variant="outline">
+                            {locale === 'hi' && e.category_name_hi ? e.category_name_hi : e.category_name || 'General'}
+                          </Badge>
                         </td>
                         <td className="py-2.5 px-2 text-stone-900 font-medium">{e.description}</td>
                         <td className="py-2.5 px-2 text-stone-600">{e.paid_to || '—'}</td>

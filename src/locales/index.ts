@@ -8,6 +8,9 @@ import enPeople from './en/people.json';
 import enInventory from './en/inventory.json';
 import enPurchases from './en/purchases.json';
 import enOperations from './en/operations.json';
+import enFinance from './en/finance.json';
+import enReports from './en/reports.json';
+import enDashboard from './en/dashboard.json';
 
 import hiCommon from './hi/common.json';
 import hiNavigation from './hi/navigation.json';
@@ -19,6 +22,9 @@ import hiPeople from './hi/people.json';
 import hiInventory from './hi/inventory.json';
 import hiPurchases from './hi/purchases.json';
 import hiOperations from './hi/operations.json';
+import hiFinance from './hi/finance.json';
+import hiReports from './hi/reports.json';
+import hiDashboard from './hi/dashboard.json';
 
 export type Locale = 'en' | 'hi';
 
@@ -40,6 +46,9 @@ export const enTranslations = {
   inventory: enInventory,
   purchases: enPurchases,
   operations: enOperations,
+  finance: enFinance,
+  reports: enReports,
+  dashboard: enDashboard,
 };
 
 export const hiTranslations = {
@@ -53,6 +62,9 @@ export const hiTranslations = {
   inventory: hiInventory,
   purchases: hiPurchases,
   operations: hiOperations,
+  finance: hiFinance,
+  reports: hiReports,
+  dashboard: hiDashboard,
 };
 
 export const translations: Record<Locale, typeof enTranslations> = {

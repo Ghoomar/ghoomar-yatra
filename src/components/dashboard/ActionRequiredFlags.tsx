@@ -1,8 +1,11 @@
+'use client';
+
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { AlertTriangle, AlertCircle, Info, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { useI18n } from '@/lib/i18n/context';
 
 export interface ActionFlag {
   id: string;
@@ -14,14 +17,16 @@ export interface ActionFlag {
 }
 
 export function ActionRequiredFlags({ flags }: { flags: ActionFlag[] }) {
+  const { t } = useI18n();
+
   if (flags.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Alerts</CardTitle>
+          <CardTitle>{t('dashboard.actionFlags.alertsTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-2 text-xs text-stone-500 py-6 text-center">
-          All systems operating smoothly. No active exceptions detected.
+          {t('dashboard.actionFlags.smoothOperation')}
         </CardContent>
       </Card>
     );
@@ -31,8 +36,8 @@ export function ActionRequiredFlags({ flags }: { flags: ActionFlag[] }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle>Alerts</CardTitle>
-          <Badge variant="danger">{flags.length} Attention Items</Badge>
+          <CardTitle>{t('dashboard.actionFlags.alertsTitle')}</CardTitle>
+          <Badge variant="danger">{t('dashboard.actionFlags.attentionItems', { count: flags.length })}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-2.5 pt-2 text-xs">

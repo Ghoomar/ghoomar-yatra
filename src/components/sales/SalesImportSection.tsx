@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { formatINR } from '@/lib/utils';
 import { SalesImportBatch } from '@/lib/types/sales';
+import { useI18n } from '@/lib/i18n/context';
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -13,11 +14,8 @@ import {
   AlertCircle,
   AlertTriangle,
   RefreshCw,
-  Clock,
-  Check,
   X,
   History,
-  FileText,
   Trash2,
 } from 'lucide-react';
 
@@ -26,6 +24,7 @@ interface SalesImportSectionProps {
 }
 
 export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps) {
+  const { t, locale } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
@@ -74,6 +73,21 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
     }
   };
 
+  const formatReportTypeLabel = (type: string) => {
+    switch (type) {
+      case 'HOURLY_ITEM_SALES':
+        return t('finance.sales.import.reportTypes.hourlyItemSales');
+      case 'ORDERS_MASTER':
+        return t('finance.sales.import.reportTypes.ordersMaster');
+      case 'EXECUTIVE_SUMMARY':
+        return t('finance.sales.import.reportTypes.executiveSummary');
+      case 'MENU_MASTER':
+        return t('finance.sales.import.reportTypes.menuMaster');
+      default:
+        return type;
+    }
+  };
+
   const uploadFile = async (overwrite: boolean = false) => {
     if (!file) return;
 
@@ -105,12 +119,16 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
       }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to import sales file.');
+        throw new Error(data.error || t('finance.sales.import.failedImport'));
       }
 
       setMessage({
         type: 'success',
-        text: `Successfully imported ${formatReportTypeLabel(data.batch.report_type)} for ${data.batch.business_date || 'Menu Master'} (${data.insertedRecords || data.batch.record_count} records).`,
+        text: t('finance.sales.import.successImport', {
+          reportType: formatReportTypeLabel(data.batch.report_type),
+          date: data.batch.business_date || 'Menu Master',
+          records: data.insertedRecords || data.batch.record_count,
+        }),
       });
 
       // Clear selection
@@ -127,7 +145,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
         onImportSuccess();
       }
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Error uploading file.' });
+      setMessage({ type: 'error', text: err.message || t('finance.sales.import.failedImport') });
     } finally {
       setUploading(false);
     }
@@ -147,7 +165,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
 
       setMessage({
         type: 'success',
-        text: `Successfully deleted ${formatReportTypeLabel(batchToDelete.report_type)} import for ${batchToDelete.business_date}.`,
+        text: `${formatReportTypeLabel(batchToDelete.report_type)} (${batchToDelete.business_date || ''})`,
       });
       setBatchToDelete(null);
       await loadBatches();
@@ -161,21 +179,6 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
     }
   };
 
-  const formatReportTypeLabel = (type: string) => {
-    switch (type) {
-      case 'HOURLY_ITEM_SALES':
-        return 'Hourly Item Sales';
-      case 'ORDERS_MASTER':
-        return 'Orders Master';
-      case 'EXECUTIVE_SUMMARY':
-        return 'Executive Summary';
-      case 'MENU_MASTER':
-        return 'Menu Master';
-      default:
-        return type;
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Upload Zone Card */}
@@ -183,10 +186,10 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-bold text-stone-900 flex items-center gap-2">
             <UploadCloud className="h-5 w-5 text-amber-600" />
-            Upload Petpooja Sales Report
+            {t('finance.sales.import.title')}
           </CardTitle>
           <CardDescription className="text-xs text-stone-500">
-            Upload raw Petpooja exports directly (.xlsx, .xls, .csv). The system detects the report format and imports orders, hourly item sales, executive summaries, or menu masters.
+            {t('finance.sales.import.description')}
           </CardDescription>
         </CardHeader>
 
@@ -240,16 +243,16 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   {file.name}
                 </p>
                 <p className="text-xs text-stone-500 font-mono">
-                  {(file.size / 1024).toFixed(1)} KB • Click or drop to replace
+                  {(file.size / 1024).toFixed(1)} KB • {t('finance.sales.import.clickToReplace')}
                 </p>
               </div>
             ) : (
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-stone-800">
-                  Drop Petpooja export file here, or <span className="text-amber-600 underline">browse</span>
+                  {t('finance.sales.import.dropPrompt')}
                 </p>
                 <p className="text-xs text-stone-400">
-                  Supports Hourly Item Sales, Orders Master, Executive Sales Summary, or Menu Export (.xlsx, .xls, .csv)
+                  {t('finance.sales.import.supportedFormats')}
                 </p>
               </div>
             )}
@@ -267,7 +270,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                 }}
                 disabled={uploading}
               >
-                Clear
+                {t('finance.sales.import.clear')}
               </Button>
               <Button
                 size="sm"
@@ -278,10 +281,10 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                 {uploading ? (
                   <>
                     <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                    Parsing &amp; Importing...
+                    {t('finance.sales.import.importing')}
                   </>
                 ) : (
-                  'Import Report'
+                  t('finance.sales.import.importReport')
                 )}
               </Button>
             </div>
@@ -295,10 +298,10 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
           <div>
             <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
               <History className="h-4 w-4 text-stone-500" />
-              Import History ({batches.length})
+              {t('finance.sales.import.historyTitle', { count: batches.length })}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Audit log of previously uploaded Petpooja reports
+              {t('finance.sales.import.historyDescription')}
             </CardDescription>
           </div>
           <Button
@@ -309,7 +312,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
             className="h-7 text-xs"
           >
             <RefreshCw className={`h-3 w-3 mr-1 ${loadingBatches ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('finance.sales.import.refresh')}
           </Button>
         </CardHeader>
 
@@ -317,24 +320,24 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
           {loadingBatches ? (
             <div className="py-12 text-center text-xs text-stone-400">
               <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2 text-amber-500" />
-              Loading import history...
+              {t('finance.sales.import.loadingHistory')}
             </div>
           ) : batches.length === 0 ? (
             <div className="py-12 text-center text-xs text-stone-400">
-              No reports imported yet. Upload your first Petpooja report above.
+              {t('finance.sales.import.noHistory')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Report Date</th>
-                    <th className="p-3">Report Type</th>
-                    <th className="p-3">File Name</th>
-                    <th className="p-3 text-center">Records</th>
-                    <th className="p-3 text-right">Net Sales</th>
-                    <th className="p-3 text-right">Imported At</th>
-                    <th className="p-3 text-center w-16">Action</th>
+                    <th className="p-3">{t('finance.sales.import.colDate')}</th>
+                    <th className="p-3">{t('finance.sales.import.colType')}</th>
+                    <th className="p-3">{t('finance.sales.import.colFile')}</th>
+                    <th className="p-3 text-center">{t('finance.sales.import.colRecords')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.import.colNetSales')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.import.colImportedAt')}</th>
+                    <th className="p-3 text-center w-16">{t('finance.sales.import.colAction')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -369,7 +372,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                         {b.total_net_sales > 0 ? formatINR(b.total_net_sales) : '—'}
                       </td>
                       <td className="p-3 text-right text-stone-400 whitespace-nowrap">
-                        {new Date(b.created_at).toLocaleString('en-IN', {
+                        {new Date(b.created_at).toLocaleString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
@@ -381,7 +384,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                           type="button"
                           onClick={() => setBatchToDelete(b)}
                           className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Delete this import batch"
+                          title={t('finance.sales.import.deleteTitle')}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -405,8 +408,12 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-stone-900">Duplicate Report Detected</h3>
-                  <p className="text-xs text-stone-500">Report already exists for this date</p>
+                  <h3 className="text-base font-bold text-stone-900">
+                    {t('finance.sales.import.duplicateModal.title')}
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    {t('finance.sales.import.duplicateModal.subtitle')}
+                  </p>
                 </div>
               </div>
               <button
@@ -423,10 +430,12 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
               </p>
 
               <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs space-y-1">
-                <span className="text-stone-400 block text-[10px] uppercase font-semibold">Existing Batch</span>
+                <span className="text-stone-400 block text-[10px] uppercase font-semibold">
+                  {t('finance.sales.import.duplicateModal.existingBatch')}
+                </span>
                 <p className="font-semibold text-stone-900">{duplicateModal.existingBatch?.file_name}</p>
                 <p className="text-stone-500">
-                  Net Sales: {formatINR(duplicateModal.existingBatch?.total_net_sales)} • Imported: {new Date(duplicateModal.existingBatch?.created_at).toLocaleDateString()}
+                  Net Sales: {formatINR(duplicateModal.existingBatch?.total_net_sales)} • Imported: {new Date(duplicateModal.existingBatch?.created_at).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
                 </p>
               </div>
 
@@ -436,7 +445,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   size="sm"
                   onClick={() => setDuplicateModal({ isOpen: false, message: '' })}
                 >
-                  Cancel
+                  {t('finance.sales.import.duplicateModal.cancel')}
                 </Button>
                 <Button
                   size="sm"
@@ -444,7 +453,9 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   disabled={uploading}
                   className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
                 >
-                  {uploading ? 'Overwriting...' : 'Overwrite & Replace'}
+                  {uploading
+                    ? t('finance.sales.import.duplicateModal.overwriting')
+                    : t('finance.sales.import.duplicateModal.overwrite')}
                 </Button>
               </div>
             </div>
@@ -462,8 +473,12 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   <Trash2 className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-stone-900">Remove Import Batch</h3>
-                  <p className="text-xs text-stone-500">Delete uploaded report and associated records</p>
+                  <h3 className="text-base font-bold text-stone-900">
+                    {t('finance.sales.import.deleteModal.title')}
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    {t('finance.sales.import.deleteModal.subtitle')}
+                  </p>
                 </div>
               </div>
               <button
@@ -476,28 +491,28 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
 
             <div className="p-6 space-y-4">
               <p className="text-xs text-stone-600 leading-relaxed">
-                Are you sure you want to remove this import? This will delete the batch and all dependent records (orders, hourly items, or executive metrics) atomically from sales analytics and reconciliation.
+                {t('finance.sales.import.deleteModal.warning')}
               </p>
 
               <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs space-y-1.5">
                 <div className="flex justify-between items-center text-stone-500 text-[11px]">
-                  <span>Report Type:</span>
+                  <span>{t('finance.sales.import.deleteModal.reportType')}</span>
                   <span className="font-semibold text-stone-800">{formatReportTypeLabel(batchToDelete.report_type)}</span>
                 </div>
                 <div className="flex justify-between items-center text-stone-500 text-[11px]">
-                  <span>Report Date:</span>
+                  <span>{t('finance.sales.import.deleteModal.reportDate')}</span>
                   <span className="font-semibold text-stone-800">{batchToDelete.business_date || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between items-center text-stone-500 text-[11px]">
-                  <span>File Name:</span>
+                  <span>{t('finance.sales.import.deleteModal.fileName')}</span>
                   <span className="font-mono text-stone-700 truncate max-w-[220px]" title={batchToDelete.file_name}>{batchToDelete.file_name}</span>
                 </div>
                 <div className="flex justify-between items-center text-stone-500 text-[11px]">
-                  <span>Records:</span>
+                  <span>{t('finance.sales.import.deleteModal.records')}</span>
                   <span className="font-semibold text-stone-800">{batchToDelete.record_count}</span>
                 </div>
                 <div className="flex justify-between items-center text-stone-500 text-[11px]">
-                  <span>Net Sales:</span>
+                  <span>{t('finance.sales.import.deleteModal.netSales')}</span>
                   <span className="font-bold text-stone-900">{formatINR(batchToDelete.total_net_sales)}</span>
                 </div>
               </div>
@@ -509,7 +524,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   onClick={() => setBatchToDelete(null)}
                   disabled={deleting}
                 >
-                  Cancel
+                  {t('finance.sales.import.deleteModal.cancel')}
                 </Button>
                 <Button
                   size="sm"
@@ -517,14 +532,9 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                   disabled={deleting}
                   className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
                 >
-                  {deleting ? (
-                    <>
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete Import'
-                  )}
+                  {deleting
+                    ? t('finance.sales.import.deleteModal.deleting')
+                    : t('finance.sales.import.deleteModal.deleteAction')}
                 </Button>
               </div>
             </div>

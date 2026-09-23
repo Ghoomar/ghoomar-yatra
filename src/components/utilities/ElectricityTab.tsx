@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatNumber, formatINR } from '@/lib/utils';
-import { Zap, Calculator, RefreshCw, AlertCircle, CheckCircle2, History, RotateCcw } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { Zap, Calculator, RefreshCw, AlertCircle, CheckCircle2, History } from 'lucide-react';
 
 interface ElectricityTabProps {
   businessDate: string;
@@ -28,6 +29,7 @@ export function ElectricityTab({
   setMessage,
 }: ElectricityTabProps) {
   const supabase = createClient();
+  const { t, locale } = useI18n();
   const [newReading, setNewReading] = useState<string>('');
   const [isReset, setIsReset] = useState(false);
   const [notes, setNotes] = useState('');
@@ -62,13 +64,11 @@ export function ElectricityTab({
   }, [supabase]);
 
   // 2. Fetch Continuous Chronological Baseline Reading
-  // Finds the latest reading strictly prior to or on the current business date
   useEffect(() => {
     const fetchBaseline = async () => {
       if (!selectedMeterId) return;
       setLoadingBaseline(true);
       try {
-        // Find latest reading chronologically
         const { data } = await supabase
           .from('meter_readings')
           .select('reading_value, reading_timestamp, business_date')
@@ -80,7 +80,6 @@ export function ElectricityTab({
         if (data && data.length > 0) {
           setLatestPriorReading(Number(data[0].reading_value));
         } else {
-          // Fallback to any latest reading
           const { data: anyLatest } = await supabase
             .from('meter_readings')
             .select('reading_value')
@@ -99,14 +98,10 @@ export function ElectricityTab({
     fetchBaseline();
   }, [selectedMeterId, businessDate, readings, supabase]);
 
-  // Filter readings for current selected meter from props
   const meterReadings = readings.filter((r) => r.meter_id === selectedMeterId);
-
-  // Total consumption for selected business date = sum of delta_consumption for readings on that date
   const todayConsumption = meterReadings.reduce((sum, r) => sum + (Number(r.delta_consumption) || 0), 0);
   const todayEstimatedCost = todayConsumption * costPerUnit;
 
-  // Real-time calculation for input
   const parsedNewReading = parseFloat(newReading);
   const isInputValid = !isNaN(parsedNewReading) && parsedNewReading > 0;
   
@@ -155,7 +150,7 @@ export function ElectricityTab({
 
       setMessage({
         type: 'success',
-        text: `Meter reading ${parsedNewReading.toFixed(1)} ${unitLabel} logged successfully. Consumption: +${previewConsumption.toFixed(1)} ${unitLabel} (${formatINR(previewCost)}).`,
+        text: t('finance.utilities.savedSuccess'),
       });
 
       setNewReading('');
@@ -174,25 +169,25 @@ export function ElectricityTab({
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
-          <CardDescription>Today's Consumption</CardDescription>
+          <CardDescription>{t('finance.utilities.todayConsumption')}</CardDescription>
           <div className="text-2xl font-bold text-amber-600 mt-1">
             {todayConsumption > 0 ? `${formatNumber(todayConsumption)} ${unitLabel}` : `0.0 ${unitLabel}`}
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            Estimated Cost: <strong className="text-stone-900 font-mono">{formatINR(todayEstimatedCost)}</strong>
+            {t('finance.utilities.estimatedCost')} <strong className="text-stone-900 font-mono">{formatINR(todayEstimatedCost)}</strong>
             <span className="text-[10px] text-stone-400 ml-1">(@ {formatINR(costPerUnit)}/{unitLabel})</span>
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Meter Reading</CardDescription>
+          <CardDescription>{t('finance.utilities.meterReading')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1 font-mono">
-            {latestPriorReading !== null ? `${latestPriorReading.toFixed(1)} ${unitLabel}` : 'No Prior Reading'}
+            {latestPriorReading !== null ? `${latestPriorReading.toFixed(1)} ${unitLabel}` : t('finance.utilities.noPriorReading')}
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Cost Rate</CardDescription>
+          <CardDescription>{t('finance.utilities.costRate')}</CardDescription>
           <div className="text-base font-semibold text-stone-800 mt-1 flex items-center gap-1.5">
             <Calculator className="h-4 w-4 text-amber-600" />
             <span>{formatINR(costPerUnit)} / {unitLabel}</span>
@@ -206,13 +201,13 @@ export function ElectricityTab({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-600" />
-              Meter Reading
+              {t('finance.utilities.meterReading')}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Select Meter</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.selectMeter')}</label>
                 <select
                   value={selectedMeterId}
                   onChange={(e) => setSelectedMeterId(e.target.value)}
@@ -228,7 +223,7 @@ export function ElectricityTab({
 
               <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/80 space-y-1">
                 <div className="flex items-center justify-between text-stone-600">
-                  <span>Previous Reading:</span>
+                  <span>{t('finance.utilities.previousReading')}</span>
                   <strong className="font-mono text-stone-900 text-sm">
                     {loadingBaseline ? 'Loading...' : latestPriorReading !== null ? `${latestPriorReading.toFixed(1)} ${unitLabel}` : '—'}
                   </strong>
@@ -237,7 +232,7 @@ export function ElectricityTab({
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Current Reading <span className="text-rose-500">*</span>
+                  {t('finance.utilities.currentReading')} <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative rounded-lg shadow-2xs">
                   <input
@@ -262,7 +257,7 @@ export function ElectricityTab({
                 {isLowerThanPrevious && !isReset && (
                   <p className="text-[11px] text-rose-600 mt-1.5 flex items-center gap-1 font-medium">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    Reading is lower than previous ({latestPriorReading} {unitLabel}). Check replacement/reset below if applicable.
+                    Reading is lower than previous ({latestPriorReading} {unitLabel}).
                   </p>
                 )}
               </div>
@@ -271,13 +266,13 @@ export function ElectricityTab({
               {isInputValid && latestPriorReading !== null && (
                 <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-lg space-y-1.5">
                   <div className="font-bold text-amber-900 flex items-center justify-between text-xs">
-                    <span>Calculated Consumption:</span>
+                    <span>{t('finance.utilities.previewDelta')}</span>
                     <span className="font-mono text-sm font-extrabold text-amber-800">
                       {isReset ? `0.0 ${unitLabel} (Reset)` : `+${previewConsumption.toFixed(1)} ${unitLabel}`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-stone-600 text-[11px]">
-                    <span>Estimated Cost:</span>
+                    <span>{t('finance.utilities.previewCost')}</span>
                     <strong className="font-mono text-stone-900">{formatINR(previewCost)}</strong>
                   </div>
                 </div>
@@ -292,17 +287,17 @@ export function ElectricityTab({
                   className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                 />
                 <label htmlFor="isReset" className="text-xs text-stone-700 cursor-pointer select-none leading-tight font-semibold text-stone-900">
-                  Meter Replaced / Rolled Over
+                  {t('finance.utilities.meterReset')}
                 </label>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.notes')}</label>
                 <input
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Lunch rush closing reading"
+                  placeholder={t('finance.utilities.notesPlaceholder')}
                   className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -315,11 +310,11 @@ export function ElectricityTab({
               >
                 {saving ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" /> Saving Reading...
+                    <RefreshCw className="h-4 w-4 animate-spin" /> {t('finance.utilities.saving')}
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="h-4 w-4" /> Record Reading
+                    <CheckCircle2 className="h-4 w-4" /> {t('finance.utilities.saveReading')}
                   </>
                 )}
               </Button>
@@ -331,34 +326,29 @@ export function ElectricityTab({
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-base font-bold">Meter Readings</CardTitle>
+              <CardTitle className="text-base font-bold">{t('finance.utilities.historyTitle', { date: businessDate })}</CardTitle>
             </div>
             <Badge variant={meterReadings.length > 0 ? 'success' : 'outline'}>
-              {meterReadings.length} {meterReadings.length === 1 ? 'Reading' : 'Readings'} Today
+              {meterReadings.length}
             </Badge>
           </CardHeader>
           <CardContent className="pt-0">
             {meterReadings.length === 0 ? (
               <div className="py-16 text-center text-stone-400 text-xs space-y-2">
                 <History className="h-8 w-8 mx-auto text-stone-300" />
-                <div>No readings logged for {businessDate}.</div>
-                <div className="text-[11px] text-stone-400">
-                  {latestPriorReading !== null
-                    ? `Next reading will chain from prior baseline (${latestPriorReading.toFixed(1)} ${unitLabel}).`
-                    : 'Log the opening reading to start the continuous ledger.'}
-                </div>
+                <div>{t('finance.utilities.noReadings', { date: businessDate })}</div>
               </div>
             ) : (
               <div className="overflow-x-auto text-xs">
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Time</th>
-                      <th className="py-2.5 px-3 text-right">Previous</th>
-                      <th className="py-2.5 px-3 text-right">Reading ({unitLabel})</th>
-                      <th className="py-2.5 px-3 text-right">Consumption</th>
-                      <th className="py-2.5 px-3 text-right">Estimated Cost</th>
-                      <th className="py-2.5 px-3">Notes</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.colTime')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.previousReading')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.colReading')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.colDelta')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.colCost')}</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.colNotes')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -373,7 +363,7 @@ export function ElectricityTab({
                       return (
                         <tr key={r.id} className="hover:bg-stone-50/80">
                           <td className="py-2.5 px-3 text-stone-700 whitespace-nowrap">
-                            {new Date(r.reading_timestamp).toLocaleTimeString('en-IN', {
+                            {new Date(r.reading_timestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
                               hour: 'numeric',
                               minute: '2-digit',
                               hour12: true,
@@ -392,7 +382,7 @@ export function ElectricityTab({
                           </td>
                           <td className="py-2.5 px-3 text-right font-semibold text-amber-700 font-mono">
                             {r.is_reset ? (
-                              <span className="text-sky-700 font-normal">Baseline Reset</span>
+                              <span className="text-sky-700 font-normal">Reset</span>
                             ) : deltaVal > 0 ? (
                               `+${deltaVal.toFixed(1)} ${unitLabel}`
                             ) : (

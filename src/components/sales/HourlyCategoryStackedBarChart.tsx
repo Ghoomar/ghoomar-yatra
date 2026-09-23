@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { HourlyCategoryDataPoint } from '@/lib/types/sales';
 import { formatINR } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
 
 interface HourlyCategoryStackedBarChartProps {
   hourlyData: HourlyCategoryDataPoint[];
@@ -40,6 +41,7 @@ export function HourlyCategoryStackedBarChart({
   hourlyData,
   parentCategoriesList,
 }: HourlyCategoryStackedBarChartProps) {
+  const { t } = useI18n();
   const [hoveredHour, setHoveredHour] = useState<HourlyCategoryDataPoint | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -198,7 +200,8 @@ export function HourlyCategoryStackedBarChart({
             <span className="font-mono font-bold text-sm">{formatINR(hoveredHour.total_sales)}</span>
           </div>
           <div className="text-[11px] text-stone-300 mb-2">
-            Items sold: <span className="font-semibold text-white">{hoveredHour.total_quantity}</span>
+            {t('finance.sales.analytics.hourlyChart.tooltipSold')}{' '}
+            <span className="font-semibold text-white">{hoveredHour.total_quantity}</span>
           </div>
 
           <div className="space-y-1">
@@ -239,7 +242,9 @@ export function HourlyCategoryStackedBarChart({
         ))}
         {parentCategoriesList.length > 10 && (
           <span className="text-stone-400 text-[11px]">
-            +{parentCategoriesList.length - 10} more
+            {t('finance.sales.analytics.hourlyChart.moreCategories', {
+              count: parentCategoriesList.length - 10,
+            })}
           </span>
         )}
       </div>

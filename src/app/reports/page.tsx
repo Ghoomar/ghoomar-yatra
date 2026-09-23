@@ -33,6 +33,8 @@ import {
 import { DailySalesLineGraph } from '@/components/reports/DailySalesLineGraph';
 import { SalesAnalyticsDashboard } from '@/components/sales/SalesAnalyticsDashboard';
 import { GateTimeAnalyticsChart } from '@/components/reports/GateTimeAnalyticsChart';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 type DrilldownType = 'restaurant' | 'snacks' | 'camel' | 'games' | 'mehendi' | 'champi' | null;
 
@@ -48,6 +50,7 @@ const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
 const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
 
 export default function ReportsPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [activeTab, setActiveTab] = useState<'sales' | 'inventory' | 'vendors'>('sales');
@@ -122,8 +125,8 @@ export default function ReportsPage() {
           .from('stock_movements')
           .select(`
             id, item_id, created_at, movement_type, purpose, quantity, unit_cost, total_value,
-            item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol)),
-            department:departments(name),
+            item:inventory_items(name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi)),
+            department:departments(name, name_hi),
             responsible_person:employees(name)
           `)
           .eq('business_date', businessDate)
@@ -187,7 +190,7 @@ export default function ReportsPage() {
 
   const exportCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) {
-      alert('No data available to export.');
+      alert(locale === 'hi' ? 'निर्यात के लिए कोई डेटा उपलब्ध नहीं है।' : 'No data available to export.');
       return;
     }
     const keys = Object.keys(data[0]);
@@ -403,6 +406,7 @@ export default function ReportsPage() {
 
   // 8. Factual Dynamic Executive Prose Brief
   const executiveBrief = useMemo(() => {
+    const isHindi = locale === 'hi';
     const lines: string[] = [];
 
     // Date formatting (prominent long format: e.g. 20 September 2026)
@@ -410,72 +414,152 @@ export default function ReportsPage() {
 
     // Zero-data case: neither gate nor sales logged
     if (gateFootfall === 0 && consolidatedGross === 0) {
-      return `On ${formattedDate}, no resort gate footfall or restaurant sales were logged in the system.`;
+      return isHindi
+        ? `${formattedDate} को, सिस्टम में कोई रिज़ॉर्ट गेट विज़िटर्स या रेस्टोरेंट बिक्री दर्ज नहीं की गई थी।`
+        : `On ${formattedDate}, no resort gate footfall or restaurant sales were logged in the system.`;
     }
 
     // Gate & Traffic sentence
     if (gateFootfall > 0) {
-      let vehicleStr = `${totalVehicles} total vehicles (${totalBikes} two-wheelers and ${totalCars} cars)`;
-      if (topVehiclePrefix) {
-        vehicleStr += `, led by prefix ${topVehiclePrefix.name} (${topVehiclePrefix.count} vehicles)`;
+      if (isHindi) {
+        let vehicleStr = `कुल ${totalVehicles} वाहन (${totalBikes} दोपहिया और ${totalCars} कारें)`;
+        if (topVehiclePrefix) {
+          vehicleStr += `, जिसमें मुख्य रूप से प्रीफ़िक्स ${topVehiclePrefix.name} (${topVehiclePrefix.count} वाहन) शामिल थे`;
+        }
+        lines.push(
+          `${formattedDate} को, रिज़ॉर्ट गेट पर कुल ${formatNumber(gateFootfall)} आगंतुक दर्ज किए गए। सबसे अधिक भीड़ ${
+            peakVisitorHour?.label || 'शाम के समय'
+          } (${peakVisitorHour?.count || 0} प्रविष्टियाँ) रही। वाहन यातायात में ${vehicleStr}।`
+        );
+      } else {
+        let vehicleStr = `${totalVehicles} total vehicles (${totalBikes} two-wheelers and ${totalCars} cars)`;
+        if (topVehiclePrefix) {
+          vehicleStr += `, led by prefix ${topVehiclePrefix.name} (${topVehiclePrefix.count} vehicles)`;
+        }
+        lines.push(
+          `On ${formattedDate}, resort gate arrivals recorded ${formatNumber(gateFootfall)} persons. Peak visitor flow occurred between ${
+            peakVisitorHour?.label || 'evening hours'
+          } (${peakVisitorHour?.count || 0} entries). Vehicle traffic comprised ${vehicleStr}.`
+        );
       }
-      lines.push(
-        `On ${formattedDate}, resort gate arrivals recorded ${formatNumber(gateFootfall)} persons. Peak visitor flow occurred between ${
-          peakVisitorHour?.label || 'evening hours'
-        } (${peakVisitorHour?.count || 0} entries). Vehicle traffic comprised ${vehicleStr}.`
-      );
     } else {
-      lines.push(`On ${formattedDate}, no gate footfall was logged.`);
+      lines.push(isHindi ? `${formattedDate} को कोई गेट फ़ुटफ़ॉल दर्ज नहीं किया गया।` : `On ${formattedDate}, no gate footfall was logged.`);
     }
 
     // Dining Performance & Conversion sentence
     if (dineInOrders.length > 0) {
-      const convText =
-        dinerConversionRate !== null
-          ? `This yielded a ${dinerConversionRate.toFixed(1)}% diner conversion rate from gate footfall`
-          : `Diner conversion is unavailable due to unrecorded gate footfall`;
-      const apcText = spendPerDiner !== null ? formatINR(spendPerDiner) : '—';
-      const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} PAX/bill` : '—';
+      if (isHindi) {
+        const convText =
+          dinerConversionRate !== null
+            ? `गेट फ़ुटफ़ॉल से डाइनर कन्वर्शन दर ${dinerConversionRate.toFixed(1)}% रही`
+            : `गेट फ़ुटफ़ॉल दर्ज न होने के कारण कन्वर्शन दर उपलब्ध नहीं है`;
+        const apcText = spendPerDiner !== null ? formatINR(spendPerDiner) : '—';
+        const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} PAX/बिल` : '—';
 
-      lines.push(
-        `The main restaurant served ${formatNumber(dineInPax)} Dine-In covers across ${dineInBillsCount} Dine-In bills. ${convText}, with an average spend per diner (APC) of ${apcText} and an average party size of ${partyText}. Total Dine-In sales were ${formatINR(
-          dineInNet
-        )} Net, ${formatINR(dineInTax)} GST, and ${formatINR(dineInGross)} Gross.`
-      );
+        lines.push(
+          `मुख्य रेस्टोरेंट ने ${dineInBillsCount} डाइन-इन बिलों के माध्यम से ${formatNumber(dineInPax)} डाइन-इन कवर्स को सेवा दी। ${convText}, जिसमें प्रति डाइनर औसत खर्च (APC) ${apcText} और औसत पार्टी आकार ${partyText} रहा। कुल डाइन-इन बिक्री ${formatINR(
+            dineInNet
+          )} शुद्ध (Net), ${formatINR(dineInTax)} GST, और ${formatINR(dineInGross)} सकल (Gross) रही।`
+        );
+      } else {
+        const convText =
+          dinerConversionRate !== null
+            ? `This yielded a ${dinerConversionRate.toFixed(1)}% diner conversion rate from gate footfall`
+            : `Diner conversion is unavailable due to unrecorded gate footfall`;
+        const apcText = spendPerDiner !== null ? formatINR(spendPerDiner) : '—';
+        const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} PAX/bill` : '—';
+
+        lines.push(
+          `The main restaurant served ${formatNumber(dineInPax)} Dine-In covers across ${dineInBillsCount} Dine-In bills. ${convText}, with an average spend per diner (APC) of ${apcText} and an average party size of ${partyText}. Total Dine-In sales were ${formatINR(
+            dineInNet
+          )} Net, ${formatINR(dineInTax)} GST, and ${formatINR(dineInGross)} Gross.`
+        );
+      }
     } else if (gateFootfall > 0) {
-      lines.push(`No Dine-In restaurant covers were recorded for ${formattedDate} (0.0% diner conversion from gate footfall).`);
+      lines.push(
+        isHindi
+          ? `${formattedDate} के लिए कोई डाइन-इन कवर्स दर्ज नहीं किए गए (गेट फ़ुटफ़ॉल से 0.0% डाइनर कन्वर्शन)।`
+          : `No Dine-In restaurant covers were recorded for ${formattedDate} (0.0% diner conversion from gate footfall).`
+      );
     } else {
-      lines.push(`No Dine-In restaurant covers were recorded for ${formattedDate}.`);
+      lines.push(
+        isHindi
+          ? `${formattedDate} के लिए कोई डाइन-इन कवर्स दर्ज नहीं किए गए।`
+          : `No Dine-In restaurant covers were recorded for ${formattedDate}.`
+      );
     }
 
     // Snacks Stall sentence
     if (snacksBillCount > 0) {
-      const topItemsStr =
-        snacksTopItems.length > 0
-          ? `, supported by top items ${snacksTopItems.map((i) => `${i.name} (${i.qty} units)`).join(', ')}`
-          : '';
-      const abvText = snacksAbv !== null ? formatINR(snacksAbv) : '—';
-      lines.push(
-        `The Snacks Stall handled ${snacksBillCount} orders, generating ${formatINR(snacksNet)} Net and ${formatINR(
-          snacksGross
-        )} Gross with an average order value of ${abvText}${topItemsStr}.`
-      );
+      if (isHindi) {
+        const topItemsStr =
+          snacksTopItems.length > 0
+            ? `, जिसमें प्रमुख व्यंजन ${snacksTopItems.map((i) => `${i.name} (${i.qty} यूनिट)`).join(', ')} शामिल रहे`
+            : '';
+        const abvText = snacksAbv !== null ? formatINR(snacksAbv) : '—';
+        lines.push(
+          `स्नैक्स स्टॉल ने ${snacksBillCount} ऑर्डर पूरे किए, जिससे ${formatINR(snacksNet)} शुद्ध (Net) और ${formatINR(
+            snacksGross
+          )} सकल (Gross) बिक्री उत्पन्न हुई, जिसका औसत ऑर्डर मूल्य ${abvText} रहा${topItemsStr}।`
+        );
+      } else {
+        const topItemsStr =
+          snacksTopItems.length > 0
+            ? `, supported by top items ${snacksTopItems.map((i) => `${i.name} (${i.qty} units)`).join(', ')}`
+            : '';
+        const abvText = snacksAbv !== null ? formatINR(snacksAbv) : '—';
+        lines.push(
+          `The Snacks Stall handled ${snacksBillCount} orders, generating ${formatINR(snacksNet)} Net and ${formatINR(
+            snacksGross
+          )} Gross with an average order value of ${abvText}${topItemsStr}.`
+        );
+      }
     }
 
     // Village Attractions sentence
     const actParts: string[] = [];
-    if (camelData.totalQty > 0) actParts.push(`Camel Ride: ${camelData.totalQty} rides (${formatINR(camelData.totalGross)})`);
-    if (gamesData.totalQty > 0) actParts.push(`Skill Games: ${gamesData.totalQty} tickets (${formatINR(gamesData.totalGross)})`);
-    if (mehendiData.totalQty > 0) actParts.push(`Mehendi: ${mehendiData.totalQty} clients (${formatINR(mehendiData.totalGross)})`);
-    if (champiData.totalQty > 0) actParts.push(`Champi: ${champiData.totalQty} sessions (${formatINR(champiData.totalGross)})`);
+    if (camelData.totalQty > 0) {
+      actParts.push(
+        isHindi
+          ? `ऊंट सवारी: ${camelData.totalQty} सवारी (${formatINR(camelData.totalGross)})`
+          : `Camel Ride: ${camelData.totalQty} rides (${formatINR(camelData.totalGross)})`
+      );
+    }
+    if (gamesData.totalQty > 0) {
+      actParts.push(
+        isHindi
+          ? `कौशल खेल: ${gamesData.totalQty} टिकट (${formatINR(gamesData.totalGross)})`
+          : `Skill Games: ${gamesData.totalQty} tickets (${formatINR(gamesData.totalGross)})`
+      );
+    }
+    if (mehendiData.totalQty > 0) {
+      actParts.push(
+        isHindi
+          ? `मेहंदी: ${mehendiData.totalQty} ग्राहक (${formatINR(mehendiData.totalGross)})`
+          : `Mehendi: ${mehendiData.totalQty} clients (${formatINR(mehendiData.totalGross)})`
+      );
+    }
+    if (champiData.totalQty > 0) {
+      actParts.push(
+        isHindi
+          ? `चंपा मालिश: ${champiData.totalQty} सत्र (${formatINR(champiData.totalGross)})`
+          : `Champi: ${champiData.totalQty} sessions (${formatINR(champiData.totalGross)})`
+      );
+    }
 
     if (actParts.length > 0) {
-      lines.push(`Village activity sales: ${actParts.join('; ')}.`);
+      lines.push(
+        isHindi
+          ? `ग्राम्य आकर्षण गतिविधियाँ बिक्री: ${actParts.join('; ')}।`
+          : `Village activity sales: ${actParts.join('; ')}.`
+      );
     }
 
     // Consolidated Total & Pacing sentence
     lines.push(
-      `Consolidated estate Gross Sales totaled ${formatINR(consolidatedGross)} across ${totalBillsCount} successful bills.`
+      isHindi
+        ? `कुल समेकित सकल बिक्री (Gross Sales) ${totalBillsCount} सफल बिलों के साथ ${formatINR(consolidatedGross)} रही।`
+        : `Consolidated estate Gross Sales totaled ${formatINR(consolidatedGross)} across ${totalBillsCount} successful bills.`
     );
 
     // Factual DoD and WoW comparison
@@ -484,12 +568,16 @@ export default function ReportsPage() {
       const dodGrossPct = (((consolidatedGross - prevGross) / prevGross) * 100).toFixed(1);
       const dodGrossDir = Number(dodGrossPct) >= 0 ? `+${dodGrossPct}%` : `${dodGrossPct}%`;
 
-      let compStr = `Day-over-day gross sales moved ${dodGrossDir} relative to ${formatDisplayDate(prevDayDate, 'short')} (${formatINR(prevGross)}).`;
+      let compStr = isHindi
+        ? `पिछले दिन (${formatDisplayDate(prevDayDate, 'short')}, ${formatINR(prevGross)}) की तुलना में सकल बिक्री में ${dodGrossDir} का परिवर्तन हुआ।`
+        : `Day-over-day gross sales moved ${dodGrossDir} relative to ${formatDisplayDate(prevDayDate, 'short')} (${formatINR(prevGross)}).`;
       if (prevDayGate && prevDayGate.total_visitors > 0 && gateFootfall > 0) {
         const pdFootfall = prevDayGate.total_visitors;
         const dodFootPct = (((gateFootfall - pdFootfall) / pdFootfall) * 100).toFixed(1);
         const dodFootDir = Number(dodFootPct) >= 0 ? `+${dodFootPct}%` : `${dodFootPct}%`;
-        compStr += ` Gate footfall moved ${dodFootDir} compared to ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} visitors).`;
+        compStr += isHindi
+          ? ` गेट फ़ुटफ़ॉल में ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} आगंतुक) की तुलना में ${dodFootDir} का बदलाव देखा गया।`
+          : ` Gate footfall moved ${dodFootDir} compared to ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} visitors).`;
       }
       lines.push(compStr);
     }
@@ -498,12 +586,17 @@ export default function ReportsPage() {
       const pwGross = Number(prevWeekSummary.gross_sales);
       const wowGrossPct = (((consolidatedGross - pwGross) / pwGross) * 100).toFixed(1);
       const wowGrossDir = Number(wowGrossPct) >= 0 ? `+${wowGrossPct}%` : `${wowGrossPct}%`;
-      lines.push(`Week-over-week gross sales moved ${wowGrossDir} compared to same weekday on ${formatDisplayDate(prevWeekDate, 'short')} (${formatINR(pwGross)}).`);
+      lines.push(
+        isHindi
+          ? `पिछले सप्ताह के समान दिन (${formatDisplayDate(prevWeekDate, 'short')}, ${formatINR(pwGross)}) की तुलना में सप्ताह-दर-सप्ताह सकल बिक्री में ${wowGrossDir} का बदलाव हुआ।`
+          : `Week-over-week gross sales moved ${wowGrossDir} compared to same weekday on ${formatDisplayDate(prevWeekDate, 'short')} (${formatINR(pwGross)}).`
+      );
     }
 
     return lines.join(' ');
   }, [
     businessDate,
+    locale,
     gateFootfall,
     totalVehicles,
     totalBikes,
@@ -541,32 +634,65 @@ export default function ReportsPage() {
   const executiveHighlights = useMemo(() => {
     const items: { label: string; value: string; sub?: string }[] = [];
     if (gateFootfall > 0) {
-      items.push({ label: 'Visitors', value: formatNumber(gateFootfall), sub: 'Gate footfall' });
+      items.push({
+        label: t('reports.operationsSummary.visitors'),
+        value: formatNumber(gateFootfall),
+        sub: t('reports.operationsSummary.visitorsSub'),
+      });
     }
     if (dineInPax > 0) {
-      items.push({ label: 'Restaurant', value: `${formatNumber(dineInPax)} Covers`, sub: `${dineInBillsCount} bills` });
+      items.push({
+        label: t('reports.operationsSummary.restaurant'),
+        value: t('reports.operationsSummary.restaurantCovers', { pax: formatNumber(dineInPax) }),
+        sub: t('reports.operationsSummary.restaurantBillsSub', { count: dineInBillsCount }),
+      });
     }
     if (dinerConversionRate !== null && dinerConversionRate > 0) {
-      items.push({ label: 'Conversion', value: `${dinerConversionRate.toFixed(1)}%`, sub: 'PAX ÷ footfall' });
+      items.push({
+        label: t('reports.operationsSummary.conversion'),
+        value: `${dinerConversionRate.toFixed(1)}%`,
+        sub: t('reports.operationsSummary.conversionSub'),
+      });
     }
     if (spendPerDiner !== null && spendPerDiner > 0) {
-      items.push({ label: 'APC', value: formatINR(spendPerDiner), sub: 'Spend / cover' });
+      items.push({
+        label: t('reports.operationsSummary.apc'),
+        value: formatINR(spendPerDiner),
+        sub: t('reports.operationsSummary.apcSub'),
+      });
     }
     if (peakVisitorHour?.label) {
-      items.push({ label: 'Peak Period', value: peakVisitorHour.label, sub: `${peakVisitorHour.count || 0} entries` });
+      items.push({
+        label: t('reports.operationsSummary.peakPeriod'),
+        value: peakVisitorHour.label,
+        sub: t('reports.operationsSummary.peakEntries', { count: peakVisitorHour.count || 0 }),
+      });
     }
     if (dineInNet > 0) {
-      items.push({ label: 'Restaurant Net', value: formatINR(dineInNet, true), sub: 'Net Sales' });
+      items.push({
+        label: t('reports.operationsSummary.restaurantNet'),
+        value: formatINR(dineInNet, true),
+        sub: t('reports.operationsSummary.netSalesSub'),
+      });
     }
     if (snacksGross > 0) {
-      items.push({ label: 'Snacks Stall', value: formatINR(snacksGross, true), sub: `${snacksBillCount} orders` });
+      items.push({
+        label: t('reports.operationsSummary.snacksStall'),
+        value: formatINR(snacksGross, true),
+        sub: t('reports.operationsSummary.snacksOrdersSub', { count: snacksBillCount }),
+      });
     }
     const actTotal = camelData.totalGross + gamesData.totalGross + mehendiData.totalGross + champiData.totalGross;
     if (actTotal > 0) {
-      items.push({ label: 'Attractions', value: formatINR(actTotal, true), sub: 'Gross Sales' });
+      items.push({
+        label: t('reports.operationsSummary.attractions'),
+        value: formatINR(actTotal, true),
+        sub: t('reports.operationsSummary.attractionsSub'),
+      });
     }
     return items;
   }, [
+    t,
     gateFootfall,
     dineInPax,
     dineInBillsCount,
@@ -593,16 +719,16 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#6B162E] flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-[#6B162E]" />
-            Management Reports &amp; Intelligence
+            {t('reports.title')}
           </h1>
           <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
-            Unified operational and revenue performance dashboard across all estate channels.
+            {t('reports.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-2 bg-white border border-[#E7E2D8] rounded-xl px-3 py-1.5 shadow-xs text-xs font-medium">
-            <span className="text-stone-500">Business Date:</span>
+            <span className="text-stone-500">{t('reports.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -610,7 +736,7 @@ export default function ReportsPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadData} title="Refresh all reports" className="rounded-xl border-[#E7E2D8]">
+          <Button variant="outline" size="sm" onClick={loadData} title={t('reports.salesLineGraph.refreshTitle')} className="rounded-xl border-[#E7E2D8]">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-[#6B162E]' : 'text-stone-600'}`} />
           </Button>
         </div>
@@ -627,7 +753,7 @@ export default function ReportsPage() {
           }`}
         >
           <TrendingUp className="h-4 w-4" />
-          Revenue &amp; Operations Intelligence
+          {t('reports.tabs.sales')}
         </button>
         <button
           onClick={() => setActiveTab('inventory')}
@@ -638,7 +764,7 @@ export default function ReportsPage() {
           }`}
         >
           <Layers className="h-4 w-4" />
-          Store Consumption Ledger
+          {t('reports.tabs.inventory')}
         </button>
         <button
           onClick={() => setActiveTab('vendors')}
@@ -649,7 +775,7 @@ export default function ReportsPage() {
           }`}
         >
           <ArrowRightLeft className="h-4 w-4" />
-          Vendor Outstanding Ledger
+          {t('reports.tabs.vendors')}
         </button>
       </div>
 
@@ -670,16 +796,24 @@ export default function ReportsPage() {
               <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-900">
                 <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
                 <span>
-                  <strong className="font-semibold">Reconciled:</strong> Consolidated Gross Sales ({formatINR(consolidatedGross)}) matches all granular sales channels for {formatDisplayDate(businessDate, 'short')}.
+                  <strong className="font-semibold">{t('reports.reconciliation.reconciledTitle')}</strong>{' '}
+                  {t('reports.reconciliation.reconciledText', {
+                    amount: formatINR(consolidatedGross),
+                    date: formatDisplayDate(businessDate, 'short'),
+                  })}
                 </span>
               </div>
             ) : (
               <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-900">
                 <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-amber-900">Sales Reconciliation Notice</div>
+                  <div className="font-bold text-amber-900">{t('reports.reconciliation.varianceTitle')}</div>
                   <div className="text-amber-800 mt-0.5">
-                    Consolidated Gross ({formatINR(consolidatedGross)}) differs from granular channel bills total ({formatINR(granularStreamsGrossSum)}) by <strong className="font-mono">{formatINR(reconciliationDifference)}</strong>. Review Daily Sales batches.
+                    {t('reports.reconciliation.varianceText', {
+                      gross: formatINR(consolidatedGross),
+                      streams: formatINR(granularStreamsGrossSum),
+                      diff: formatINR(reconciliationDifference),
+                    })}
                   </div>
                 </div>
               </div>
@@ -692,20 +826,20 @@ export default function ReportsPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-[#6B162E]" />
-                  Daily Operations Summary
+                  {t('reports.operationsSummary.title')}
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px] font-medium border-[#E7E2D8]">
                   {formatDisplayDate(businessDate, 'short')}
                 </Badge>
               </div>
               <CardDescription className="text-xs text-stone-500">
-                Unified operational and financial performance overview
+                {t('reports.operationsSummary.subtitle')}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-1">
               {loading ? (
                 <div className="py-4 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading operational summary...
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> {t('reports.operationsSummary.loading')}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -729,11 +863,11 @@ export default function ReportsPage() {
                       onClick={() => setShowFullExecutiveSummary(!showFullExecutiveSummary)}
                       className="text-xs font-semibold text-[#6B162E] hover:text-[#521123] flex items-center gap-1 cursor-pointer transition-colors"
                     >
-                      <span>{showFullExecutiveSummary ? 'Hide summary' : 'View full summary'}</span>
+                      <span>{showFullExecutiveSummary ? t('reports.operationsSummary.hideSummary') : t('reports.operationsSummary.viewSummary')}</span>
                       {showFullExecutiveSummary ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     </button>
                     <span className="text-[11px] text-stone-400 hidden sm:inline">
-                      Factual cross-system daily analysis
+                      {t('reports.operationsSummary.factualCrossSystem')}
                     </span>
                   </div>
 
@@ -753,10 +887,10 @@ export default function ReportsPage() {
               <div>
                 <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
                   <Users className="h-4 w-4 text-[#6B162E]" />
-                  Footfall vs Restaurant Dining Conversion
+                  {t('reports.footfallConversion.title')}
                 </CardTitle>
                 <CardDescription className="text-xs text-stone-500">
-                  Resort gate entries correlated with POS dining covers for {formatDisplayDate(businessDate, 'short')}
+                  {t('reports.footfallConversion.subtitle', { date: formatDisplayDate(businessDate, 'short') })}
                 </CardDescription>
               </div>
               <Button
@@ -766,54 +900,54 @@ export default function ReportsPage() {
                 className="text-xs gap-1 cursor-pointer rounded-xl border-[#E7E2D8]"
               >
                 <Clock className="h-3.5 w-3.5 text-stone-500" />
-                <span>{showGateDetails ? 'Hide Hourly Gate Curve' : 'Show Hourly Gate Curve'}</span>
+                <span>{showGateDetails ? t('reports.footfallConversion.hideHourly') : t('reports.footfallConversion.showHourly')}</span>
                 {showGateDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </Button>
             </CardHeader>
             <CardContent className="pt-2">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Gate Footfall</div>
+                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.gateFootfall')}</div>
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Total persons entered' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? t('reports.footfallConversion.totalPersonsEntered') : t('reports.footfallConversion.noGateData')}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-[#6B162E] font-semibold uppercase tracking-wider">Restaurant PAX</div>
+                  <div className="text-[10px] text-[#6B162E] font-semibold uppercase tracking-wider">{t('reports.footfallConversion.restaurantPax')}</div>
                   <div className="text-xl font-bold text-[#6B162E] tabular-nums mt-0.5">{dineInPax > 0 ? formatNumber(dineInPax) : '—'}</div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">{dineInPax > 0 ? 'Dine-in covers' : 'No covers'}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{dineInPax > 0 ? t('reports.footfallConversion.dineInCovers') : t('reports.footfallConversion.noCovers')}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-emerald-800 font-semibold uppercase tracking-wider">Diner Conversion</div>
+                  <div className="text-[10px] text-emerald-800 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.dinerConversion')}</div>
                   <div className="text-xl font-bold text-emerald-700 tabular-nums mt-0.5">
                     {dinerConversionRate !== null ? `${dinerConversionRate.toFixed(1)}%` : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">{dinerConversionRate !== null ? 'PAX ÷ footfall' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-500 mt-0.5">{dinerConversionRate !== null ? t('reports.footfallConversion.paxFootfall') : t('reports.footfallConversion.noGateData')}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Spend / Footfall</div>
+                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.spendFootfall')}</div>
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {spendPerGateVisitor !== null ? formatINR(spendPerGateVisitor) : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? 'Net sales ÷ visitor' : 'No gate data'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? t('reports.footfallConversion.netSalesVisitor') : t('reports.footfallConversion.noGateData')}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Spend / Diner</div>
+                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.spendDiner')}</div>
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInPax > 0 ? 'Average per cover' : 'No covers'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInPax > 0 ? t('reports.footfallConversion.avgCover') : t('reports.footfallConversion.noCovers')}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">Party Size / Bill</div>
+                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.partySize')}</div>
                   <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                     {paxPerBill !== null ? `${paxPerBill.toFixed(1)}` : '—'}
                   </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInBillsCount > 0 ? 'Covers per bill' : 'No bills'}</div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInBillsCount > 0 ? t('reports.footfallConversion.coversPerBill') : t('reports.footfallConversion.noBills')}</div>
                 </div>
               </div>
 
@@ -834,10 +968,10 @@ export default function ReportsPage() {
             <div className="mb-2.5 flex items-center justify-between">
               <h2 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
                 <Receipt className="h-4 w-4 text-[#6B162E]" />
-                Revenue Streams &amp; P&amp;L Expenses ({formatDisplayDate(businessDate, 'short')})
+                {t('reports.revenueStreams.title', { date: formatDisplayDate(businessDate, 'short') })}
               </h2>
               <span className="text-[11px] text-stone-500">
-                Click a card to view details
+                {t('reports.revenueStreams.clickCard')}
               </span>
             </div>
 
@@ -855,26 +989,26 @@ export default function ReportsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Restaurant Dine-In</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.restaurantDineIn')}</span>
                   <Badge
                     variant={activeDrilldown === 'restaurant' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    View Details
+                    {t('reports.revenueStreams.viewDetails')}
                   </Badge>
                 </div>
                 <div className="mt-2">
-                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Net Sales</div>
+                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.netSales')}</div>
                   <div className="text-xl font-bold tracking-tight text-[#6B162E] tabular-nums mt-0.5">
                     {formatINR(dineInNet)}
                   </div>
                 </div>
                 <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                  <span>Gross Sales {formatINR(dineInGross)}</span>
-                  <span className="font-medium text-stone-700">{dineInBillsCount} Dine-In Bills</span>
+                  <span>{t('reports.revenueStreams.grossSales')} {formatINR(dineInGross)}</span>
+                  <span className="font-medium text-stone-700">{t('reports.revenueStreams.dineInBills', { count: dineInBillsCount })}</span>
                 </div>
                 <div className="text-[10px] text-stone-500 mt-0.5">
-                  {dineInPax} Covers • APC {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
+                  {t('reports.revenueStreams.coversApc', { pax: dineInPax, apc: spendPerDiner !== null ? formatINR(spendPerDiner) : '—' })}
                 </div>
               </div>
 
@@ -891,26 +1025,26 @@ export default function ReportsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Snacks Stall</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.snacksStall')}</span>
                   <Badge
                     variant={activeDrilldown === 'snacks' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    View Details
+                    {t('reports.revenueStreams.viewDetails')}
                   </Badge>
                 </div>
                 <div className="mt-2">
-                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
                   <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                     {formatINR(snacksGross)}
                   </div>
                 </div>
                 <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                  <span>Net Sales {formatINR(snacksNet)}</span>
-                  <span className="font-medium text-stone-700">{snacksBillCount} Orders</span>
+                  <span>{t('reports.revenueStreams.netSales')} {formatINR(snacksNet)}</span>
+                  <span className="font-medium text-stone-700">{t('reports.revenueStreams.ordersCount', { count: snacksBillCount })}</span>
                 </div>
                 <div className="text-[10px] text-stone-500 mt-0.5">
-                  ABV {snacksAbv !== null ? formatINR(snacksAbv) : '—'} • Peak 8–10 PM
+                  {t('reports.revenueStreams.abvPeak', { abv: snacksAbv !== null ? formatINR(snacksAbv) : '—' })}
                 </div>
               </div>
 
@@ -927,43 +1061,43 @@ export default function ReportsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Camel Ride</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.camelRide')}</span>
                   <Badge
                     variant={activeDrilldown === 'camel' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    View Details
+                    {t('reports.revenueStreams.viewDetails')}
                   </Badge>
                 </div>
                 {camelData.totalQty > 0 ? (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
                       <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                         {formatINR(camelData.totalGross)}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                      <span>Rides: {camelData.totalQty}</span>
-                      <span className="font-medium text-stone-700">Rate: {camelData.abv !== null ? formatINR(camelData.abv) : '—'}</span>
+                      <span>{t('reports.revenueStreams.ridesCount', { count: camelData.totalQty })}</span>
+                      <span className="font-medium text-stone-700">{t('reports.revenueStreams.rateLabel', { rate: camelData.abv !== null ? formatINR(camelData.abv) : '—' })}</span>
                     </div>
                     <div className="text-[10px] text-stone-500 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">{t('reports.revenueStreams.activityStatus')}</div>
                       <div className="text-lg font-semibold text-stone-400 mt-0.5">
-                        No Activity
+                        {t('reports.revenueStreams.noActivity')}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
-                      No transactions recorded
+                      {t('reports.revenueStreams.noTransactions')}
                     </div>
                     <div className="text-[10px] text-stone-400 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 )}
@@ -982,43 +1116,43 @@ export default function ReportsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Skill Games</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.skillGames')}</span>
                   <Badge
                     variant={activeDrilldown === 'games' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    View Details
+                    {t('reports.revenueStreams.viewDetails')}
                   </Badge>
                 </div>
                 {gamesData.totalQty > 0 ? (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
                       <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                         {formatINR(gamesData.totalGross)}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                      <span>Tickets: {gamesData.totalQty}</span>
-                      <span className="font-medium text-stone-700">Rate: {gamesData.abv !== null ? formatINR(gamesData.abv) : '—'}</span>
+                      <span>{t('reports.revenueStreams.ticketsCount', { count: gamesData.totalQty })}</span>
+                      <span className="font-medium text-stone-700">{t('reports.revenueStreams.rateLabel', { rate: gamesData.abv !== null ? formatINR(gamesData.abv) : '—' })}</span>
                     </div>
                     <div className="text-[10px] text-stone-500 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">{t('reports.revenueStreams.activityStatus')}</div>
                       <div className="text-lg font-semibold text-stone-400 mt-0.5">
-                        No Activity
+                        {t('reports.revenueStreams.noActivity')}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
-                      No transactions recorded
+                      {t('reports.revenueStreams.noTransactions')}
                     </div>
                     <div className="text-[10px] text-stone-400 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 )}
@@ -1037,43 +1171,43 @@ export default function ReportsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Mehendi</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.mehendi')}</span>
                   <Badge
                     variant={activeDrilldown === 'mehendi' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    View Details
+                    {t('reports.revenueStreams.viewDetails')}
                   </Badge>
                 </div>
                 {mehendiData.totalQty > 0 ? (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
                       <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                         {formatINR(mehendiData.totalGross)}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                      <span>Clients: {mehendiData.totalQty}</span>
-                      <span className="font-medium text-stone-700">Rate: {mehendiData.abv !== null ? formatINR(mehendiData.abv) : '—'}</span>
+                      <span>{t('reports.revenueStreams.clientsCount', { count: mehendiData.totalQty })}</span>
+                      <span className="font-medium text-stone-700">{t('reports.revenueStreams.rateLabel', { rate: mehendiData.abv !== null ? formatINR(mehendiData.abv) : '—' })}</span>
                     </div>
                     <div className="text-[10px] text-stone-500 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">{t('reports.revenueStreams.activityStatus')}</div>
                       <div className="text-lg font-semibold text-stone-400 mt-0.5">
-                        No Activity
+                        {t('reports.revenueStreams.noActivity')}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
-                      No transactions recorded
+                      {t('reports.revenueStreams.noTransactions')}
                     </div>
                     <div className="text-[10px] text-stone-400 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 )}
@@ -1092,43 +1226,43 @@ export default function ReportsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Champi Maalish</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.champi')}</span>
                   <Badge
                     variant={activeDrilldown === 'champi' ? 'warning' : 'outline'}
                     className="text-[9px] px-1.5 py-0.5"
                   >
-                    View Details
+                    {t('reports.revenueStreams.viewDetails')}
                   </Badge>
                 </div>
                 {champiData.totalQty > 0 ? (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Gross Sales</div>
+                      <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
                       <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                         {formatINR(champiData.totalGross)}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
-                      <span>Sessions: {champiData.totalQty}</span>
-                      <span className="font-medium text-stone-700">Rate: {champiData.abv !== null ? formatINR(champiData.abv) : '—'}</span>
+                      <span>{t('reports.revenueStreams.sessionsCount', { count: champiData.totalQty })}</span>
+                      <span className="font-medium text-stone-700">{t('reports.revenueStreams.rateLabel', { rate: champiData.abv !== null ? formatINR(champiData.abv) : '—' })}</span>
                     </div>
                     <div className="text-[10px] text-stone-500 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="mt-2">
-                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">Activity Status</div>
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">{t('reports.revenueStreams.activityStatus')}</div>
                       <div className="text-lg font-semibold text-stone-400 mt-0.5">
-                        No Activity
+                        {t('reports.revenueStreams.noActivity')}
                       </div>
                     </div>
                     <div className="text-[11px] text-stone-400 mt-2 border-t border-[#F0ECE3] pt-1.5">
-                      No transactions recorded
+                      {t('reports.revenueStreams.noTransactions')}
                     </div>
                     <div className="text-[10px] text-stone-400 mt-0.5">
-                      Activity Sales
+                      {t('reports.revenueStreams.activitySales')}
                     </div>
                   </>
                 )}
@@ -1140,13 +1274,13 @@ export default function ReportsPage() {
                 className="relative p-3.5 rounded-xl border border-[#E7E2D8] bg-white hover:border-amber-400/80 hover:bg-[#FAF8F5]/50 transition-all cursor-pointer shadow-xs block"
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-xs font-bold text-stone-800 tracking-tight">Daily Expenses</span>
+                  <span className="text-xs font-bold text-stone-800 tracking-tight">{t('reports.revenueStreams.dailyExpenses')}</span>
                   <span className="text-[10px] font-semibold text-[#6B162E] flex items-center gap-0.5">
-                    View P&amp;L →
+                    {t('reports.revenueStreams.viewPnl')}
                   </span>
                 </div>
                 <div className="mt-2">
-                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Total Expenses</div>
+                  <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.totalExpenses')}</div>
                   <div className={`text-xl font-bold tracking-tight mt-0.5 tabular-nums ${hasExpensesLogged ? 'text-[#6B162E]' : 'text-stone-400'}`}>
                     {hasExpensesLogged ? formatINR(totalOperationalExpenses) : '—'}
                   </div>
@@ -1154,17 +1288,16 @@ export default function ReportsPage() {
                 <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
                   {hasExpensesLogged ? (
                     <>
-                      <span>Direct: {formatINR(totalDirectVouchers)}</span>
-                      <span>Store: {formatINR(totalStoreConsumption)}</span>
+                      <span>{t('reports.revenueStreams.directStore', { direct: formatINR(totalDirectVouchers), store: formatINR(totalStoreConsumption) })}</span>
                     </>
                   ) : (
-                    <span>No logged expenses</span>
+                    <span>{t('reports.revenueStreams.noLoggedExpenses')}</span>
                   )}
                 </div>
                 <div className="text-[10px] text-stone-500 font-medium mt-0.5 flex items-center justify-between">
-                  <span>{hasExpensesLogged ? `Utilities: ${formatINR(totalUtilities)}` : 'Click to view full P&L'}</span>
+                  <span>{hasExpensesLogged ? t('reports.revenueStreams.utilities', { amount: formatINR(totalUtilities) }) : t('reports.revenueStreams.clickPnl')}</span>
                   <span className="text-[#6B162E] font-semibold flex items-center gap-0.5">
-                    View P&amp;L <ExternalLink className="h-2.5 w-2.5" />
+                    {t('reports.revenueStreams.viewPnl')} <ExternalLink className="h-2.5 w-2.5" />
                   </span>
                 </div>
               </Link>
@@ -1177,12 +1310,12 @@ export default function ReportsPage() {
               <div className="flex items-center justify-between pb-3 border-b border-[#E7E2D8]">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-stone-900 text-sm">
-                    {activeDrilldown === 'restaurant' && 'Restaurant Sales Analytics'}
-                    {activeDrilldown === 'snacks' && 'Snacks Stall — Hourly Sales & Top Items'}
-                    {activeDrilldown === 'camel' && 'Camel Ride — Hourly Activity'}
-                    {activeDrilldown === 'games' && 'Skill Games — Hourly Activity'}
-                    {activeDrilldown === 'mehendi' && 'Mehendi — Hourly Activity'}
-                    {activeDrilldown === 'champi' && 'Champi Maalish — Hourly Activity'}
+                    {activeDrilldown === 'restaurant' && t('reports.drilldown.restaurantTitle')}
+                    {activeDrilldown === 'snacks' && t('reports.drilldown.snacksTitle')}
+                    {activeDrilldown === 'camel' && t('reports.drilldown.camelTitle')}
+                    {activeDrilldown === 'games' && t('reports.drilldown.gamesTitle')}
+                    {activeDrilldown === 'mehendi' && t('reports.drilldown.mehendiTitle')}
+                    {activeDrilldown === 'champi' && t('reports.drilldown.champiTitle')}
                   </span>
                   <Badge variant="outline" className="text-[10px] border-[#E7E2D8]">
                     {formatDisplayDate(businessDate, 'short')}
@@ -1194,7 +1327,7 @@ export default function ReportsPage() {
                   onClick={() => setActiveDrilldown(null)}
                   className="h-7 text-xs rounded-lg border-[#E7E2D8]"
                 >
-                  Close
+                  {t('reports.drilldown.close')}
                 </Button>
               </div>
 
@@ -1215,19 +1348,19 @@ export default function ReportsPage() {
                   {/* Exactly 3 strong summary KPIs */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
                     <div>
-                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">ORDERS</div>
+                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.drilldown.ordersUpper')}</div>
                       <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">{snacksBillCount}</div>
-                      <div className="text-[10px] text-stone-400 mt-0.5">Snack stall orders</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">{t('reports.drilldown.snackOrdersSub')}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">GROSS SALES</div>
+                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.drilldown.grossUpper')}</div>
                       <div className="text-xl sm:text-2xl font-bold text-[#6B162E] mt-0.5 tabular-nums">{formatINR(snacksGross)}</div>
-                      <div className="text-[10px] text-stone-400 mt-0.5">Net Sales: {formatINR(snacksNet)}</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">{t('reports.drilldown.netSalesSub', { amount: formatINR(snacksNet) })}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">AVERAGE BILL</div>
+                      <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.drilldown.avgBillUpper')}</div>
                       <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">{snacksAbv !== null ? formatINR(snacksAbv) : '—'}</div>
-                      <div className="text-[10px] text-stone-400 mt-0.5">Average bill value</div>
+                      <div className="text-[10px] text-stone-400 mt-0.5">{t('reports.drilldown.avgBillSub')}</div>
                     </div>
                   </div>
 
@@ -1238,13 +1371,13 @@ export default function ReportsPage() {
                       <div className="flex items-center justify-between pb-2 border-b border-[#E7E2D8] mb-3">
                         <h4 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-[#D97706]" />
-                          Hourly Sales
+                          {t('reports.drilldown.hourlySales')}
                         </h4>
-                        <span className="text-[10px] text-stone-400">Evening snack service</span>
+                        <span className="text-[10px] text-stone-400">{t('reports.drilldown.eveningService')}</span>
                       </div>
 
                       {snacksHourly.every((h) => h.gross === 0 && h.count === 0) ? (
-                        <div className="py-8 text-center text-stone-400 text-xs">No snack sales recorded for this date.</div>
+                        <div className="py-8 text-center text-stone-400 text-xs">{t('reports.drilldown.noSnackSales')}</div>
                       ) : (
                         <div className="space-y-2">
                           {(() => {
@@ -1266,7 +1399,7 @@ export default function ReportsPage() {
                                       {formatINR(h.gross)}
                                     </span>
                                     <span className="w-16 sm:w-20 text-right text-[11px] text-stone-500 shrink-0">
-                                      {h.count} {h.count === 1 ? 'order' : 'orders'}
+                                      {h.count} {h.count === 1 ? (locale === 'hi' ? 'ऑर्डर' : 'order') : (locale === 'hi' ? 'ऑर्डर' : 'orders')}
                                     </span>
                                   </div>
                                 );
@@ -1281,20 +1414,20 @@ export default function ReportsPage() {
                       <div className="flex items-center justify-between pb-2 border-b border-[#E7E2D8] mb-3">
                         <h4 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
                           <UtensilsCrossed className="h-3.5 w-3.5 text-[#D97706]" />
-                          Top Street Food &amp; Snack Items
+                          {t('reports.drilldown.topItems')}
                         </h4>
-                        <span className="text-[10px] text-stone-400">By units sold</span>
+                        <span className="text-[10px] text-stone-400">{t('reports.drilldown.byUnits')}</span>
                       </div>
 
                       {snacksTopItems.length === 0 ? (
-                        <div className="py-8 text-center text-stone-400 text-xs">No snack items logged for this date.</div>
+                        <div className="py-8 text-center text-stone-400 text-xs">{t('reports.drilldown.noSnackItems')}</div>
                       ) : (
                         <table className="w-full text-left text-xs">
                           <thead>
                             <tr className="border-b border-[#E7E2D8] text-stone-500 text-[10px]">
-                              <th className="pb-1.5">Item Name</th>
-                              <th className="pb-1.5 text-center">Units Sold</th>
-                              <th className="pb-1.5 text-right">Net Sales</th>
+                              <th className="pb-1.5">{t('reports.drilldown.colItemName')}</th>
+                              <th className="pb-1.5 text-center">{t('reports.drilldown.colUnitsSold')}</th>
+                              <th className="pb-1.5 text-right">{t('reports.drilldown.colNetSales')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#F0ECE3]">
@@ -1333,20 +1466,20 @@ export default function ReportsPage() {
                   : champiData;
 
                 const unitLabel = isCamel
-                  ? 'Rides'
+                  ? t('reports.drilldown.units.rides')
                   : isGames
-                  ? 'Tickets'
+                  ? t('reports.drilldown.units.tickets')
                   : isMehendi
-                  ? 'Clients'
-                  : 'Sessions';
+                  ? t('reports.drilldown.units.clients')
+                  : t('reports.drilldown.units.sessions');
 
                 const unitSingular = isCamel
-                  ? 'ride'
+                  ? t('reports.drilldown.units.ride')
                   : isGames
-                  ? 'ticket'
+                  ? t('reports.drilldown.units.ticket')
                   : isMehendi
-                  ? 'client'
-                  : 'session';
+                  ? t('reports.drilldown.units.client')
+                  : t('reports.drilldown.units.session');
 
                 const hasActivity = act.totalQty > 0;
 
@@ -1356,35 +1489,35 @@ export default function ReportsPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
                       <div>
                         <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">
-                          {hasActivity ? unitLabel.toUpperCase() : 'ACTIVITY STATUS'}
+                          {hasActivity ? unitLabel.toUpperCase() : t('reports.drilldown.activityStatusUpper')}
                         </div>
                         <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">
-                          {hasActivity ? act.totalQty : 'No Activity'}
+                          {hasActivity ? act.totalQty : t('reports.revenueStreams.noActivity')}
                         </div>
                         <div className="text-[10px] text-stone-400 mt-0.5">
-                          {hasActivity ? `Total ${unitLabel.toLowerCase()}` : 'No transactions recorded'}
+                          {hasActivity ? t('reports.drilldown.totalUnitsSub', { unit: unitLabel.toLowerCase() }) : t('reports.revenueStreams.noTransactions')}
                         </div>
                       </div>
                       <div>
                         <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">
-                          {hasActivity ? 'GROSS SALES' : unitLabel.toUpperCase()}
+                          {hasActivity ? t('reports.drilldown.grossUpper') : unitLabel.toUpperCase()}
                         </div>
                         <div className="text-xl sm:text-2xl font-bold text-[#6B162E] mt-0.5 tabular-nums">
                           {hasActivity ? formatINR(act.totalGross) : '0'}
                         </div>
                         <div className="text-[10px] text-stone-400 mt-0.5">
-                          {hasActivity ? 'Activity sales' : `Recorded ${unitLabel.toLowerCase()}`}
+                          {hasActivity ? t('reports.revenueStreams.activitySales') : t('reports.drilldown.recordedUnitsSub', { unit: unitLabel.toLowerCase() })}
                         </div>
                       </div>
                       <div>
                         <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">
-                          AVERAGE PRICE
+                          {t('reports.drilldown.avgPriceUpper')}
                         </div>
                         <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-0.5 tabular-nums">
                           {hasActivity && act.abv !== null ? formatINR(act.abv) : '—'}
                         </div>
                         <div className="text-[10px] text-stone-400 mt-0.5">
-                          {hasActivity ? `Per ${unitSingular} rate` : 'Rate not available'}
+                          {hasActivity ? t('reports.drilldown.perRateSub', { unit: unitSingular }) : t('reports.drilldown.rateNotAvailable')}
                         </div>
                       </div>
                     </div>
@@ -1394,16 +1527,16 @@ export default function ReportsPage() {
                       <div className="flex items-center justify-between pb-2 border-b border-[#E7E2D8] mb-3">
                         <h4 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-[#6B162E]" />
-                          Hourly Activity
+                          {t('reports.drilldown.hourlyActivity')}
                         </h4>
                         <span className="text-[10px] text-stone-400">
-                          {unitLabel} and revenue distribution
+                          {t('reports.drilldown.activityDistSub', { unit: unitLabel })}
                         </span>
                       </div>
 
                       {!hasActivity || act.hourlyData.length === 0 ? (
                         <div className="py-8 text-center text-stone-400 text-xs">
-                          No activity recorded for {formatDisplayDate(businessDate, 'short')}.
+                          {t('reports.drilldown.noActivityDate', { date: formatDisplayDate(businessDate, 'short') })}
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -1413,7 +1546,7 @@ export default function ReportsPage() {
                               const pct = Math.max((pt.amount / maxGross) * 100, 3);
                               const hourText =
                                 pt.hour === 1
-                                  ? '01:00 AM (Petpooja posting time)'
+                                  ? (locale === 'hi' ? '01:00 AM (Petpooja पोस्टिंग समय)' : '01:00 AM (Petpooja posting time)')
                                   : pt.label;
 
                               return (
@@ -1453,10 +1586,10 @@ export default function ReportsPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
                 <CardTitle className="text-sm font-bold text-stone-900">
-                  Daily Operating Surplus
+                  {t('reports.operatingSurplus.title')}
                 </CardTitle>
                 <CardDescription className="text-xs text-stone-500">
-                  Financial reconciliation of Net Sales against store consumption and operating expenses for {formatDisplayDate(businessDate, 'short')}
+                  {t('reports.operatingSurplus.subtitle', { date: formatDisplayDate(businessDate, 'short') })}
                 </CardDescription>
               </div>
               <Button
@@ -1465,36 +1598,36 @@ export default function ReportsPage() {
                 onClick={() => exportCSV([dailyData || {}], 'daily-operations-report')}
                 className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
               >
-                <Download className="h-3.5 w-3.5" /> Export CSV
+                <Download className="h-3.5 w-3.5" /> {t('reports.operatingSurplus.exportCsv')}
               </Button>
             </CardHeader>
             <CardContent className="pt-0 text-xs sm:text-sm space-y-3">
               {loading ? (
                 <div className="py-10 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading financial surplus...
+                  <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> {t('reports.operatingSurplus.loading')}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                   <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
-                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">Net Sales (POS)</div>
+                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.operatingSurplus.netSalesPos')}</div>
                     <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {formatINR(consolidatedNet)}
                     </div>
                   </div>
                   <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
-                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">Store Consumption</div>
+                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.operatingSurplus.storeConsumption')}</div>
                     <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {totalStoreConsumption > 0 ? formatINR(totalStoreConsumption) : '—'}
                     </div>
                   </div>
                   <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
-                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">Direct &amp; Utilities</div>
+                    <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.operatingSurplus.directUtilities')}</div>
                     <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {(totalDirectVouchers + totalUtilities) > 0 ? formatINR(totalDirectVouchers + totalUtilities) : '—'}
                     </div>
                   </div>
                   <div className="p-3.5 bg-emerald-50/80 rounded-xl border border-emerald-200/80">
-                    <div className="text-[11px] text-emerald-900 font-bold uppercase tracking-wider">Gross Operating Surplus</div>
+                    <div className="text-[11px] text-emerald-900 font-bold uppercase tracking-wider">{t('reports.operatingSurplus.grossSurplus')}</div>
                     <div className="text-xl font-bold text-emerald-800 tabular-nums mt-0.5">
                       {hasExpensesLogged || consolidatedNet > 0
                         ? formatINR(consolidatedNet - totalOperationalExpenses)
@@ -1515,8 +1648,8 @@ export default function ReportsPage() {
         <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Kitchen Store Issue Movements ({formatDisplayDate(businessDate, 'short')})</CardTitle>
-              <CardDescription className="text-stone-500">Line-by-line consumption attributed to kitchen &amp; chef</CardDescription>
+              <CardTitle>{t('reports.inventoryLedger.title', { date: formatDisplayDate(businessDate, 'short') })}</CardTitle>
+              <CardDescription className="text-stone-500">{t('reports.inventoryLedger.subtitle')}</CardDescription>
             </div>
             <Button
               variant="outline"
@@ -1524,47 +1657,47 @@ export default function ReportsPage() {
               onClick={() => exportCSV(inventoryMovements, 'store-consumption')}
               className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
             >
-              <Download className="h-3.5 w-3.5" /> Export CSV
+              <Download className="h-3.5 w-3.5" /> {t('reports.inventoryLedger.exportCsv')}
             </Button>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
               <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading store consumption...
+                <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> {t('reports.inventoryLedger.loading')}
               </div>
             ) : inventoryMovements.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">No inventory movements logged for {formatDisplayDate(businessDate, 'short')}.</div>
+              <div className="py-12 text-center text-stone-400 text-xs">{t('reports.inventoryLedger.noMovements', { date: formatDisplayDate(businessDate, 'short') })}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-[#E7E2D8] text-stone-600 font-semibold bg-[#FAF8F5]">
-                      <th className="py-2.5 px-3">Time</th>
-                      <th className="py-2.5 px-3">Item SKU</th>
-                      <th className="py-2.5 px-3">Kitchen / Section</th>
-                      <th className="py-2.5 px-3">Chef</th>
-                      <th className="py-2.5 px-3">Purpose</th>
-                      <th className="py-2.5 px-3 text-right">Quantity</th>
-                      <th className="py-2.5 px-3 text-right">WAC Rate</th>
-                      <th className="py-2.5 px-3 text-right">Valuation</th>
+                      <th className="py-2.5 px-3">{t('reports.inventoryLedger.colTime')}</th>
+                      <th className="py-2.5 px-3">{t('reports.inventoryLedger.colSku')}</th>
+                      <th className="py-2.5 px-3">{t('reports.inventoryLedger.colKitchen')}</th>
+                      <th className="py-2.5 px-3">{t('reports.inventoryLedger.colChef')}</th>
+                      <th className="py-2.5 px-3">{t('reports.inventoryLedger.colPurpose')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('reports.inventoryLedger.colQty')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('reports.inventoryLedger.colWac')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('reports.inventoryLedger.colValuation')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F0ECE3]">
                     {inventoryMovements.map((m) => (
                       <tr key={m.id} className="hover:bg-[#FAF8F5]/80">
                         <td className="py-2 px-3 text-stone-500 font-mono">
-                          {new Date(m.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          {new Date(m.created_at).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-stone-900">{m.item?.name}</td>
-                        <td className="py-2 px-3 text-stone-600">{m.department?.name || 'Central Store'}</td>
+                        <td className="py-2 px-3 font-semibold text-stone-900">{getLocalizedMasterName(m.item, locale)}</td>
+                        <td className="py-2 px-3 text-stone-600">{getLocalizedMasterName(m.department, locale) || (locale === 'hi' ? 'केंद्रीय स्टोर' : 'Central Store')}</td>
                         <td className="py-2 px-3 text-stone-600">{m.responsible_person?.name || '—'}</td>
                         <td className="py-2 px-3">
                           <Badge variant={m.purpose === 'Customer Food' ? 'success' : m.purpose === 'Staff Food' ? 'info' : 'warning'}>
-                            {m.purpose}
+                            {t(('inventory.issues.purposeOptions.' + m.purpose) as any) || m.purpose}
                           </Badge>
                         </td>
                         <td className="py-2 px-3 text-right font-bold text-stone-900">
-                          {m.quantity} {m.item?.unit?.symbol}
+                          {m.quantity} {getLocalizedMasterSymbol(m.item?.unit, locale)}
                         </td>
                         <td className="py-2 px-3 text-right text-stone-700">{formatINR(Number(m.unit_cost || 0))}</td>
                         <td className="py-2 px-3 text-right font-bold text-stone-900">{formatINR(Number(m.total_value || 0))}</td>
@@ -1585,8 +1718,8 @@ export default function ReportsPage() {
         <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Vendor Accounts Summary</CardTitle>
-              <CardDescription className="text-stone-500">Current balances derived from invoices and payment allocations</CardDescription>
+              <CardTitle>{t('reports.vendorsLedger.title')}</CardTitle>
+              <CardDescription className="text-stone-500">{t('reports.vendorsLedger.subtitle')}</CardDescription>
             </div>
             <Button
               variant="outline"
@@ -1594,25 +1727,25 @@ export default function ReportsPage() {
               onClick={() => exportCSV(vendors, 'vendor-ledger')}
               className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
             >
-              <Download className="h-3.5 w-3.5" /> Export CSV
+              <Download className="h-3.5 w-3.5" /> {t('reports.vendorsLedger.exportCsv')}
             </Button>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
               <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> Loading vendor accounts...
+                <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> {t('reports.vendorsLedger.loading')}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-[#E7E2D8] text-stone-600 font-semibold bg-[#FAF8F5]">
-                      <th className="py-2.5 px-3">Supplier</th>
-                      <th className="py-2.5 px-3">Contact</th>
-                      <th className="py-2.5 px-3 text-right">Total Invoiced</th>
-                      <th className="py-2.5 px-3 text-right">Total Settled</th>
-                      <th className="py-2.5 px-3 text-right">Net Due</th>
-                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3">{t('reports.vendorsLedger.colSupplier')}</th>
+                      <th className="py-2.5 px-3">{t('reports.vendorsLedger.colContact')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('reports.vendorsLedger.colInvoiced')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('reports.vendorsLedger.colSettled')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('reports.vendorsLedger.colDue')}</th>
+                      <th className="py-2.5 px-3 text-center">{t('reports.vendorsLedger.colStatus')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F0ECE3]">
@@ -1628,7 +1761,11 @@ export default function ReportsPage() {
                           <td className="py-3 px-3 text-right font-medium text-emerald-700">{formatINR(Number(v.total_paid || 0))}</td>
                           <td className="py-3 px-3 text-right font-bold text-rose-600">{formatINR(out)}</td>
                           <td className="py-3 px-3 text-center">
-                            {out <= 0 ? <Badge variant="success">Settled</Badge> : <Badge variant="danger">Due</Badge>}
+                            {out <= 0 ? (
+                              <Badge variant="success">{t('reports.vendorsLedger.statusSettled')}</Badge>
+                            ) : (
+                              <Badge variant="danger">{t('reports.vendorsLedger.statusDue')}</Badge>
+                            )}
                           </td>
                         </tr>
                       );

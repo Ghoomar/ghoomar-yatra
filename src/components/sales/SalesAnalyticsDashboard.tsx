@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { SalesAnalyticsResponse } from '@/lib/types/sales';
+import { useI18n } from '@/lib/i18n/context';
 import { HourlyCategoryStackedBarChart } from './HourlyCategoryStackedBarChart';
 import { SalesReconciliationBanner } from './SalesReconciliationBanner';
 import {
@@ -20,7 +21,6 @@ import {
   RefreshCw,
   Search,
   X,
-  PieChart,
   ShoppingBag,
 } from 'lucide-react';
 
@@ -33,8 +33,8 @@ interface SalesAnalyticsDashboardProps {
 export function SalesAnalyticsDashboard({
   initialDate,
   onDateChange,
-  hideDatePicker = false,
 }: SalesAnalyticsDashboardProps) {
+  const { t, locale } = useI18n();
   const [selectedDate, setSelectedDate] = useState<string>(initialDate || getTodayBusinessDate());
 
   useEffect(() => {
@@ -55,11 +55,9 @@ export function SalesAnalyticsDashboard({
 
   const [data, setData] = useState<SalesAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const loadAnalytics = async () => {
     setLoading(true);
-    setError(null);
     try {
       const params = new URLSearchParams();
       if (selectedDate) {
@@ -80,7 +78,6 @@ export function SalesAnalyticsDashboard({
       setData(json);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Error loading sales analytics.');
     } finally {
       setLoading(false);
     }
@@ -144,14 +141,16 @@ export function SalesAnalyticsDashboard({
         {/* Quick Filter Status */}
         {hasActiveFilters && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-stone-500 font-medium">Filtered View Active</span>
+            <span className="text-xs text-stone-500 font-medium">
+              {t('finance.sales.analytics.filteredViewActive')}
+            </span>
             <Button
               variant="outline"
               size="sm"
               onClick={resetFilters}
               className="h-7 text-xs text-stone-600 hover:text-stone-900 gap-1"
             >
-              <X className="h-3 w-3" /> Reset Filters
+              <X className="h-3 w-3" /> {t('finance.sales.analytics.resetFilters')}
             </Button>
           </div>
         )}
@@ -171,13 +170,13 @@ export function SalesAnalyticsDashboard({
         <Card className="border-amber-300 bg-amber-50/30 shadow-xs">
           <CardContent className="p-3.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-              Net Sales
+              {t('finance.sales.analytics.kpis.netSales')}
             </span>
             <div className="text-2xl font-extrabold text-amber-900 mt-0.5">
               {formatINR(data?.kpis.netSales || 0)}
             </div>
             <span className="text-[10px] text-amber-700 block mt-0.5">
-              Net of discounts
+              {t('finance.sales.analytics.kpis.netOfDiscounts')}
             </span>
           </CardContent>
         </Card>
@@ -186,13 +185,13 @@ export function SalesAnalyticsDashboard({
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-3.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-500 block">
-              Grand Total
+              {t('finance.sales.analytics.kpis.grandTotal')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-0.5">
               {formatINR(data?.kpis.grossSales || 0)}
             </div>
             <span className="text-[10px] text-stone-400 block mt-0.5">
-              Inclusive of taxes
+              {t('finance.sales.analytics.kpis.inclusiveTaxes')}
             </span>
           </CardContent>
         </Card>
@@ -201,13 +200,15 @@ export function SalesAnalyticsDashboard({
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-3.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-500 block">
-              Total Bills
+              {t('finance.sales.analytics.kpis.totalBills')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-0.5">
               {data?.kpis.totalBills || 0}
             </div>
             <span className="text-[10px] text-stone-400 block mt-0.5">
-              AOV: {formatINR(data?.kpis.averageOrderValue || 0)}
+              {t('finance.sales.analytics.kpis.aov', {
+                amount: formatINR(data?.kpis.averageOrderValue || 0),
+              })}
             </span>
           </CardContent>
         </Card>
@@ -216,13 +217,13 @@ export function SalesAnalyticsDashboard({
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-3.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-500 block">
-              Items Sold
+              {t('finance.sales.analytics.kpis.itemsSold')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-0.5">
               {data?.kpis.totalItemsSold || 0}
             </div>
             <span className="text-[10px] text-stone-400 block mt-0.5">
-              Units across menu
+              {t('finance.sales.analytics.kpis.unitsAcrossMenu')}
             </span>
           </CardContent>
         </Card>
@@ -231,13 +232,13 @@ export function SalesAnalyticsDashboard({
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-3.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-500 block">
-              GST / Taxes
+              {t('finance.sales.analytics.kpis.gstTaxes')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-0.5">
               {formatINR(data?.kpis.totalTax || 0)}
             </div>
             <span className="text-[10px] text-stone-400 block mt-0.5">
-              CGST + SGST collected
+              {t('finance.sales.analytics.kpis.taxesCollected')}
             </span>
           </CardContent>
         </Card>
@@ -246,13 +247,13 @@ export function SalesAnalyticsDashboard({
         <Card className="border-stone-200 shadow-xs">
           <CardContent className="p-3.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-500 block">
-              Discounts
+              {t('finance.sales.analytics.kpis.discounts')}
             </span>
             <div className="text-2xl font-bold text-stone-900 mt-0.5">
               {formatINR(data?.kpis.totalDiscounts || 0)}
             </div>
             <span className="text-[10px] text-stone-400 block mt-0.5">
-              Special offers / promos
+              {t('finance.sales.analytics.kpis.specialOffers')}
             </span>
           </CardContent>
         </Card>
@@ -264,10 +265,10 @@ export function SalesAnalyticsDashboard({
           <div>
             <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-amber-600" />
-              Hourly Sales by Parent Category
+              {t('finance.sales.analytics.hourlyChart.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Hover over columns to view hourly revenue and category contribution breakdown
+              {t('finance.sales.analytics.hourlyChart.subtitle')}
             </CardDescription>
           </div>
         </CardHeader>
@@ -276,11 +277,11 @@ export function SalesAnalyticsDashboard({
           {loading ? (
             <div className="py-20 text-center text-xs text-stone-400">
               <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-amber-500" />
-              Loading hourly sales distribution...
+              {t('finance.sales.analytics.hourlyChart.loading')}
             </div>
           ) : !data || data.hourly.length === 0 || data.hourly.every((h) => h.total_sales === 0) ? (
             <div className="py-20 text-center text-xs text-stone-400">
-              No hourly sales data recorded for {selectedDate}. Upload an Hourly Item Sales report in the &quot;Import Reports&quot; tab.
+              {t('finance.sales.analytics.hourlyChart.noData', { date: selectedDate })}
             </div>
           ) : (
             <HourlyCategoryStackedBarChart
@@ -296,7 +297,7 @@ export function SalesAnalyticsDashboard({
         <div className="bg-white border border-stone-200 rounded-xl p-3 shadow-2xs space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-700">
             <Filter className="h-3.5 w-3.5 text-stone-400" />
-            <span>Filter Sales Analytics</span>
+            <span>{t('finance.sales.analytics.filters.title')}</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
@@ -306,7 +307,7 @@ export function SalesAnalyticsDashboard({
               onChange={(e) => setParentCategory(e.target.value)}
               className="rounded-lg border border-stone-200 px-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/50"
             >
-              <option value="">All Parent Categories</option>
+              <option value="">{t('finance.sales.analytics.filters.allParents')}</option>
               {data.activeFilterOptions.parentCategories.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -320,7 +321,7 @@ export function SalesAnalyticsDashboard({
               onChange={(e) => setCategory(e.target.value)}
               className="rounded-lg border border-stone-200 px-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/50"
             >
-              <option value="">All Categories</option>
+              <option value="">{t('finance.sales.analytics.filters.allCategories')}</option>
               {data.activeFilterOptions.categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -334,7 +335,7 @@ export function SalesAnalyticsDashboard({
               onChange={(e) => setCaptain(e.target.value)}
               className="rounded-lg border border-stone-200 px-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/50"
             >
-              <option value="">All Captains</option>
+              <option value="">{t('finance.sales.analytics.filters.allCaptains')}</option>
               {data.activeFilterOptions.captains.map((cap) => (
                 <option key={cap} value={cap}>
                   {cap}
@@ -348,7 +349,7 @@ export function SalesAnalyticsDashboard({
               onChange={(e) => setPaymentType(e.target.value)}
               className="rounded-lg border border-stone-200 px-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/50"
             >
-              <option value="">All Payment Modes</option>
+              <option value="">{t('finance.sales.analytics.filters.allPayments')}</option>
               {data.activeFilterOptions.paymentTypes.map((pm) => (
                 <option key={pm} value={pm}>
                   {pm}
@@ -362,7 +363,7 @@ export function SalesAnalyticsDashboard({
               onChange={(e) => setOrderType(e.target.value)}
               className="rounded-lg border border-stone-200 px-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/50"
             >
-              <option value="">All Order Types</option>
+              <option value="">{t('finance.sales.analytics.filters.allOrderTypes')}</option>
               {data.activeFilterOptions.orderTypes.map((ot) => (
                 <option key={ot} value={ot}>
                   {ot}
@@ -375,7 +376,7 @@ export function SalesAnalyticsDashboard({
               <Search className="absolute left-2 top-2 h-3 w-3 text-stone-400" />
               <input
                 type="text"
-                placeholder="Search Item..."
+                placeholder={t('finance.sales.analytics.filters.searchItem')}
                 value={itemSearch}
                 onChange={(e) => setItemSearch(e.target.value)}
                 className="w-full rounded-lg border border-stone-200 pl-7 pr-2 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/50"
@@ -398,7 +399,9 @@ export function SalesAnalyticsDashboard({
             }`}
           >
             <Layers className="h-4 w-4" />
-            Category Sales ({data?.breakdowns.byParentCategory.length || 0})
+            {t('finance.sales.analytics.tabs.categories', {
+              count: data?.breakdowns.byParentCategory.length || 0,
+            })}
           </button>
           <button
             onClick={() => setActiveTab('items')}
@@ -409,7 +412,7 @@ export function SalesAnalyticsDashboard({
             }`}
           >
             <UtensilsCrossed className="h-4 w-4" />
-            Top Selling Items
+            {t('finance.sales.analytics.tabs.items')}
           </button>
           <button
             onClick={() => setActiveTab('payments')}
@@ -420,7 +423,7 @@ export function SalesAnalyticsDashboard({
             }`}
           >
             <CreditCard className="h-4 w-4" />
-            Payment Modes
+            {t('finance.sales.analytics.tabs.payments')}
           </button>
           <button
             onClick={() => setActiveTab('captains')}
@@ -431,7 +434,7 @@ export function SalesAnalyticsDashboard({
             }`}
           >
             <UserCheck className="h-4 w-4" />
-            Captain Performance
+            {t('finance.sales.analytics.tabs.captains')}
           </button>
           <button
             onClick={() => setActiveTab('orders')}
@@ -442,7 +445,7 @@ export function SalesAnalyticsDashboard({
             }`}
           >
             <ShoppingBag className="h-4 w-4" />
-            Order Types
+            {t('finance.sales.analytics.tabs.orders')}
           </button>
           <button
             onClick={() => setActiveTab('bills')}
@@ -453,7 +456,9 @@ export function SalesAnalyticsDashboard({
             }`}
           >
             <Receipt className="h-4 w-4" />
-            All Bills ({data?.allBills?.length || 0})
+            {t('finance.sales.analytics.tabs.bills', {
+              count: data?.allBills?.length || 0,
+            })}
           </button>
         </div>
 
@@ -464,10 +469,10 @@ export function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Parent Category</th>
-                    <th className="p-3 text-center">Items Sold</th>
-                    <th className="p-3 text-right">Net Sales</th>
-                    <th className="p-3 text-right">Share %</th>
+                    <th className="p-3">{t('finance.sales.analytics.tables.colParent')}</th>
+                    <th className="p-3 text-center">{t('finance.sales.analytics.tables.colQty')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colNetSales')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colShare')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -506,10 +511,10 @@ export function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Item Name</th>
-                    <th className="p-3">Category</th>
-                    <th className="p-3 text-center">Quantity Sold</th>
-                    <th className="p-3 text-right">Net Revenue</th>
+                    <th className="p-3">{t('finance.sales.analytics.tables.colItem')}</th>
+                    <th className="p-3">{t('finance.sales.analytics.tables.colCategory')}</th>
+                    <th className="p-3 text-center">{t('finance.sales.analytics.tables.colQty')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colNetSales')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -545,9 +550,9 @@ export function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Payment Mode</th>
-                    <th className="p-3 text-right">Total Collected</th>
-                    <th className="p-3 text-right">Share %</th>
+                    <th className="p-3">{t('finance.sales.analytics.tables.colPaymentMode')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colTotalCollected')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colShare')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -584,11 +589,11 @@ export function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Captain Name</th>
-                    <th className="p-3 text-center">Orders Handled</th>
-                    <th className="p-3 text-center">Covers (Pax)</th>
-                    <th className="p-3 text-right">Net Sales</th>
-                    <th className="p-3 text-right">Avg Order Value</th>
+                    <th className="p-3">{t('finance.sales.analytics.tables.colCaptain')}</th>
+                    <th className="p-3 text-center">{t('finance.sales.analytics.tables.colBillCount')}</th>
+                    <th className="p-3 text-center">{t('finance.sales.analytics.tables.colCovers')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colNetSales')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colAvgPrice')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -622,10 +627,10 @@ export function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                   <tr>
-                    <th className="p-3">Order Type</th>
-                    <th className="p-3 text-center">Orders Count</th>
-                    <th className="p-3 text-right">Net Sales</th>
-                    <th className="p-3 text-right">Share %</th>
+                    <th className="p-3">{t('finance.sales.analytics.tables.colOrderType')}</th>
+                    <th className="p-3 text-center">{t('finance.sales.analytics.tables.colBillCount')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colNetSales')}</th>
+                    <th className="p-3 text-right">{t('finance.sales.analytics.tables.colShare')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -738,32 +743,32 @@ export function SalesAnalyticsDashboard({
                   <table className="w-full text-left text-[11px] border-collapse">
                     <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                       <tr>
-                        <th className="p-2.5">Invoice #</th>
-                        <th className="p-2.5">Time</th>
-                        <th className="p-2.5">Type &amp; Area</th>
-                        <th className="p-2.5 text-center">PAX</th>
-                        <th className="p-2.5">Captain / Biller</th>
+                        <th className="p-2.5">{t('finance.sales.analytics.tables.colBillNo')}</th>
+                        <th className="p-2.5">{t('finance.sales.analytics.tables.colOrderTime')}</th>
+                        <th className="p-2.5">{t('finance.sales.analytics.tables.colOrderType')}</th>
+                        <th className="p-2.5 text-center">{t('finance.sales.analytics.tables.colPax')}</th>
+                        <th className="p-2.5">{t('finance.sales.analytics.tables.colCaptain')}</th>
                         <th className="p-2.5">Customer</th>
-                        <th className="p-2.5">Tender</th>
-                        <th className="p-2.5 text-right">Gross</th>
-                        <th className="p-2.5 text-right">Discount</th>
-                        <th className="p-2.5 text-right">Net Sales</th>
-                        <th className="p-2.5 text-right">Tax</th>
+                        <th className="p-2.5">{t('finance.sales.analytics.tables.colPayment')}</th>
+                        <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colGross')}</th>
+                        <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colDiscounts')}</th>
+                        <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colNet')}</th>
+                        <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colTaxes')}</th>
                         <th className="p-2.5 text-right">Grand Total</th>
-                        <th className="p-2.5 text-center">Status</th>
+                        <th className="p-2.5 text-center">{t('common.status')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
                       {filteredBills.length === 0 ? (
                         <tr>
                           <td colSpan={13} className="p-8 text-center text-stone-400">
-                            No bills match the search filter.
+                            {t('finance.sales.analytics.tables.noData')}
                           </td>
                         </tr>
                       ) : (
                         filteredBills.map((bill) => {
                           const timeStr = bill.order_timestamp
-                            ? new Date(bill.order_timestamp).toLocaleTimeString('en-IN', {
+                            ? new Date(bill.order_timestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
                                 hour: '2-digit',
                                 minute: '2-digit',
                                 hour12: true,

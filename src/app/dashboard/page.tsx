@@ -18,8 +18,10 @@ import { BusinessHealth } from '@/components/dashboard/BusinessHealth';
 import { LayoutDashboard, RefreshCw } from 'lucide-react';
 import { MTDFinancialSummary } from '@/lib/types/database';
 import { getMonthDateRange } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
 
 export default function DashboardPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [loading, setLoading] = useState(true);
@@ -228,9 +230,9 @@ export default function DashboardPage() {
     flags.push({
       id: 'low_stock',
       severity: 'critical',
-      title: `${lowStockItems.length} Raw Materials Below Minimum Stock`,
-      description: `Critical items: ${itemNames}. Replenishment required.`,
-      linkText: 'Open Store Catalog',
+      title: t('dashboard.actionFlags.lowStockTitle', { count: lowStockItems.length }),
+      description: t('dashboard.actionFlags.lowStockDesc', { items: itemNames }),
+      linkText: t('dashboard.actionFlags.openCatalog'),
       href: '/inventory',
     });
   }
@@ -238,9 +240,9 @@ export default function DashboardPage() {
     flags.push({
       id: 'missing_sales',
       severity: 'warning',
-      title: 'Petpooja Sales Not Uploaded',
-      description: `Authoritative Petpooja reports for ${businessDate} have not been uploaded yet.`,
-      linkText: 'Upload Petpooja Sales',
+      title: t('dashboard.actionFlags.salesPendingTitle'),
+      description: t('dashboard.actionFlags.salesPendingDesc', { date: businessDate }),
+      linkText: t('dashboard.actionFlags.uploadSales'),
       href: '/finance/sales',
     });
   }
@@ -248,9 +250,9 @@ export default function DashboardPage() {
     flags.push({
       id: 'absent_staff',
       severity: 'warning',
-      title: `${absentStaffCount} Staff Members Absent Today`,
-      description: 'Manpower shortage detected in Service / Kitchen rosters.',
-      linkText: 'Check Muster Roll',
+      title: t('dashboard.actionFlags.absentStaffTitle', { count: absentStaffCount }),
+      description: t('dashboard.actionFlags.absentStaffDesc'),
+      linkText: t('dashboard.actionFlags.checkMuster'),
       href: '/people/attendance',
     });
   }
@@ -258,9 +260,9 @@ export default function DashboardPage() {
     flags.push({
       id: 'day_closing_open',
       severity: 'info',
-      title: 'Midnight Daily Closing Pending',
-      description: 'Reconcile sales, cash, expenses and footfall before locking the day.',
-      linkText: 'Closing Console',
+      title: t('dashboard.actionFlags.pendingClosing'),
+      description: t('dashboard.actionFlags.pendingClosingDesc'),
+      linkText: t('dashboard.actionFlags.closingConsole'),
       href: '/operations/closing',
     });
   }
@@ -272,13 +274,13 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <LayoutDashboard className="h-6 w-6 text-stone-800" />
-            Central Command Center
+            {t('dashboard.centralTitle')}
           </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('dashboard.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -286,7 +288,7 @@ export default function DashboardPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadDashboardData} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={loadDashboardData} disabled={loading} title={t('dashboard.refreshTitle')}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>

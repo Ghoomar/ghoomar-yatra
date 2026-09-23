@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, formatNumber } from '@/lib/utils';
 import { Flame, Plus, AlertTriangle, CheckCircle2, RefreshCw, History, Utensils, Truck } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface LpgTabProps {
   businessDate: string;
@@ -20,6 +22,7 @@ const KITCHEN_LOCATION_ID = 'a05329b1-941f-4d6d-a390-14cb16a7d42f';
 const KITCHEN_DEPT_ID = '6e9e8b3b-0e62-4a4f-bd2c-fb5b7d5aebe1';
 
 export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
 
   const [lpgItem, setLpgItem] = useState<any>(null);
@@ -53,7 +56,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       const [itemRes, locRes, vRes, movsRes] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('id', LPG_ITEM_ID).single(),
         supabase.from('item_location_stocks').select('quantity').eq('item_id', LPG_ITEM_ID).eq('location_id', CENTRAL_STORE_ID).maybeSingle(),
-        supabase.from('vendors').select('id, name').eq('is_active', true).order('name'),
+        supabase.from('vendors').select('id, name, name_hi').eq('is_active', true).order('name'),
         supabase.from('stock_movements')
           .select('*')
           .eq('item_id', LPG_ITEM_ID)
@@ -88,7 +91,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       setTodayIssuesValue(todayVal);
     } catch (err: any) {
       console.error('Failed to load LPG inventory:', err);
-      setMessage({ type: 'error', text: err.message || 'Failed to load LPG data.' });
+      setMessage({ type: 'error', text: err.message || t('finance.utilities.lpgTab.errorIssue') });
     } finally {
       setLoading(false);
     }
@@ -107,12 +110,12 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
     e.preventDefault();
     const qty = parseInt(issueQty, 10);
     if (isNaN(qty) || qty <= 0) {
-      alert('Please enter a valid positive cylinder count.');
+      alert(t('finance.utilities.lpgTab.alertValidCount'));
       return;
     }
 
     if (qty > storeStock) {
-      alert(`Insufficient cylinders in Central Store!\nAvailable: ${storeStock} cylinders\nRequested: ${qty} cylinders`);
+      alert(t('finance.utilities.lpgTab.alertInsufficientStock', { available: storeStock, requested: qty }));
       return;
     }
 
@@ -141,7 +144,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
       setMessage({
         type: 'success',
-        text: `Issued ${qty} LPG cylinders to Kitchen. Central Store balance: ${storeStock - qty} cylinders.`,
+        text: t('finance.utilities.lpgTab.successIssue', { qty, balance: storeStock - qty }),
       });
 
       setIssueQty('1');
@@ -149,7 +152,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       loadLpgData();
       onRefresh();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to issue cylinders to Kitchen.' });
+      setMessage({ type: 'error', text: err.message || t('finance.utilities.lpgTab.errorIssue') });
     } finally {
       setSaving(false);
     }
@@ -162,11 +165,11 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
     const rate = parseFloat(purchaseRate);
 
     if (isNaN(qty) || qty <= 0) {
-      alert('Please enter a valid quantity of cylinders.');
+      alert(t('finance.utilities.lpgTab.alertValidCount'));
       return;
     }
     if (isNaN(rate) || rate <= 0) {
-      alert('Please enter the actual purchase price per cylinder.');
+      alert(t('finance.utilities.lpgTab.alertValidPrice'));
       return;
     }
 
@@ -200,7 +203,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
       setMessage({
         type: 'success',
-        text: `Received ${qty} LPG cylinders @ ${formatINR(rate)}/cyl into Central Store. Stock increased to ${storeStock + qty} cylinders.`,
+        text: t('finance.utilities.lpgTab.successPurchase', { qty, rate: formatINR(rate), balance: storeStock + qty }),
       });
 
       setPurchaseQty('');
@@ -223,14 +226,14 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* Central Store Cylinder Balance */}
         <Card className={`relative overflow-hidden ${isLowStock ? 'border-rose-300 bg-rose-50/20' : ''}`}>
-          <CardDescription>LPG Stock</CardDescription>
+          <CardDescription>{t('finance.utilities.lpgTab.stockTitle')}</CardDescription>
           <div className="flex items-baseline gap-2 mt-1">
             <span className={`text-2xl font-bold font-mono ${isLowStock ? 'text-rose-600' : 'text-stone-900'}`}>
-              {storeStock} Cylinders
+              {storeStock} {storeStock === 1 ? t('finance.utilities.lpgTab.cylinderSingular') : t('finance.utilities.lpgTab.cylinderPlural')}
             </span>
             {isLowStock && (
               <Badge variant="danger" className="text-[10px]">
-                LOW RESERVE
+                {t('finance.utilities.lpgTab.lowReserve')}
               </Badge>
             )}
           </div>
@@ -238,13 +241,13 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
         {/* Minimum Reserve */}
         <Card>
-          <CardDescription>Minimum Reserve</CardDescription>
-          <div className="text-2xl font-bold text-amber-700 mt-1 font-mono">{minReserve} Cylinders</div>
+          <CardDescription>{t('finance.utilities.lpgTab.minimumReserve')}</CardDescription>
+          <div className="text-2xl font-bold text-amber-700 mt-1 font-mono">{minReserve} {t('finance.utilities.lpgTab.cylinderPlural')}</div>
         </Card>
 
         {/* Current WAC */}
         <Card>
-          <CardDescription>Avg Cost</CardDescription>
+          <CardDescription>{t('finance.utilities.lpgTab.avgCost')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1 font-mono">
             {currentWac > 0 ? `${formatINR(currentWac)} / cyl` : '—'}
           </div>
@@ -252,9 +255,9 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
         {/* Standard Commercial Spec */}
         <Card className="bg-stone-50/50">
-          <CardDescription>Cylinder Size</CardDescription>
+          <CardDescription>{t('finance.utilities.lpgTab.cylinderSize')}</CardDescription>
           <div className="text-2xl font-bold text-stone-700 mt-1 font-mono">
-            19.5 kg
+            {t('finance.utilities.lpgTab.standardSize')}
           </div>
         </Card>
       </div>
@@ -264,9 +267,13 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-xs text-rose-800">
           <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
           <div>
-            <div className="font-bold">LPG Cylinder Low Reserve Warning</div>
+            <div className="font-bold">{t('finance.utilities.lpgTab.lowStockWarningTitle')}</div>
             <div className="text-rose-700 mt-0.5">
-              Central Store currently has <strong>{storeStock} {storeStock === 1 ? 'cylinder' : 'cylinders'}</strong> remaining, which is at or below the configured safety reserve of <strong>{minReserve} cylinders</strong>. Please place a cylinder refill order to avoid kitchen production stoppages.
+              {t('finance.utilities.lpgTab.lowStockWarningText', {
+                storeStock,
+                unit: storeStock === 1 ? t('finance.utilities.lpgTab.cylinderSingular') : t('finance.utilities.lpgTab.cylinderPlural'),
+                minReserve,
+              })}
             </div>
           </div>
         </div>
@@ -279,7 +286,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Flame className="h-4 w-4 text-amber-600" />
-                LPG Action
+                {t('finance.utilities.lpgTab.lpgAction')}
               </CardTitle>
             </div>
             {/* Mode Switch Tabs */}
@@ -293,7 +300,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                     : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
-                Issue to Kitchen
+                {t('finance.utilities.lpgTab.tabIssue')}
               </button>
               <button
                 type="button"
@@ -304,7 +311,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                     : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
-                Purchase Inward
+                {t('finance.utilities.lpgTab.tabPurchase')}
               </button>
             </div>
           </CardHeader>
@@ -315,18 +322,18 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
               <form onSubmit={handleIssueSubmit} className="space-y-3 text-xs">
                 <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-100 text-[11px] text-stone-600 space-y-1">
                   <div className="flex justify-between">
-                    <span>Available in Store:</span>
-                    <strong className="font-mono text-stone-900">{storeStock} Cylinders</strong>
+                    <span>{t('finance.utilities.lpgTab.availableInStore')}</span>
+                    <strong className="font-mono text-stone-900">{storeStock} {t('finance.utilities.lpgTab.cylinderPlural')}</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span>Applicable WAC Rate:</span>
+                    <span>{t('finance.utilities.lpgTab.applicableWac')}</span>
                     <strong className="font-mono text-stone-900">{formatINR(currentWac)} / cyl</strong>
                   </div>
                 </div>
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Cylinders Issued <span className="text-rose-500">*</span>
+                    {t('finance.utilities.lpgTab.cylindersIssued')} <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -336,7 +343,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                       max={storeStock}
                       value={issueQty}
                       onChange={(e) => setIssueQty(e.target.value)}
-                      placeholder="e.g. 2"
+                      placeholder={t('finance.utilities.lpgTab.cylindersPlaceholder')}
                       required
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pr-14"
                     />
@@ -346,14 +353,14 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                   </div>
                   {parseInt(issueQty, 10) > storeStock && (
                     <p className="text-[11px] text-rose-600 mt-1 font-medium">
-                      Exceeds available store cylinders ({storeStock}).
+                      {t('finance.utilities.lpgTab.exceedsStock', { stock: storeStock })}
                     </p>
                   )}
                 </div>
 
                 {parseInt(issueQty, 10) > 0 && currentWac > 0 && (
                   <div className="p-2 bg-amber-50/70 rounded-lg border border-amber-200/60 flex justify-between items-center text-xs">
-                    <span className="text-amber-900">P&amp;L Consumption Cost:</span>
+                    <span className="text-amber-900">{t('finance.utilities.lpgTab.consumptionCost')}</span>
                     <strong className="font-mono text-amber-950">
                       {formatINR(parseInt(issueQty, 10) * currentWac)}
                     </strong>
@@ -361,12 +368,12 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 )}
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.lpgTab.notes')}</label>
                   <input
                     type="text"
                     value={issueNotes}
                     onChange={(e) => setIssueNotes(e.target.value)}
-                    placeholder="e.g. Main burner bank exchange"
+                    placeholder={t('finance.utilities.lpgTab.issueNotesPlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
@@ -379,11 +386,11 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 >
                   {saving ? (
                     <>
-                      <RefreshCw className="h-4 w-4 animate-spin" /> Issuing Cylinders...
+                      <RefreshCw className="h-4 w-4 animate-spin" /> {t('finance.utilities.lpgTab.issuingCylinders')}
                     </>
                   ) : (
                     <>
-                      <Utensils className="h-4 w-4" /> Issue to Kitchen
+                      <Utensils className="h-4 w-4" /> {t('finance.utilities.lpgTab.issueToKitchen')}
                     </>
                   )}
                 </Button>
@@ -393,7 +400,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
               <form onSubmit={handlePurchaseSubmit} className="space-y-3 text-xs">
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Cylinders Purchased <span className="text-rose-500">*</span>
+                    {t('finance.utilities.lpgTab.qtyPurchased')} <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -402,7 +409,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                       min="1"
                       value={purchaseQty}
                       onChange={(e) => setPurchaseQty(e.target.value)}
-                      placeholder="e.g. 10"
+                      placeholder={t('finance.utilities.lpgTab.purchaseQtyPlaceholder')}
                       required
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pr-14"
                     />
@@ -414,7 +421,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Purchase Price per Cylinder <span className="text-rose-500">*</span>
+                    {t('finance.utilities.lpgTab.pricePerCylinder')} <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400 font-bold">
@@ -426,7 +433,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                       min="1"
                       value={purchaseRate}
                       onChange={(e) => setPurchaseRate(e.target.value)}
-                      placeholder="e.g. 3050"
+                      placeholder={t('finance.utilities.lpgTab.pricePlaceholder')}
                       required
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pl-8"
                     />
@@ -435,7 +442,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
                 {parseInt(purchaseQty, 10) > 0 && parseFloat(purchaseRate) > 0 && (
                   <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/70 flex justify-between items-center text-xs">
-                    <span className="text-stone-600 font-medium">Total Purchase Amount:</span>
+                    <span className="text-stone-600 font-medium">{t('finance.utilities.lpgTab.totalPurchaseAmount')}</span>
                     <strong className="font-mono text-stone-900 text-sm">
                       {formatINR(parseInt(purchaseQty, 10) * parseFloat(purchaseRate))}
                     </strong>
@@ -443,39 +450,39 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 )}
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Vendor</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.lpgTab.vendor')}</label>
                   <select
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
                   >
-                    <option value="">Select Vendor (Optional)</option>
+                    <option value="">{t('finance.utilities.lpgTab.selectVendor')}</option>
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {getLocalizedMasterName(v, locale)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Invoice / Challan No.</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.lpgTab.invoiceNo')}</label>
                   <input
                     type="text"
                     value={invoiceNo}
                     onChange={(e) => setInvoiceNo(e.target.value)}
-                    placeholder="e.g. INDANE-54109"
+                    placeholder={t('finance.utilities.lpgTab.invoicePlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.lpgTab.notes')}</label>
                   <input
                     type="text"
                     value={purchaseNotes}
                     onChange={(e) => setPurchaseNotes(e.target.value)}
-                    placeholder="e.g. 10 cylinders delivered to store"
+                    placeholder={t('finance.utilities.lpgTab.purchaseNotesPlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
@@ -488,11 +495,11 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 >
                   {saving ? (
                     <>
-                      <RefreshCw className="h-4 w-4 animate-spin" /> Inwarding Cylinders...
+                      <RefreshCw className="h-4 w-4 animate-spin" /> {t('finance.utilities.lpgTab.inwardingStock')}
                     </>
                   ) : (
                     <>
-                      <Truck className="h-4 w-4" /> Record Purchase
+                      <Truck className="h-4 w-4" /> {t('finance.utilities.lpgTab.recordPurchase')}
                     </>
                   )}
                 </Button>
@@ -505,11 +512,14 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-base font-bold">LPG Movements</CardTitle>
+              <CardTitle className="text-base font-bold">{t('finance.utilities.lpgTab.movementsTitle')}</CardTitle>
             </div>
             {todayIssuesCylinders > 0 && (
               <Badge variant="warning">
-                Today: {todayIssuesCylinders} Cyl ({formatINR(todayIssuesValue)})
+                {t('finance.utilities.lpgTab.todaySummary', {
+                  count: todayIssuesCylinders,
+                  cost: formatINR(todayIssuesValue),
+                })}
               </Badge>
             )}
           </CardHeader>
@@ -517,9 +527,9 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
             {recentMovements.length === 0 ? (
               <div className="py-16 text-center text-stone-400 text-xs space-y-2">
                 <History className="h-8 w-8 mx-auto text-stone-300" />
-                <div>No LPG cylinder movements recorded yet.</div>
+                <div>{t('finance.utilities.lpgTab.noMovements')}</div>
                 <div className="text-[11px] text-stone-400">
-                  Record an inward purchase or issue to kitchen to start the ledger.
+                  {t('finance.utilities.lpgTab.noMovementsSub')}
                 </div>
               </div>
             ) : (
@@ -527,12 +537,12 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Date / Time</th>
-                      <th className="py-2.5 px-3">Action</th>
-                      <th className="py-2.5 px-3 text-right">Quantity</th>
-                      <th className="py-2.5 px-3 text-right">Rate</th>
-                      <th className="py-2.5 px-3 text-right">Total Value</th>
-                      <th className="py-2.5 px-3">Reference / Notes</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.lpgTab.colDateTime')}</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.lpgTab.colAction')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.lpgTab.colQuantity')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.lpgTab.colRate')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.lpgTab.colTotalValue')}</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.lpgTab.colNotes')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -544,7 +554,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <div className="font-semibold text-stone-900">{m.business_date}</div>
                             <div className="text-[10px] text-stone-400">
-                              {new Date(m.created_at).toLocaleTimeString('en-IN', {
+                              {new Date(m.created_at).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
                                 hour: 'numeric',
                                 minute: '2-digit',
                                 hour12: true,
@@ -553,7 +563,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                           </td>
                           <td className="py-2.5 px-3">
                             <Badge variant={isPurchase ? 'info' : isConsumption ? 'warning' : 'outline'}>
-                              {isPurchase ? 'Purchase Inward' : isConsumption ? 'Issued to Kitchen' : m.movement_type}
+                              {isPurchase ? t('finance.utilities.lpgTab.actionPurchase') : isConsumption ? t('finance.utilities.lpgTab.actionConsumption') : m.movement_type}
                             </Badge>
                           </td>
                           <td className={`py-2.5 px-3 text-right font-mono font-bold ${
@@ -570,8 +580,9 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                           <td className="py-2.5 px-3 text-stone-500 max-w-xs truncate">
                             {(() => {
                               const vendor = vendors.find((v) => v.id === m.reference_id);
-                              if (vendor && m.notes) return `${vendor.name} • ${m.notes}`;
-                              if (vendor) return vendor.name;
+                              const vendorName = vendor ? getLocalizedMasterName(vendor, locale) : '';
+                              if (vendor && m.notes) return `${vendorName} • ${m.notes}`;
+                              if (vendor) return vendorName;
                               return m.notes || m.purpose || '—';
                             })()}
                           </td>

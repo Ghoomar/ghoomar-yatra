@@ -5,16 +5,18 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { formatINR, getTodayBusinessDate, formatPercent, getMonthDateRange } from '@/lib/utils';
+import { formatINR, getTodayBusinessDate, getMonthDateRange } from '@/lib/utils';
 import { calculateDailyProfitability, calculateBreakEvenPacing, fetchMTDFinancialSummary } from '@/lib/finance-engine';
 import { MTDFinancialSummary } from '@/lib/types/database';
-import { TrendingUp, RefreshCw, Zap, Fuel, Flame, Receipt, UtensilsCrossed, IndianRupee, Building2 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { TrendingUp, RefreshCw, Zap, Receipt, UtensilsCrossed, IndianRupee, Building2 } from 'lucide-react';
 
 const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
 const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
 
 export default function ProfitabilityPage() {
   const supabase = createClient();
+  const { t } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +43,7 @@ export default function ProfitabilityPage() {
   const [variableExpenses, setVariableExpenses] = useState(0);
   const [totalSalaries, setTotalSalaries] = useState(68000);
   const [monthlyOtherFixed, setMonthlyOtherFixed] = useState(3500);
-  const [planningBreakEven, setPlanningBreakEven] = useState(3000000);
+  const [, setPlanningBreakEven] = useState(3000000);
   const [healthBufferPercent, setHealthBufferPercent] = useState(10);
   const [rentRate, setRentRate] = useState(0.10);
   const [investorRate, setInvestorRate] = useState(0.08);
@@ -103,14 +105,12 @@ export default function ProfitabilityPage() {
       let lpgCylinders = 0;
 
       (movs || []).forEach((m) => {
-        // Exclude internal transfers, purchases, opening stock, returns, and physical count adjustments from P&L expense
         if (['transfer', 'purchase', 'opening', 'return', 'count_adjustment', 'physical_count_adjustment'].includes(m.movement_type)) {
           return;
         }
         const val = Math.abs(Number(m.total_value)) || 0;
         const qty = Math.abs(Number(m.quantity)) || 0;
 
-        // Check if fuel consumption vs food material consumption
         if (m.item_id === DIESEL_ITEM_ID || m.purpose === 'Generator Fuel') {
           dieselCost += val;
           dieselLiters += qty;
@@ -261,21 +261,22 @@ export default function ProfitabilityPage() {
     mtdContributionMargin: mtdContribution,
   });
 
-  const cmRatioPercent = mtdNetSales > 0 ? Math.round((mtdContribution / mtdNetSales) * 100) : 45;
-
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <TrendingUp className="h-6 w-6 text-amber-600" />
-            Daily P&L
+            {t('finance.profitability.title')}
           </h1>
+          <p className="text-xs text-stone-500 mt-0.5">
+            {t('finance.profitability.subtitle')}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('finance.profitability.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -292,7 +293,7 @@ export default function ProfitabilityPage() {
       {/* Top Level Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-2 border-stone-200/80">
-          <CardDescription>Net Profit</CardDescription>
+          <CardDescription>{t('finance.profitability.ebitda')}</CardDescription>
           <div className={`text-3xl font-black mt-1 ${pnl.estimatedNetProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
             {pnl.isReported ? formatINR(pnl.estimatedNetProfit) : 'NOT REPORTED'}
           </div>
@@ -302,14 +303,14 @@ export default function ProfitabilityPage() {
         </Card>
 
         <Card>
-          <CardDescription>Food Cost %</CardDescription>
+          <CardDescription>{t('finance.profitability.foodMaterialCost')}</CardDescription>
           <div className="text-3xl font-bold text-stone-900 mt-1">
             {pnl.foodCostPercent}%
           </div>
         </Card>
 
         <Card>
-          <CardDescription>Monthly Performance</CardDescription>
+          <CardDescription>{t('finance.profitability.pacing')}</CardDescription>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant={
               breakEven.status === 'HEALTHY' || breakEven.status === 'Healthy' || breakEven.status === 'ON TARGET' ? 'success' :
@@ -320,7 +321,7 @@ export default function ProfitabilityPage() {
             </Badge>
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            Projected Month-End Revenue: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (BEP: {formatINR(breakEven.calculatedBreakEven, true)})
+            Projected: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (BEP: {formatINR(breakEven.calculatedBreakEven, true)})
           </div>
         </Card>
       </div>
@@ -333,7 +334,9 @@ export default function ProfitabilityPage() {
             <div className="flex items-center justify-between font-bold text-stone-900">
               <div className="flex items-center gap-2">
                 <Receipt className="h-4 w-4 text-emerald-600" />
-                <span className="tracking-wider uppercase text-xs sm:text-sm font-bold text-stone-900">Revenue</span>
+                <span className="tracking-wider uppercase text-xs sm:text-sm font-bold text-stone-900">
+                  {t('finance.profitability.revenueBridge')}
+                </span>
                 {pnl.isReported ? (
                   <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                     PETPOOJA ACTUAL
@@ -354,18 +357,18 @@ export default function ProfitabilityPage() {
                 {/* Sales Before Discounts and Discounts */}
                 <div className="pl-4 space-y-1 text-xs">
                   <div className="flex items-center justify-between text-stone-700">
-                    <span>Sales Before Discounts</span>
+                    <span>{t('finance.profitability.salesBeforeDiscounts')}</span>
                     <span className="font-mono font-medium text-stone-900">{formatINR(salesReport.sub_total)}</span>
                   </div>
                   <div className="flex items-center justify-between text-stone-500">
-                    <span>Less: Discounts</span>
+                    <span>{t('finance.profitability.lessDiscounts')}</span>
                     <span className="font-mono text-rose-600">− {formatINR(salesReport.discounts || 0)}</span>
                   </div>
                 </div>
 
                 {/* Net Sales */}
                 <div className="pt-2 border-t border-stone-200 flex items-center justify-between font-bold text-stone-900 bg-stone-50/70 px-2.5 py-2 rounded-lg">
-                  <span className="font-bold text-stone-900">Net Sales</span>
+                  <span className="font-bold text-stone-900">{t('finance.profitability.netSales')}</span>
                   <span className="text-emerald-700 text-base font-extrabold font-mono">
                     {formatINR(pnl.revenue)}
                   </span>
@@ -374,11 +377,11 @@ export default function ProfitabilityPage() {
                 {/* Informational Taxes & Billed Amount */}
                 <div className="pl-4 pt-1 space-y-1 text-xs">
                   <div className="flex items-center justify-between text-stone-600">
-                    <span>GST / Taxes Collected</span>
+                    <span>{t('finance.profitability.taxesCollected')}</span>
                     <span className="font-mono text-stone-800">{formatINR(salesReport.tax_amount || 0)}</span>
                   </div>
                   <div className="flex items-center justify-between text-stone-700 font-medium">
-                    <span>Gross Bill Value</span>
+                    <span>{t('finance.profitability.grossBillValue')}</span>
                     <span className="font-mono text-stone-900">{formatINR(salesReport.gross_sales)}</span>
                   </div>
                 </div>
@@ -391,34 +394,30 @@ export default function ProfitabilityPage() {
             <div className="flex items-center justify-between font-semibold text-stone-800">
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="h-4 w-4 text-amber-600" />
-                <span>Food & Materials</span>
+                <span>{t('finance.profitability.foodMaterialCost')}</span>
               </div>
               <span className="text-rose-600">− {formatINR(pnl.totalDirectConsumption)}</span>
             </div>
             <div className="pl-4 space-y-1 text-xs text-stone-500">
               <div className="flex items-center justify-between">
-                <span>• Customer Food Production</span>
+                <span>• {t('finance.profitability.customerFood')}</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.customerFoodConsumption)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Complimentary Food (Guest Relations)</span>
+                <span>• {t('finance.profitability.complimentary')}</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.complimentaryFoodConsumption)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Sampling / Recipe Testing</span>
-                <span className="font-mono text-stone-700">{formatINR(pnl.samplingConsumption)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>• Staff Food (Duty Meals)</span>
+                <span>• {t('finance.profitability.staffFood')}</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.staffFoodConsumption)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Kitchen Wastage &amp; Storage Spoilage</span>
+                <span>• {t('finance.profitability.wastageSpoilage')}</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.wastageCost)}</span>
               </div>
               {pnl.otherConsumption > 0 && (
                 <div className="flex items-center justify-between">
-                  <span>• Other Operational Consumption</span>
+                  <span>• Operational Consumption</span>
                   <span className="font-mono text-stone-700">{formatINR(pnl.otherConsumption)}</span>
                 </div>
               )}
@@ -430,21 +429,21 @@ export default function ProfitabilityPage() {
             <div className="flex items-center justify-between font-semibold text-stone-800">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-amber-600" />
-                <span>Utilities & Fuel</span>
+                <span>{t('finance.profitability.utilities')}</span>
               </div>
               <span className="text-rose-600">− {formatINR(pnl.operationalUtilities.totalOperationalUtilities)}</span>
             </div>
             <div className="pl-4 space-y-1 text-xs text-stone-500">
               <div className="flex items-center justify-between">
-                <span>• Electricity ({operationalUtilities.electricityKvah.toFixed(1)} KVAH × {formatINR(operationalUtilities.electricityRate)}/KVAH)</span>
+                <span>• {t('finance.profitability.electricity')} ({operationalUtilities.electricityKvah.toFixed(1)} KVAH × {formatINR(operationalUtilities.electricityRate)}/KVAH)</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.electricityCost)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Generator Diesel ({operationalUtilities.generatorDieselLiters.toFixed(1)} L consumed @ WAC)</span>
+                <span>• {t('finance.profitability.dieselGen')} ({operationalUtilities.generatorDieselLiters.toFixed(1)} L)</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.generatorDieselCost)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Commercial LPG ({operationalUtilities.commercialLpgCylinders} Cyl issued @ WAC)</span>
+                <span>• {t('finance.profitability.commercialLpg')} ({operationalUtilities.commercialLpgCylinders} Cyl)</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.commercialLpgCost)}</span>
               </div>
             </div>
@@ -455,21 +454,21 @@ export default function ProfitabilityPage() {
             <div className="flex items-center justify-between font-semibold text-stone-800">
               <div className="flex items-center gap-2">
                 <IndianRupee className="h-4 w-4 text-amber-600" />
-                <span>Operating Expenses</span>
+                <span>{t('finance.profitability.operationalExpenses')}</span>
               </div>
               <span className="text-rose-600">− {formatINR(pnl.totalVariableExpenses)}</span>
             </div>
             <div className="pl-4 space-y-1 text-xs text-stone-500">
               <div className="flex items-center justify-between">
-                <span>• Property Rent ({(rentRate * 100).toFixed(0)}% of Revenue)</span>
+                <span>• {t('finance.profitability.rentShare', { percent: (rentRate * 100).toFixed(0) })}</span>
                 <span>{formatINR(pnl.revenue * rentRate)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Investor Share ({(investorRate * 100).toFixed(0)}% of Revenue)</span>
+                <span>• {t('finance.profitability.investorShare', { percent: (investorRate * 100).toFixed(0) })}</span>
                 <span>{formatINR(pnl.revenue * investorRate)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Direct Logged Expenses (Vouchers)</span>
+                <span>• {t('finance.profitability.otherVariableExps')}</span>
                 <span>{formatINR(variableExpenses)}</span>
               </div>
             </div>
@@ -480,18 +479,18 @@ export default function ProfitabilityPage() {
             <div className="flex items-center justify-between font-semibold text-stone-800">
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-amber-600" />
-                <span>Monthly Overheads</span>
+                <span>{t('finance.profitability.payrollFixed')}</span>
                 <span className="text-[10px] text-amber-800 font-normal bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">ALLOCATED ESTIMATE</span>
               </div>
               <span className="text-rose-600">− {formatINR(pnl.dailyAllocatedFixedCosts)}</span>
             </div>
             <div className="pl-4 space-y-1 text-xs text-stone-500">
               <div className="flex items-center justify-between">
-                <span>• Staff Salaries ({formatINR(totalSalaries)} ÷ {daysInMonth} days)</span>
+                <span>• {t('finance.profitability.staffSalaries')} ({formatINR(totalSalaries)} ÷ {daysInMonth} days)</span>
                 <span>{formatINR(totalSalaries / daysInMonth)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• Fixed Internet &amp; Telecom ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
+                <span>• {t('finance.profitability.otherFixed')} ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
                 <span>{formatINR(monthlyOtherFixed / daysInMonth)}</span>
               </div>
             </div>
@@ -501,7 +500,7 @@ export default function ProfitabilityPage() {
           <div className="py-4 flex items-center justify-between font-extrabold text-base bg-stone-100 px-3 rounded-xl">
             <div className="flex items-center gap-2">
               <TrendingUp className={`h-4 w-4 ${pnl.estimatedNetProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`} />
-              <span className="text-stone-900">Net Profit</span>
+              <span className="text-stone-900">{t('finance.profitability.ebitda')}</span>
             </div>
             <span className={pnl.estimatedNetProfit >= 0 ? 'text-emerald-700 text-lg' : 'text-rose-600 text-lg'}>
               {formatINR(pnl.estimatedNetProfit)}
@@ -513,14 +512,13 @@ export default function ProfitabilityPage() {
       {/* Break-Even Analysis */}
       <Card>
         <CardHeader>
-          <CardTitle>Calculated Break-Even</CardTitle>
+          <CardTitle>{t('finance.profitability.pacing')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0 text-xs space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">Calculated Break-Even Point</div>
-              <div className="text-2xl font-black text-amber-700">
-                {formatINR(breakEven.calculatedBreakEven)} / month
+              <div className="text-xs font-bold text-stone-700 uppercase">
+                {t('finance.profitability.pacingTarget', { target: `${formatINR(breakEven.calculatedBreakEven)}/mo` })}
               </div>
               <p className="text-stone-500 text-[11px]">
                 {breakEven.requiredDailyRevenue > 0
@@ -536,7 +534,7 @@ export default function ProfitabilityPage() {
                 {breakEven.breakEvenProgressPercent}%
               </div>
               <p className="text-stone-500 text-[11px]">
-                Projected Month-End Revenue: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong>
+                Projected: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong>
               </p>
             </div>
           </div>

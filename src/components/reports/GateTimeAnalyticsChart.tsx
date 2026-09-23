@@ -20,6 +20,7 @@ import {
   Flame,
   ArrowRight,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 interface GateTimeAnalyticsChartProps {
   selectedDate: string;
@@ -27,6 +28,7 @@ interface GateTimeAnalyticsChartProps {
 }
 
 export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeAnalyticsChartProps) {
+  const { t } = useI18n();
   const [data, setData] = useState<GateAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [nightStart, setNightStart] = useState<number>(23);
@@ -88,10 +90,10 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
           <div>
             <CardTitle className="text-base font-bold flex items-center gap-2 text-stone-900">
               <Clock className="h-5 w-5 text-amber-600" />
-              Gate Counter Time &amp; Entry Analytics
+              {t('reports.gateTimeChart.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Precise entry timestamps preserved from original counter taps in IST (Asia/Kolkata)
+              {t('reports.gateTimeChart.subtitle')}
             </CardDescription>
           </div>
 
@@ -108,7 +110,7 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Combined
+                {t('reports.gateTimeChart.combined')}
               </button>
               <button
                 type="button"
@@ -119,7 +121,7 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                People Only
+                {t('reports.gateTimeChart.peopleOnly')}
               </button>
               <button
                 type="button"
@@ -130,14 +132,14 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Vehicles Only
+                {t('reports.gateTimeChart.vehiclesOnly')}
               </button>
             </div>
 
             {/* Nighttime Window Configurator */}
             <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-2.5 py-1 text-stone-700 shadow-2xs">
               <Moon className="h-3.5 w-3.5 text-indigo-600" />
-              <span className="text-[11px] text-stone-400 font-medium">Night Window:</span>
+              <span className="text-[11px] text-stone-400 font-medium">{t('reports.gateTimeChart.nightWindow')}</span>
               <select
                 value={nightStart}
                 onChange={(e) => setNightStart(parseInt(e.target.value, 10))}
@@ -149,7 +151,7 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
                   </option>
                 ))}
               </select>
-              <span className="text-stone-300">to</span>
+              <span className="text-stone-300">{t('reports.gateTimeChart.to')}</span>
               <select
                 value={nightEnd}
                 onChange={(e) => setNightEnd(parseInt(e.target.value, 10))}
@@ -169,7 +171,7 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
               onClick={loadData}
               disabled={loading}
               className="h-8 px-2.5 text-xs text-stone-600 hover:text-stone-900"
-              title="Refresh gate analytics"
+              title={t('reports.gateTimeChart.refreshTitle')}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-amber-600' : ''}`} />
             </Button>
@@ -180,37 +182,37 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-3 mt-3 border-t border-stone-200/60">
           <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
             <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider flex items-center gap-1">
-              <Users className="h-3.5 w-3.5 text-amber-600" /> Entry Footfall
+              <Users className="h-3.5 w-3.5 text-amber-600" /> {t('reports.gateTimeChart.entryFootfall')}
             </span>
             <span className="text-xl font-black text-stone-900 block mt-0.5">
               {formatNumber(summary?.total_visitors || 0)}
             </span>
-            <span className="text-[10px] text-stone-400">Total persons entered</span>
+            <span className="text-[10px] text-stone-400">{t('reports.gateTimeChart.totalPersons')}</span>
           </div>
 
           <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
             <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider flex items-center gap-1">
-              <Car className="h-3.5 w-3.5 text-sky-600" /> Cars
+              <Car className="h-3.5 w-3.5 text-sky-600" /> {t('reports.gateTimeChart.cars')}
             </span>
             <span className="text-xl font-black text-stone-900 block mt-0.5">
               {formatNumber(summary?.total_cars || 0)}
             </span>
-            <span className="text-[10px] text-stone-400">Car entries</span>
+            <span className="text-[10px] text-stone-400">{t('reports.gateTimeChart.carEntries')}</span>
           </div>
 
           <div className="bg-white p-2.5 rounded-lg border border-stone-200/80 shadow-2xs">
             <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider flex items-center gap-1">
-              <Bike className="h-3.5 w-3.5 text-emerald-600" /> Bikes
+              <Bike className="h-3.5 w-3.5 text-emerald-600" /> {t('reports.gateTimeChart.bikes')}
             </span>
             <span className="text-xl font-black text-stone-900 block mt-0.5">
               {formatNumber(summary?.total_bikes || 0)}
             </span>
-            <span className="text-[10px] text-stone-400">Bike entries</span>
+            <span className="text-[10px] text-stone-400">{t('reports.gateTimeChart.bikeEntries')}</span>
           </div>
 
           <div className="bg-white p-2.5 rounded-lg border border-indigo-200/60 shadow-2xs">
             <span className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider flex items-center gap-1">
-              <Moon className="h-3.5 w-3.5 text-indigo-600" /> Night Entry
+              <Moon className="h-3.5 w-3.5 text-indigo-600" /> {t('reports.gateTimeChart.nightEntry')}
             </span>
             <div className="flex items-baseline gap-1.5 mt-0.5">
               <span className="text-xl font-black text-indigo-900">
@@ -221,19 +223,22 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
               </span>
             </div>
             <span className="text-[10px] text-indigo-500/80 font-medium">
-              {summary?.nighttime?.total_vehicles || 0} vehicles ({summary?.nighttime?.vehicles_percent || 0}%)
+              {t('reports.gateTimeChart.vehiclesNight', {
+                count: summary?.nighttime?.total_vehicles || 0,
+                percent: summary?.nighttime?.vehicles_percent || 0,
+              })}
             </span>
           </div>
 
           <div className="bg-white p-2.5 rounded-lg border border-amber-200/60 shadow-2xs">
             <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider flex items-center gap-1">
-              <Flame className="h-3.5 w-3.5 text-amber-600" /> Peak Hours
+              <Flame className="h-3.5 w-3.5 text-amber-600" /> {t('reports.gateTimeChart.peakHours')}
             </span>
             <div className="text-xs font-bold text-stone-900 mt-0.5 truncate">
-              PAX: <span className="text-amber-700 font-extrabold">{summary?.peak_visitor_hour?.label}</span> ({summary?.peak_visitor_hour?.count})
+              {t('reports.gateTimeChart.paxLabel')} <span className="text-amber-700 font-extrabold">{summary?.peak_visitor_hour?.label}</span> ({summary?.peak_visitor_hour?.count})
             </div>
             <div className="text-xs font-bold text-stone-900 mt-0.5 truncate">
-              Veh: <span className="text-sky-700 font-extrabold">{summary?.peak_vehicle_hour?.label}</span> ({summary?.peak_vehicle_hour?.count})
+              {t('reports.gateTimeChart.vehLabel')} <span className="text-sky-700 font-extrabold">{summary?.peak_vehicle_hour?.label}</span> ({summary?.peak_vehicle_hour?.count})
             </div>
           </div>
         </div>
@@ -243,7 +248,7 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
         {loading ? (
           <div className="py-20 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
             <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />
-            Analyzing gate counter event logs...
+            {t('reports.gateTimeChart.analyzingLogs')}
           </div>
         ) : (
           <>
@@ -399,32 +404,32 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
                     <span className="font-extrabold text-white text-xs">{hoveredPoint.hour_label}</span>
                     {hoveredPoint.is_nighttime ? (
                       <Badge variant="info" className="text-[10px] py-0 px-1.5 bg-indigo-950 text-indigo-300 border-indigo-700/50 gap-1">
-                        <Moon className="h-2.5 w-2.5" /> Night Window
+                        <Moon className="h-2.5 w-2.5" /> {t('reports.gateTimeChart.nightWindowBadge')}
                       </Badge>
                     ) : (
-                      <span className="text-[10px] text-stone-400">Daytime</span>
+                      <span className="text-[10px] text-stone-400">{t('reports.gateTimeChart.daytimeBadge')}</span>
                     )}
                   </div>
 
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between items-center text-amber-300 font-semibold">
-                      <span className="flex items-center gap-1.5"><Users className="h-3 w-3" /> People Entered:</span>
+                      <span className="flex items-center gap-1.5"><Users className="h-3 w-3" /> {t('reports.gateTimeChart.peopleEntered')}</span>
                       <strong className="font-black text-sm">{hoveredPoint.visitors}</strong>
                     </div>
 
                     <div className="flex justify-between items-center text-sky-300">
-                      <span className="flex items-center gap-1.5"><Car className="h-3 w-3" /> Cars:</span>
+                      <span className="flex items-center gap-1.5"><Car className="h-3 w-3" /> {t('reports.gateTimeChart.cars')}</span>
                       <strong className="font-bold">{hoveredPoint.cars}</strong>
                     </div>
 
                     <div className="flex justify-between items-center text-emerald-300">
-                      <span className="flex items-center gap-1.5"><Bike className="h-3 w-3" /> Bikes:</span>
+                      <span className="flex items-center gap-1.5"><Bike className="h-3 w-3" /> {t('reports.gateTimeChart.bikes')}</span>
                       <strong className="font-bold">{hoveredPoint.bikes}</strong>
                     </div>
 
                     {Object.keys(hoveredPoint.prefixes).length > 0 && (
                       <div className="pt-1.5 mt-1 border-t border-stone-800 text-[11px] text-stone-300">
-                        <span className="text-stone-400 block mb-0.5">Car Origins:</span>
+                        <span className="text-stone-400 block mb-0.5">{t('reports.gateTimeChart.carOrigins')}</span>
                         <div className="flex flex-wrap gap-1">
                           {Object.entries(hoveredPoint.prefixes).map(([pref, cnt]) => (
                             <span key={pref} className="bg-stone-800 px-1.5 py-0.5 rounded text-[10px] font-mono">
@@ -444,25 +449,25 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5 text-stone-600">
                   <span className="w-3 h-3 rounded-xs bg-amber-500 inline-block" />
-                  <span>Visitors (PAX)</span>
+                  <span>{t('reports.gateTimeChart.legendVisitors')}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-stone-600">
                   <span className="w-3 h-3 rounded-xs bg-sky-600 inline-block" />
-                  <span>Cars</span>
+                  <span>{t('reports.gateTimeChart.legendCars')}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-stone-600">
                   <span className="w-3 h-3 rounded-xs bg-emerald-500 inline-block" />
-                  <span>Bikes</span>
+                  <span>{t('reports.gateTimeChart.legendBikes')}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-indigo-700">
                   <span className="w-3 h-3 rounded-xs bg-indigo-100 border border-indigo-200 inline-block" />
-                  <span>Night Window ({data?.night_window?.label})</span>
+                  <span>{t('reports.gateTimeChart.legendNight', { label: data?.night_window?.label })}</span>
                 </div>
               </div>
 
               {/* Registration Prefixes Quick Pills */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-semibold text-stone-400">Cars:</span>
+                <span className="text-[11px] font-semibold text-stone-400">{t('reports.gateTimeChart.carsPrefix')}</span>
                 {(summary?.prefixes || []).map((p) => (
                   <span
                     key={p.name}

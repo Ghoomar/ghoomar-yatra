@@ -1,6 +1,9 @@
+'use client';
+
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { useI18n } from '@/lib/i18n/context';
 
 interface BusinessHealthProps {
   salesHealth: 'Healthy' | 'Warning' | 'Pending';
@@ -19,19 +22,45 @@ export function BusinessHealth({
   cashHealth,
   profitabilityHealth,
 }: BusinessHealthProps) {
+  const { t } = useI18n();
+
+  const getLocalizedHealthStatus = (s: string) => {
+    const norm = (s || '').toUpperCase();
+    switch (norm) {
+      case 'HEALTHY':
+        return t('dashboard.health.statusHealthy');
+      case 'WARNING':
+        return t('dashboard.health.statusWarning');
+      case 'PENDING':
+        return t('dashboard.health.statusPending');
+      case 'ON TARGET':
+        return t('dashboard.health.statusOnTarget');
+      case 'AT RISK':
+        return t('dashboard.health.statusAtRisk');
+      case 'BELOW TARGET':
+        return t('dashboard.health.statusBelowTarget');
+      case 'BELOW BREAK-EVEN':
+        return t('dashboard.health.statusBelowBreakEven');
+      case 'NOT REPORTED':
+        return t('dashboard.health.statusNotReported');
+      default:
+        return s;
+    }
+  };
+
   const healthItems = [
-    { label: 'Sales & POS', status: salesHealth },
-    { label: 'Footfall Flow', status: footfallHealth },
-    { label: 'Store Inventory', status: inventoryHealth },
-    { label: 'Staff Attendance', status: attendanceHealth },
-    { label: 'Cash & Gateway', status: cashHealth },
-    { label: 'Profitability Pace', status: profitabilityHealth },
+    { label: t('dashboard.health.salesPos'), status: salesHealth },
+    { label: t('dashboard.health.footfallFlow'), status: footfallHealth },
+    { label: t('dashboard.health.storeInventory'), status: inventoryHealth },
+    { label: t('dashboard.health.staffAttendance'), status: attendanceHealth },
+    { label: t('dashboard.health.cashGateway'), status: cashHealth },
+    { label: t('dashboard.health.profitabilityPace'), status: profitabilityHealth },
   ];
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle>System Status</CardTitle>
+        <CardTitle>{t('dashboard.health.systemStatus')}</CardTitle>
       </CardHeader>
       <CardContent className="pt-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
@@ -46,7 +75,7 @@ export function BusinessHealth({
               >
                 <span className="font-medium text-stone-700">{item.label}</span>
                 <Badge variant={isGood ? 'success' : isWarn ? 'warning' : 'danger'}>
-                  {item.status}
+                  {getLocalizedHealthStatus(item.status)}
                 </Badge>
               </div>
             );

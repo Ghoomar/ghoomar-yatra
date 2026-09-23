@@ -8,14 +8,18 @@ import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
 import { Shirt, Plus, RefreshCw, CheckCircle, AlertCircle, ShieldCheck, RotateCcw } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
-function getEmployeeRoleName(emp: any): string {
-  if (!emp) return 'Staff';
-  if (Array.isArray(emp.role)) return emp.role[0]?.name || 'Staff';
-  return emp.role?.name || emp.designation || 'Staff';
+function getEmployeeRoleName(emp: any, locale: 'en' | 'hi'): string {
+  if (!emp) return locale === 'hi' ? 'स्टाफ' : 'Staff';
+  const roleObj = Array.isArray(emp.role) ? emp.role[0] : emp.role;
+  if (roleObj) return getLocalizedMasterName(roleObj, locale) || roleObj.name || (locale === 'hi' ? 'स्टाफ' : 'Staff');
+  return emp.designation || (locale === 'hi' ? 'स्टाफ' : 'Staff');
 }
 
 export default function UniformsPage() {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [businessDate] = useState(getTodayBusinessDate());
   const [uniforms, setUniforms] = useState<any[]>([]);
@@ -38,14 +42,14 @@ export default function UniformsPage() {
       // 1. Authoritative Uniform Items from inventory_items
       const { data: uData, error: uError } = await supabase
         .from('inventory_items')
-        .select('*, unit:units!inventory_items_unit_id_fkey(symbol), category:inventory_categories(name)')
+        .select('*, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi), category:inventory_categories(name, name_hi)')
         .eq('inventory_class', 'Uniform')
         .order('name');
 
       // 2. Active Employees
       const { data: empData, error: eError } = await supabase
         .from('employees')
-        .select('id, name, employee_code, role:employee_roles(name)')
+        .select('id, name, employee_code, role:employee_roles(name, name_hi)')
         .eq('employment_status', 'Active')
         .order('name');
 
@@ -54,10 +58,10 @@ export default function UniformsPage() {
         .from('employee_uniform_issues')
         .select(`
           id, business_date, created_at, notes,
-          employee:employees(name, employee_code, role:employee_roles(name)),
+          employee:employees(name, employee_code, role:employee_roles(name, name_hi)),
           items:employee_uniform_issue_items(
             id, quantity, status, item_id, uniform_item_id, returned_at,
-            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, item_code),
+            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, name_hi, item_code),
             legacy_uniform:uniform_items(name, size)
           )
         `)
@@ -90,7 +94,7 @@ export default function UniformsPage() {
       setIssues(issData || []);
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Error loading uniform records.' });
+      setMessage({ type: 'error', text: err.message || t('operations.uniforms.loadError') });
     } finally {
       setLoading(false);
     }
@@ -106,7 +110,10 @@ export default function UniformsPage() {
 
     const targetUni = uniforms.find((u) => u.id === selectedUniformId);
     if (!targetUni || Number(targetUni.current_stock) < issueQty) {
-      setMessage({ type: 'error', text: `Insufficient stock! Only ${targetUni?.current_stock || 0} available in store.` });
+      setMessage({
+        type: 'error',
+        text: t('operations.uniforms.insufficientStock', { stock: targetUni?.current_stock || 0 }),
+      });
       return;
     }
 
@@ -186,20 +193,20 @@ export default function UniformsPage() {
         },
       });
 
-      setMessage({ type: 'success', text: `Uniform issued successfully (${issueQty} pcs).` });
+      setMessage({ type: 'success', text: t('operations.uniforms.issueSuccess', { qty: issueQty }) });
       setShowIssueModal(false);
       setIssueQty(1);
       setIssueNotes('');
       loadData();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Error issuing uniform.' });
+      setMessage({ type: 'error', text: err.message || t('operations.uniforms.issueError') });
     } finally {
       setSaving(false);
     }
   };
 
   const handleReturnUniform = async (issueItemId: string, uniformItemId: string, qty: number) => {
-    if (!confirm(`Confirm return of ${qty} uniform pcs back to central inventory?`)) return;
+    if (!confirm(t('operations.uniforms.confirmReturn', { qty }))) return;
     setSaving(true);
     try {
       // 1. Update issue item status
@@ -244,10 +251,10 @@ export default function UniformsPage() {
         details: { uniform_item_id: uniformItemId, returned_qty: qty },
       });
 
-      setMessage({ type: 'success', text: `Uniform return recorded (${qty} pcs back to store).` });
+      setMessage({ type: 'success', text: t('operations.uniforms.returnSuccess', { qty }) });
       loadData();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Error returning uniform.' });
+      setMessage({ type: 'error', text: err.message || t('operations.uniforms.returnError') });
     } finally {
       setSaving(false);
     }
@@ -262,16 +269,16 @@ export default function UniformsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Shirt className="h-6 w-6 text-amber-600" />
-            Uniform Inventory & Staff Issues
+            {t('operations.uniforms.title')}
           </h1>
           <p className="text-sm text-stone-500">
-            Authoritative SKU-linked uniform inventory with employee custody tracking and return clearances.
+            {t('operations.uniforms.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Button variant="primary" size="sm" onClick={() => setShowIssueModal(true)} className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white">
-            <Plus className="h-4 w-4" /> Issue Uniform to Staff
+            <Plus className="h-4 w-4" /> {t('operations.uniforms.issueUniformAction')}
           </Button>
           <Button variant="outline" size="sm" onClick={loadData}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -294,33 +301,33 @@ export default function UniformsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Available in Central Store</CardDescription>
-            <div className="text-2xl font-bold text-stone-900 mt-1">{totalAvailable} Pieces</div>
+            <CardDescription>{t('operations.uniforms.availableStore')}</CardDescription>
+            <div className="text-2xl font-bold text-stone-900 mt-1">{totalAvailable} {t('operations.uniforms.pieces')}</div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Authoritative inventory items ready for issue
+            {t('operations.uniforms.availableStoreDesc')}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Currently Issued to Staff</CardDescription>
-            <div className="text-2xl font-bold text-amber-600 mt-1">{totalIssued} Pieces</div>
+            <CardDescription>{t('operations.uniforms.currentlyIssued')}</CardDescription>
+            <div className="text-2xl font-bold text-amber-600 mt-1">{totalIssued} {t('operations.uniforms.pieces')}</div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Active staff uniforms currently under individual custody
+            {t('operations.uniforms.currentlyIssuedDesc')}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription>Exit Clearance Policy</CardDescription>
+            <CardDescription>{t('operations.uniforms.clearancePolicy')}</CardDescription>
             <div className="text-base font-semibold text-stone-800 mt-1 flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" /> Clearance Mandatory
+              <ShieldCheck className="h-4 w-4 text-emerald-600" /> {t('operations.uniforms.clearanceMandatory')}
             </div>
           </CardHeader>
           <CardContent className="pt-0 text-[11px] text-stone-500">
-            Returned or deducted before final salary settlement
+            {t('operations.uniforms.clearancePolicyDesc')}
           </CardContent>
         </Card>
       </div>
@@ -328,44 +335,44 @@ export default function UniformsPage() {
       {/* Uniform Stock Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Uniform Stock Master</CardTitle>
-          <CardDescription>Live authoritative inventory stock by SKU and item size</CardDescription>
+          <CardTitle>{t('operations.uniforms.stockMasterTitle')}</CardTitle>
+          <CardDescription>{t('operations.uniforms.stockMasterDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
             <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-              <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading uniform stock...
+              <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> {t('operations.uniforms.loadingStock')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                    <th className="py-2.5 px-3">SKU</th>
-                    <th className="py-2.5 px-3">Uniform Item</th>
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3 text-right">Available in Store</th>
-                    <th className="py-2.5 px-3 text-right">Active with Staff</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3">{t('operations.uniforms.skuCol')}</th>
+                    <th className="py-2.5 px-3">{t('operations.uniforms.itemCol')}</th>
+                    <th className="py-2.5 px-3">{t('operations.uniforms.categoryCol')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('operations.uniforms.storeCol')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('operations.uniforms.issuedCol')}</th>
+                    <th className="py-2.5 px-3 text-center">{t('operations.uniforms.statusCol')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {uniforms.map((u) => (
                     <tr key={u.id} className="hover:bg-stone-50/80">
                       <td className="py-3 px-3 font-mono font-bold text-amber-700">{u.item_code}</td>
-                      <td className="py-3 px-3 font-semibold text-stone-900">{u.name}</td>
-                      <td className="py-3 px-3 text-stone-500">{u.category?.name || 'Uniform'}</td>
+                      <td className="py-3 px-3 font-semibold text-stone-900">{getLocalizedMasterName(u, locale)}</td>
+                      <td className="py-3 px-3 text-stone-500">{getLocalizedMasterName(u.category, locale) || t('operations.uniforms.itemCol')}</td>
                       <td className="py-3 px-3 text-right font-bold text-emerald-700 text-sm">
-                        {Number(u.current_stock || 0)} {u.unit?.symbol || 'pcs'}
+                        {Number(u.current_stock || 0)} {getLocalizedMasterSymbol(u.unit, locale) || t('operations.uniforms.pcs')}
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-amber-700 text-sm">
-                        {u.issued_count} pcs
+                        {u.issued_count} {t('operations.uniforms.pcs')}
                       </td>
                       <td className="py-3 px-3 text-center">
                         {Number(u.current_stock || 0) <= 5 ? (
-                          <Badge variant="warning">Low Store</Badge>
+                          <Badge variant="warning">{t('operations.uniforms.lowStore')}</Badge>
                         ) : (
-                          <Badge variant="success">Adequate</Badge>
+                          <Badge variant="success">{t('operations.uniforms.adequate')}</Badge>
                         )}
                       </td>
                     </tr>
@@ -373,7 +380,7 @@ export default function UniformsPage() {
                   {uniforms.length === 0 && (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-stone-400">
-                        No uniform items found in inventory.
+                        {t('operations.uniforms.noUniformsFound')}
                       </td>
                     </tr>
                   )}
@@ -387,19 +394,19 @@ export default function UniformsPage() {
       {/* Uniform Issues History */}
       <Card>
         <CardHeader>
-          <CardTitle>Staff Uniform Issues & Custody Ledger</CardTitle>
-          <CardDescription>Track items issued to staff with return and clearance capability</CardDescription>
+          <CardTitle>{t('operations.uniforms.ledgerTitle')}</CardTitle>
+          <CardDescription>{t('operations.uniforms.ledgerDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Employee</th>
-                  <th className="py-2.5 px-3">Items Issued</th>
-                  <th className="py-2.5 px-3">Notes</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
+                  <th className="py-2.5 px-3">{t('operations.uniforms.dateCol')}</th>
+                  <th className="py-2.5 px-3">{t('operations.uniforms.employeeCol')}</th>
+                  <th className="py-2.5 px-3">{t('operations.uniforms.itemsIssuedCol')}</th>
+                  <th className="py-2.5 px-3">{t('operations.uniforms.notesCol')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('operations.uniforms.actionsCol')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
@@ -407,15 +414,15 @@ export default function UniformsPage() {
                   <tr key={iss.id} className="hover:bg-stone-50/80">
                     <td className="py-3 px-3 font-mono text-stone-600 whitespace-nowrap">{iss.business_date}</td>
                     <td className="py-3 px-3">
-                      <div className="font-semibold text-stone-900">{iss.employee?.name || 'Unknown Staff'}</div>
+                      <div className="font-semibold text-stone-900">{iss.employee?.name || t('operations.uniforms.unknownStaff')}</div>
                       <div className="text-[11px] text-stone-400 font-mono">
-                        {iss.employee?.employee_code} • {getEmployeeRoleName(iss.employee)}
+                        {iss.employee?.employee_code} • {getEmployeeRoleName(iss.employee, locale)}
                       </div>
                     </td>
                     <td className="py-3 px-3">
                       <div className="space-y-1">
                         {(iss.items || []).map((item: any) => {
-                          const itemName = item.item?.name || item.legacy_uniform?.name || 'Uniform Item';
+                          const itemName = (item.item ? getLocalizedMasterName(item.item, locale) : null) || item.legacy_uniform?.name || t('operations.uniforms.uniformItemFallback');
                           const itemCode = item.item?.item_code || '';
                           const isIssued = item.status === 'Issued';
                           const targetUniformId = item.item_id || item.uniform_item_id;
@@ -426,7 +433,7 @@ export default function UniformsPage() {
                                 {item.quantity}× {itemName} {itemCode && `(${itemCode})`}
                               </span>
                               <Badge variant={isIssued ? 'warning' : 'outline'} className="text-[10px] py-0">
-                                {item.status}
+                                {isIssued ? (locale === 'hi' ? 'जारी' : 'Issued') : (locale === 'hi' ? 'वापस' : 'Returned')}
                               </Badge>
                               {isIssued && targetUniformId && (
                                 <button
@@ -434,7 +441,7 @@ export default function UniformsPage() {
                                   disabled={saving}
                                   className="text-[10px] text-amber-700 hover:text-amber-900 flex items-center gap-0.5 underline ml-1"
                                 >
-                                  <RotateCcw className="h-3 w-3" /> Mark Returned
+                                  <RotateCcw className="h-3 w-3" /> {t('operations.uniforms.markReturnedAction')}
                                 </button>
                               )}
                             </div>
@@ -444,14 +451,14 @@ export default function UniformsPage() {
                     </td>
                     <td className="py-3 px-3 text-stone-500 max-w-xs truncate">{iss.notes || '—'}</td>
                     <td className="py-3 px-3 text-right text-stone-400 font-mono text-[11px]">
-                      {new Date(iss.created_at).toLocaleDateString('en-GB')}
+                      {new Date(iss.created_at).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-GB')}
                     </td>
                   </tr>
                 ))}
                 {issues.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-stone-400">
-                      No uniform issue records logged yet.
+                      {t('operations.uniforms.noIssuesFound')}
                     </td>
                   </tr>
                 )}
@@ -466,47 +473,56 @@ export default function UniformsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
             <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-base font-bold text-stone-900">Issue Uniform to Staff</h2>
+              <h2 className="text-base font-bold text-stone-900">{t('operations.uniforms.modalTitle')}</h2>
               <button onClick={() => setShowIssueModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
             </div>
 
             <form onSubmit={handleIssueUniform} className="space-y-3">
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Employee <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('operations.uniforms.employeeLabel')} <span className="text-red-500">*</span></label>
                 <select
                   value={selectedEmpId}
                   onChange={(e) => setSelectedEmpId(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Staff...</option>
+                  <option value="">{t('operations.uniforms.selectStaffPlaceholder')}</option>
                   {employees.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name} ({e.employee_code}) - {getEmployeeRoleName(e)}</option>
+                    <option key={e.id} value={e.id}>{e.name} ({e.employee_code}) - {getEmployeeRoleName(e, locale)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Uniform Item & Size <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('operations.uniforms.itemLabel')} <span className="text-red-500">*</span></label>
                 <select
                   value={selectedUniformId}
                   onChange={(e) => setSelectedUniformId(e.target.value)}
                   required
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
-                  <option value="">Select Uniform SKU...</option>
+                  <option value="">{t('operations.uniforms.selectItemPlaceholder')}</option>
                   {uniforms
                     .filter((u) => u.is_active !== false && Number(u.current_stock) > 0)
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>
-                        [{u.item_code}] {u.name} — {u.current_stock} {u.unit?.symbol || 'pcs'} available
-                      </option>
-                    ))}
+                    .map((u) => {
+                      const itemName = getLocalizedMasterName(u, locale);
+                      const unitSym = getLocalizedMasterSymbol(u.unit, locale) || t('operations.uniforms.pcs');
+                      return (
+                        <option key={u.id} value={u.id}>
+                          {t('operations.uniforms.stockAvailableOption', {
+                            code: u.item_code,
+                            name: itemName,
+                            stock: u.current_stock,
+                            unit: unitSym,
+                          })}
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Quantity (Pieces) <span className="text-red-500">*</span></label>
+                <label className="block font-medium text-stone-700 mb-1">{t('operations.uniforms.qtyLabel')} <span className="text-red-500">*</span></label>
                 <input
                   type="number"
                   min="1"
@@ -520,20 +536,20 @@ export default function UniformsPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">Notes / Purpose</label>
+                <label className="block font-medium text-stone-700 mb-1">{t('operations.uniforms.notesLabel')}</label>
                 <input
                   type="text"
                   value={issueNotes}
                   onChange={(e) => setIssueNotes(e.target.value)}
-                  placeholder="e.g. Joining kit issue, replacement shirt"
+                  placeholder={t('operations.uniforms.notesPlaceholder')}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <Button type="button" variant="outline" onClick={() => setShowIssueModal(false)}>Cancel</Button>
+                <Button type="button" variant="outline" onClick={() => setShowIssueModal(false)}>{t('operations.uniforms.cancelAction')}</Button>
                 <Button type="submit" variant="primary" disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white">
-                  {saving ? 'Recording...' : 'Confirm Issue'}
+                  {saving ? t('operations.uniforms.recording') : t('operations.uniforms.confirmIssueAction')}
                 </Button>
               </div>
             </form>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n/context';
 import { Zap, Flame, Fuel, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { ElectricityTab } from '@/components/utilities/ElectricityTab';
 import { LpgTab } from '@/components/utilities/LpgTab';
@@ -11,6 +12,7 @@ import { DieselTab } from '@/components/utilities/DieselTab';
 
 export default function UtilitiesPage() {
   const supabase = createClient();
+  const { t } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [activeTab, setActiveTab] = useState<'electricity' | 'lpg' | 'diesel'>('electricity');
 
@@ -53,13 +55,13 @@ export default function UtilitiesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Zap className="h-6 w-6 text-amber-600" />
-            Utilities &amp; Fuel
+            {t('finance.utilities.title')}
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
-            <span className="text-stone-500">Date:</span>
+            <span className="text-stone-500">{t('finance.utilities.dateLabel')}</span>
             <input
               type="date"
               value={businessDate}
@@ -67,7 +69,7 @@ export default function UtilitiesPage() {
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={loadData}>
+          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -90,7 +92,7 @@ export default function UtilitiesPage() {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <Zap className="h-4 w-4" /> Electricity
+          <Zap className="h-4 w-4" /> {t('finance.utilities.electricity')}
         </button>
         <button
           onClick={() => setActiveTab('diesel')}
@@ -100,7 +102,7 @@ export default function UtilitiesPage() {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <Fuel className="h-4 w-4" /> Diesel &amp; Generator
+          <Fuel className="h-4 w-4" /> {t('finance.utilities.diesel')}
         </button>
         <button
           onClick={() => setActiveTab('lpg')}
@@ -110,7 +112,7 @@ export default function UtilitiesPage() {
               : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <Flame className="h-4 w-4" /> LPG
+          <Flame className="h-4 w-4" /> {t('finance.utilities.lpg')}
         </button>
       </div>
 

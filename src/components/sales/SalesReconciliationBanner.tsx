@@ -3,7 +3,8 @@
 import React from 'react';
 import { DailySalesReconciliationRow } from '@/lib/types/sales';
 import { formatINR } from '@/lib/utils';
-import { CheckCircle2, AlertTriangle, HelpCircle, ArrowRightLeft } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { CheckCircle2, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface SalesReconciliationBannerProps {
@@ -15,12 +16,14 @@ export function SalesReconciliationBanner({
   reconciliation,
   businessDate,
 }: SalesReconciliationBannerProps) {
+  const { t } = useI18n();
+
   if (!reconciliation) {
     return (
       <div className="rounded-xl border border-stone-200 bg-stone-50/60 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-stone-500">
         <div className="flex items-center gap-2">
           <HelpCircle className="h-4 w-4 text-stone-400 shrink-0" />
-          <span>No Petpooja Executive Summary uploaded for {businessDate} yet. Upload it to verify financial totals.</span>
+          <span>{t('finance.sales.reconciliation.noSummary', { date: businessDate })}</span>
         </div>
       </div>
     );
@@ -59,7 +62,7 @@ export function SalesReconciliationBanner({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-stone-900 text-sm">
-                Executive Sales Reconciliation ({businessDate})
+                {t('finance.sales.reconciliation.title', { date: businessDate })}
               </h3>
               <Badge variant={isReconciled ? 'success' : 'warning'} className="text-[10px]">
                 {reconciliation.reconciliation_status}
@@ -67,8 +70,8 @@ export function SalesReconciliationBanner({
             </div>
             <p className="text-xs text-stone-500 mt-0.5">
               {isReconciled
-                ? 'Authoritative verification: Petpooja Executive Summary matches granular item sales exactly.'
-                : 'Variance detected between Executive Sales Summary and imported transactions.'}
+                ? t('finance.sales.reconciliation.matchedDesc')
+                : t('finance.sales.reconciliation.varianceDesc')}
             </p>
           </div>
         </div>
@@ -76,21 +79,27 @@ export function SalesReconciliationBanner({
         {/* Metrics Grid */}
         <div className="grid grid-cols-3 gap-3 text-xs bg-white/80 border border-stone-200/80 rounded-xl p-3 shrink-0">
           <div>
-            <span className="text-[10px] text-stone-500 block uppercase font-semibold">Executive Net</span>
+            <span className="text-[10px] text-stone-500 block uppercase font-semibold">
+              {t('finance.sales.reconciliation.execNet')}
+            </span>
             <span className="font-bold text-stone-900 text-sm">
               {execNet !== null ? formatINR(execNet) : '—'}
             </span>
           </div>
 
           <div>
-            <span className="text-[10px] text-stone-500 block uppercase font-semibold">Granular Net</span>
+            <span className="text-[10px] text-stone-500 block uppercase font-semibold">
+              {t('finance.sales.reconciliation.granularNet')}
+            </span>
             <span className="font-bold text-stone-900 text-sm">
               {granularNet !== null ? formatINR(granularNet) : '—'}
             </span>
           </div>
 
           <div>
-            <span className="text-[10px] text-stone-500 block uppercase font-semibold">Difference</span>
+            <span className="text-[10px] text-stone-500 block uppercase font-semibold">
+              {t('finance.sales.reconciliation.diff')}
+            </span>
             <span
               className={`font-mono font-bold text-sm ${
                 diff === 0 || (diff !== null && Math.abs(diff) < 1)

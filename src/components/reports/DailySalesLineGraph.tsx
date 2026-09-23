@@ -14,6 +14,7 @@ import {
   Receipt,
   Layers,
 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 export interface DailySalesDataPoint {
   date: string;
@@ -52,17 +53,16 @@ function generateDateRange(startStr: string, endStr: string): string[] {
   return dates;
 }
 
-function formatAxisDate(dateStr: string): string {
-  const [, m, d] = dateStr.split('-').map(Number);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${d} ${monthNames[m - 1]}`;
-}
-
-function getDayOfWeek(dateStr: string): string {
+function formatAxisDate(dateStr: string, locale: string = 'en'): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  return days[date.getUTCDay()];
+  return date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' });
+}
+
+function getDayOfWeek(dateStr: string, locale: string = 'en'): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', { weekday: 'short' });
 }
 
 function getMonthBoundaries(yearMonth: string) {
@@ -74,6 +74,7 @@ function getMonthBoundaries(yearMonth: string) {
 }
 
 export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLineGraphProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const todayIST = getTodayBusinessDate();
   const currentYearMonth = todayIST.substring(0, 7); // e.g. "2026-09"
@@ -117,10 +118,6 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
   const monthOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const [currY, currM] = currentYearMonth.split('-').map(Number);
-    const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
 
     for (let offset = -5; offset <= 2; offset++) {
       let m = currM + offset;
@@ -134,13 +131,15 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
         y += 1;
       }
       const val = `${y}-${String(m).padStart(2, '0')}`;
+      const d = new Date(Date.UTC(y, m - 1, 1));
+      const label = d.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', { month: 'long', year: 'numeric' });
       options.push({
         value: val,
-        label: `${monthNames[m - 1]} ${y}`,
+        label,
       });
     }
     return options;
-  }, [currentYearMonth]);
+  }, [currentYearMonth, locale]);
 
   const fetchSalesData = useCallback(async () => {
     setLoading(true);
@@ -170,9 +169,9 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
         const dayNum = parseInt(dateStr.split('-')[2], 10);
         return {
           date: dateStr,
-          displayDate: formatAxisDate(dateStr),
+          displayDate: formatAxisDate(dateStr, locale),
           dayNumber: dayNum,
-          dayOfWeek: getDayOfWeek(dateStr),
+          dayOfWeek: getDayOfWeek(dateStr, locale),
           netSales: Number(row?.net_sales || 0),
           grossSales: Number(row?.gross_sales || 0),
           discounts: Number(row?.discounts || 0),
@@ -189,7 +188,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
     } finally {
       setLoading(false);
     }
-  }, [activeStartDate, activeEndDate, supabase]);
+  }, [activeStartDate, activeEndDate, supabase, locale]);
 
   useEffect(() => {
     fetchSalesData();
@@ -317,10 +316,13 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           <div>
             <CardTitle className="text-base font-bold flex items-center gap-2 text-stone-900">
               <TrendingUp className="h-5 w-5 text-[#6B162E]" />
-              Consolidated Daily Gross Sales Trend
+              {t('reports.salesLineGraph.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              Authoritative total Gross Sales across all operational channels for {formatDisplayDate(activeStartDate, 'short')} through {formatDisplayDate(activeEndDate, 'short')} (IST)
+              {t('reports.salesLineGraph.subtitle', {
+                start: formatDisplayDate(activeStartDate, 'short'),
+                end: formatDisplayDate(activeEndDate, 'short'),
+              })}
             </CardDescription>
           </div>
 
@@ -337,7 +339,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Monthly
+                {t('reports.salesLineGraph.monthly')}
               </button>
               <button
                 type="button"
@@ -348,7 +350,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Custom Range
+                {t('reports.salesLineGraph.customRange')}
               </button>
             </div>
 
@@ -373,14 +375,14 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
             {/* Custom range date pickers */}
             {filterMode === 'custom' && (
               <div className="flex items-center gap-1.5 bg-white border border-[#E7E2D8] rounded-lg px-2.5 py-1 shadow-xs">
-                <span className="text-stone-400 font-medium text-[11px]">From:</span>
+                <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.from')}</span>
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
                   className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
                 />
-                <span className="text-stone-400 font-medium text-[11px]">To:</span>
+                <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.to')}</span>
                 <input
                   type="date"
                   value={customEndDate}
@@ -396,7 +398,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
               onClick={fetchSalesData}
               disabled={loading}
               className="h-8 px-2.5 text-xs text-stone-600 hover:text-stone-900 rounded-lg border-[#E7E2D8]"
-              title="Refresh sales trend data"
+              title={t('reports.salesLineGraph.refreshTitle')}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-[#6B162E]' : ''}`} />
             </Button>
@@ -406,23 +408,23 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
         {/* Summary Metrics Bar for the Selected Period */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 mt-3 border-t border-[#E7E2D8]">
           <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Period Total Gross Sales</span>
+            <span className="text-[11px] font-medium text-stone-500 block">{t('reports.salesLineGraph.periodGross')}</span>
             <span className="text-base sm:text-lg font-bold text-[#6B162E] block mt-0.5 tabular-nums">
               {formatINR(totalGrossSales)}
             </span>
-            <span className="text-[10px] text-stone-400 block mt-0.5">Net: {formatINR(totalNetSales)}</span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">{t('reports.salesLineGraph.netLabel', { amount: formatINR(totalNetSales) })}</span>
           </div>
 
           <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Daily Average Gross</span>
+            <span className="text-[11px] font-medium text-stone-500 block">{t('reports.salesLineGraph.dailyAvgGross')}</span>
             <span className="text-base sm:text-lg font-bold text-amber-700 block mt-0.5 tabular-nums">
               {formatINR(dailyAverageGross)}
             </span>
-            <span className="text-[10px] text-stone-400 block mt-0.5">Over {dailyPoints.length} days</span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">{t('reports.salesLineGraph.overDays', { count: dailyPoints.length })}</span>
           </div>
 
           <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Peak Day Gross</span>
+            <span className="text-[11px] font-medium text-stone-500 block">{t('reports.salesLineGraph.peakDayGross')}</span>
             <span className="text-base sm:text-lg font-bold text-emerald-700 block mt-0.5 tabular-nums">
               {peakGrossDay && peakGrossDay.grossSales > 0 ? formatINR(peakGrossDay.grossSales) : '—'}
             </span>
@@ -432,12 +434,12 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           </div>
 
           <div className="bg-white p-3 rounded-xl border border-[#E7E2D8] shadow-xs">
-            <span className="text-[11px] font-medium text-stone-500 block">Active Sales Days</span>
+            <span className="text-[11px] font-medium text-stone-500 block">{t('reports.salesLineGraph.activeSalesDays')}</span>
             <span className="text-base sm:text-lg font-bold text-stone-900 block mt-0.5 tabular-nums">
               {activeSalesDays}{' '}
-              <span className="text-xs font-normal text-stone-500">/ {dailyPoints.length} days</span>
+              <span className="text-xs font-normal text-stone-500">{t('reports.salesLineGraph.daysSuffix', { count: dailyPoints.length })}</span>
             </span>
-            <span className="text-[10px] text-stone-400 block mt-0.5">Reported revenue</span>
+            <span className="text-[10px] text-stone-400 block mt-0.5">{t('reports.salesLineGraph.reportedRevenue')}</span>
           </div>
         </div>
       </CardHeader>
@@ -446,7 +448,7 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
         {loading && dailyPoints.length === 0 ? (
           <div className="h-60 flex flex-col items-center justify-center gap-2 text-stone-400 text-xs">
             <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
-            <span>Loading daily gross sales performance curve...</span>
+            <span>{t('reports.salesLineGraph.loadingCurve')}</span>
           </div>
         ) : (
           <div
@@ -468,43 +470,42 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                   </span>
                   {hoveredPoint.isReported ? (
                     <span className="text-[9px] bg-emerald-950 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-800">
-                      Reported
+                      {t('reports.salesLineGraph.reported')}
                     </span>
                   ) : (
                     <span className="text-[9px] bg-stone-800 text-stone-400 px-1.5 py-0.2 rounded">
-                      Zero Sales
+                      {t('reports.salesLineGraph.zeroSales')}
                     </span>
                   )}
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] text-amber-300 font-semibold">Gross Sales:</span>
+                  <span className="text-[11px] text-amber-300 font-semibold">{t('reports.salesLineGraph.grossSales')}</span>
                   <span className="font-bold text-white text-sm">{formatINR(hoveredPoint.grossSales)}</span>
                 </div>
                 <div className="flex items-baseline justify-between gap-2 text-[10px] text-stone-300">
-                  <span>Net Sales:</span>
+                  <span>{t('reports.salesLineGraph.netSales')}</span>
                   <span>{formatINR(hoveredPoint.netSales)}</span>
                 </div>
                 {hoveredPoint.discounts > 0 && (
                   <div className="flex items-baseline justify-between gap-2 text-[10px] text-rose-400">
-                    <span>Discounts:</span>
+                    <span>{t('reports.salesLineGraph.discounts')}</span>
                     <span>-{formatINR(hoveredPoint.discounts)}</span>
                   </div>
                 )}
                 {hoveredPoint.taxAmount > 0 && (
                   <div className="flex items-baseline justify-between gap-2 text-[10px] text-stone-400">
-                    <span>GST Tax:</span>
+                    <span>{t('reports.salesLineGraph.gstTax')}</span>
                     <span>{formatINR(hoveredPoint.taxAmount)}</span>
                   </div>
                 )}
                 {(hoveredPoint.billCount > 0 || hoveredPoint.customerCount > 0) && (
                   <div className="flex items-center justify-between text-[10px] text-stone-400 mt-1 pt-1 border-t border-stone-800">
-                    <span>Bills: {hoveredPoint.billCount}</span>
-                    <span>Restaurant PAX: {hoveredPoint.customerCount}</span>
+                    <span>{t('reports.salesLineGraph.billsPax', { bills: hoveredPoint.billCount, pax: hoveredPoint.customerCount })}</span>
                   </div>
                 )}
                 {onSelectDate && (
                   <div className="text-[10px] text-amber-400 mt-1 pt-1 border-t border-stone-800 flex items-center gap-1 font-medium">
-                    <ArrowUpRight className="h-3 w-3" /> Selected date synced
+                    <ArrowUpRight className="h-3 w-3" /> {t('reports.salesLineGraph.dateSynced')}
                   </div>
                 )}
               </div>
@@ -691,19 +692,19 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5 font-medium text-stone-700">
               <span className="w-3 h-1 bg-amber-600 rounded-full inline-block" />
-              Consolidated Gross Sales
+              {t('reports.salesLineGraph.legendGross')}
             </span>
             <span className="flex items-center gap-1.5 font-medium text-stone-500">
               <span className="w-3 h-0.5 bg-stone-400 border-b border-dashed border-stone-500 inline-block" />
-              Net Sales (POS)
+              {t('reports.salesLineGraph.legendNet')}
             </span>
             <span className="flex items-center gap-1.5 text-stone-400">
               <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" />
-              Zero Sales
+              {t('reports.salesLineGraph.legendZero')}
             </span>
           </div>
           <span className="text-[10px] text-stone-400">
-            Swipe / drag horizontally to pan across dates. Tapping any day immediately selects that date.
+            {t('reports.salesLineGraph.swipeHint')}
           </span>
         </div>
       </CardContent>

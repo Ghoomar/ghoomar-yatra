@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, formatNumber } from '@/lib/utils';
 import { Fuel, Plus, AlertTriangle, CheckCircle2, RefreshCw, History, Flame, ArrowDownRight, Truck } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface DieselTabProps {
   businessDate: string;
@@ -19,6 +21,7 @@ const CENTRAL_STORE_ID = 'a89335e9-01b4-4edd-bee5-a894053d798d';
 const GENERATOR_TANK_CAPACITY_L = 160;
 
 export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
 
   const [dieselItem, setDieselItem] = useState<any>(null);
@@ -53,7 +56,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       const [itemRes, locRes, vRes, movsRes] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('id', DIESEL_ITEM_ID).single(),
         supabase.from('item_location_stocks').select('quantity').eq('item_id', DIESEL_ITEM_ID).eq('location_id', CENTRAL_STORE_ID).maybeSingle(),
-        supabase.from('vendors').select('id, name').eq('is_active', true).order('name'),
+        supabase.from('vendors').select('id, name, name_hi').eq('is_active', true).order('name'),
         supabase.from('stock_movements')
           .select('*')
           .eq('item_id', DIESEL_ITEM_ID)
@@ -88,7 +91,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       setTodayConsumptionValue(todayVal);
     } catch (err: any) {
       console.error('Failed to load diesel inventory:', err);
-      setMessage({ type: 'error', text: err.message || 'Failed to load diesel data.' });
+      setMessage({ type: 'error', text: err.message || t('finance.utilities.dieselTab.errorRefill') });
     } finally {
       setLoading(false);
     }
@@ -107,12 +110,12 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
     e.preventDefault();
     const qty = parseFloat(refillLiters);
     if (isNaN(qty) || qty <= 0) {
-      alert('Please enter a valid positive quantity of liters.');
+      alert(t('finance.utilities.dieselTab.alertValidLiters'));
       return;
     }
 
     if (qty > storeStock) {
-      alert(`Insufficient stock in Central Store!\nAvailable: ${storeStock.toFixed(1)} L\nRequested: ${qty.toFixed(1)} L`);
+      alert(t('finance.utilities.dieselTab.alertInsufficientStock', { available: storeStock.toFixed(1), requested: qty.toFixed(1) }));
       return;
     }
 
@@ -144,7 +147,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
       setMessage({
         type: 'success',
-        text: `Transferred ${qty.toFixed(1)} L diesel to Generator. Central Store balance: ${(storeStock - qty).toFixed(1)} L.`,
+        text: t('finance.utilities.dieselTab.successRefill', { qty: qty.toFixed(1), balance: (storeStock - qty).toFixed(1) }),
       });
 
       setRefillLiters('');
@@ -153,7 +156,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       loadDieselData();
       onRefresh();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to record generator refill.' });
+      setMessage({ type: 'error', text: err.message || t('finance.utilities.dieselTab.errorRefill') });
     } finally {
       setSaving(false);
     }
@@ -166,11 +169,11 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
     const rate = parseFloat(purchaseRate);
 
     if (isNaN(qty) || qty <= 0) {
-      alert('Please enter a valid quantity in liters.');
+      alert(t('finance.utilities.dieselTab.alertValidLiters'));
       return;
     }
     if (isNaN(rate) || rate <= 0) {
-      alert('Please enter the actual purchase price per liter.');
+      alert(t('finance.utilities.dieselTab.alertValidPrice'));
       return;
     }
 
@@ -204,7 +207,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
       setMessage({
         type: 'success',
-        text: `Received ${qty.toFixed(1)} L diesel @ ${formatINR(rate)}/L into Central Store. Stock increased to ${(storeStock + qty).toFixed(1)} L.`,
+        text: t('finance.utilities.dieselTab.successPurchase', { qty: qty.toFixed(1), rate: formatINR(rate), stock: (storeStock + qty).toFixed(1) }),
       });
 
       setPurchaseLiters('');
@@ -227,14 +230,14 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* Central Store Balance */}
         <Card className={`relative overflow-hidden ${isLowStock ? 'border-rose-300 bg-rose-50/20' : ''}`}>
-          <CardDescription>Diesel Stock</CardDescription>
+          <CardDescription>{t('finance.utilities.dieselTab.stockTitle')}</CardDescription>
           <div className="flex items-baseline gap-2 mt-1">
             <span className={`text-2xl font-bold font-mono ${isLowStock ? 'text-rose-600' : 'text-stone-900'}`}>
               {storeStock.toFixed(1)} L
             </span>
             {isLowStock && (
               <Badge variant="danger" className="text-[10px]">
-                LOW RESERVE
+                {t('finance.utilities.dieselTab.lowReserve')}
               </Badge>
             )}
           </div>
@@ -242,13 +245,13 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
         {/* Minimum Reserve Alert */}
         <Card>
-          <CardDescription>Minimum Reserve</CardDescription>
+          <CardDescription>{t('finance.utilities.dieselTab.minimumReserve')}</CardDescription>
           <div className="text-2xl font-bold text-amber-700 mt-1 font-mono">{minReserve.toFixed(0)} L</div>
         </Card>
 
         {/* Current WAC Cost */}
         <Card>
-          <CardDescription>Avg Cost</CardDescription>
+          <CardDescription>{t('finance.utilities.dieselTab.avgCost')}</CardDescription>
           <div className="text-2xl font-bold text-stone-900 mt-1 font-mono">
             {currentWac > 0 ? `${formatINR(currentWac)} / L` : '—'}
           </div>
@@ -256,7 +259,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
         {/* Informational Generator Metadata */}
         <Card className="bg-stone-50/50">
-          <CardDescription>Tank Capacity</CardDescription>
+          <CardDescription>{t('finance.utilities.dieselTab.tankCapacity')}</CardDescription>
           <div className="text-2xl font-bold text-stone-700 mt-1 font-mono">
             {GENERATOR_TANK_CAPACITY_L} L
           </div>
@@ -268,9 +271,12 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-xs text-rose-800">
           <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
           <div>
-            <div className="font-bold">Diesel Low Stock Reserve Warning</div>
+            <div className="font-bold">{t('finance.utilities.dieselTab.lowStockWarningTitle')}</div>
             <div className="text-rose-700 mt-0.5">
-              Central Store currently has <strong>{storeStock.toFixed(1)} L</strong> remaining, which is below the configured safety reserve of <strong>{minReserve} L</strong>. Please procure diesel to ensure uninterrupted backup generator power.
+              {t('finance.utilities.dieselTab.lowStockWarningText', {
+                storeStock: storeStock.toFixed(1),
+                minReserve: minReserve.toFixed(0),
+              })}
             </div>
           </div>
         </div>
@@ -283,7 +289,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Fuel className="h-4 w-4 text-amber-600" />
-                Fuel Action
+                {t('finance.utilities.dieselTab.fuelAction')}
               </CardTitle>
             </div>
             {/* Mode Switch Tabs */}
@@ -297,7 +303,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                     : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
-                Generator Refill
+                {t('finance.utilities.dieselTab.tabRefill')}
               </button>
               <button
                 type="button"
@@ -308,7 +314,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                     : 'border-transparent text-stone-500 hover:text-stone-800'
                 }`}
               >
-                Purchase Inward
+                {t('finance.utilities.dieselTab.tabPurchase')}
               </button>
             </div>
           </CardHeader>
@@ -319,18 +325,18 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
               <form onSubmit={handleRefillSubmit} className="space-y-3 text-xs">
                 <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-100 text-[11px] text-stone-600 space-y-1">
                   <div className="flex justify-between">
-                    <span>Available in Store:</span>
+                    <span>{t('finance.utilities.dieselTab.availableInStore')}</span>
                     <strong className="font-mono text-stone-900">{storeStock.toFixed(1)} L</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span>Applicable WAC Rate:</span>
+                    <span>{t('finance.utilities.dieselTab.applicableWac')}</span>
                     <strong className="font-mono text-stone-900">{formatINR(currentWac)} / L</strong>
                   </div>
                 </div>
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Liters Transferred <span className="text-rose-500">*</span>
+                    {t('finance.utilities.dieselTab.litersTransferred')} <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -340,7 +346,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                       max={storeStock}
                       value={refillLiters}
                       onChange={(e) => setRefillLiters(e.target.value)}
-                      placeholder="e.g. 50"
+                      placeholder={t('finance.utilities.dieselTab.litersPlaceholder')}
                       required
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pr-10"
                     />
@@ -350,14 +356,14 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                   </div>
                   {parseFloat(refillLiters) > storeStock && (
                     <p className="text-[11px] text-rose-600 mt-1 font-medium">
-                      Exceeds available stock ({storeStock.toFixed(1)} L).
+                      {t('finance.utilities.dieselTab.exceedsStock', { stock: storeStock.toFixed(1) })}
                     </p>
                   )}
                 </div>
 
                 {parseFloat(refillLiters) > 0 && currentWac > 0 && (
                   <div className="p-2 bg-amber-50/70 rounded-lg border border-amber-200/60 flex justify-between items-center text-xs">
-                    <span className="text-amber-900">P&amp;L Consumption Cost:</span>
+                    <span className="text-amber-900">{t('finance.utilities.dieselTab.consumptionCost')}</span>
                     <strong className="font-mono text-amber-950">
                       {formatINR(parseFloat(refillLiters) * currentWac)}
                     </strong>
@@ -366,7 +372,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Running Hours (Optional)
+                    {t('finance.utilities.dieselTab.runningHours')}
                   </label>
                   <input
                     type="number"
@@ -374,18 +380,18 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                     min="0"
                     value={generatorHours}
                     onChange={(e) => setGeneratorHours(e.target.value)}
-                    placeholder="e.g. 2.5"
+                    placeholder={t('finance.utilities.dieselTab.runningHoursPlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.dieselTab.notes')}</label>
                   <input
                     type="text"
                     value={refillNotes}
                     onChange={(e) => setRefillNotes(e.target.value)}
-                    placeholder="e.g. Evening power cut genset run"
+                    placeholder={t('finance.utilities.dieselTab.refillNotesPlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
@@ -398,11 +404,11 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                 >
                   {saving ? (
                     <>
-                      <RefreshCw className="h-4 w-4 animate-spin" /> Recording Refill...
+                      <RefreshCw className="h-4 w-4 animate-spin" /> {t('finance.utilities.dieselTab.recordingRefill')}
                     </>
                   ) : (
                     <>
-                      <Flame className="h-4 w-4" /> Transfer to Generator
+                      <Flame className="h-4 w-4" /> {t('finance.utilities.dieselTab.transferToGenerator')}
                     </>
                   )}
                 </Button>
@@ -412,7 +418,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
               <form onSubmit={handlePurchaseSubmit} className="space-y-3 text-xs">
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Quantity Purchased <span className="text-rose-500">*</span>
+                    {t('finance.utilities.dieselTab.qtyPurchased')} <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <input
@@ -421,7 +427,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                       min="0.5"
                       value={purchaseLiters}
                       onChange={(e) => setPurchaseLiters(e.target.value)}
-                      placeholder="e.g. 200"
+                      placeholder={t('finance.utilities.dieselTab.purchaseLitersPlaceholder')}
                       required
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pr-10"
                     />
@@ -433,7 +439,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">
-                    Purchase Price per Liter <span className="text-rose-500">*</span>
+                    {t('finance.utilities.dieselTab.pricePerLiter')} <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative rounded-lg shadow-2xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400 font-bold">
@@ -445,7 +451,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                       min="1"
                       value={purchaseRate}
                       onChange={(e) => setPurchaseRate(e.target.value)}
-                      placeholder="e.g. 88.50"
+                      placeholder={t('finance.utilities.dieselTab.pricePlaceholder')}
                       required
                       className="w-full rounded-lg border border-stone-300 p-2.5 font-bold text-base text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none pl-8"
                     />
@@ -454,7 +460,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
                 {parseFloat(purchaseLiters) > 0 && parseFloat(purchaseRate) > 0 && (
                   <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/70 flex justify-between items-center text-xs">
-                    <span className="text-stone-600 font-medium">Total Purchase Amount:</span>
+                    <span className="text-stone-600 font-medium">{t('finance.utilities.dieselTab.totalPurchaseAmount')}</span>
                     <strong className="font-mono text-stone-900 text-sm">
                       {formatINR(parseFloat(purchaseLiters) * parseFloat(purchaseRate))}
                     </strong>
@@ -462,39 +468,39 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                 )}
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Vendor</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.dieselTab.vendor')}</label>
                   <select
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
                   >
-                    <option value="">Select Vendor (Optional)</option>
+                    <option value="">{t('finance.utilities.dieselTab.selectVendor')}</option>
                     {vendors.map((v) => (
                       <option key={v.id} value={v.id}>
-                        {v.name}
+                        {getLocalizedMasterName(v, locale)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Bill / Invoice No.</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.dieselTab.invoiceNo')}</label>
                   <input
                     type="text"
                     value={invoiceNo}
                     onChange={(e) => setInvoiceNo(e.target.value)}
-                    placeholder="e.g. HPCL-98421"
+                    placeholder={t('finance.utilities.dieselTab.invoicePlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium text-stone-700 mb-1">Notes</label>
+                  <label className="block font-medium text-stone-700 mb-1">{t('finance.utilities.dieselTab.notes')}</label>
                   <input
                     type="text"
                     value={purchaseNotes}
                     onChange={(e) => setPurchaseNotes(e.target.value)}
-                    placeholder="e.g. Procured in drums from highway station"
+                    placeholder={t('finance.utilities.dieselTab.purchaseNotesPlaceholder')}
                     className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
@@ -507,11 +513,11 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                 >
                   {saving ? (
                     <>
-                      <RefreshCw className="h-4 w-4 animate-spin" /> Inwarding Stock...
+                      <RefreshCw className="h-4 w-4 animate-spin" /> {t('finance.utilities.dieselTab.inwardingStock')}
                     </>
                   ) : (
                     <>
-                      <Truck className="h-4 w-4" /> Record Purchase
+                      <Truck className="h-4 w-4" /> {t('finance.utilities.dieselTab.recordPurchase')}
                     </>
                   )}
                 </Button>
@@ -524,11 +530,14 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <div>
-              <CardTitle className="text-base font-bold">Diesel Movements</CardTitle>
+              <CardTitle className="text-base font-bold">{t('finance.utilities.dieselTab.movementsTitle')}</CardTitle>
             </div>
             {todayConsumptionLiters > 0 && (
               <Badge variant="warning">
-                Today: {todayConsumptionLiters.toFixed(1)} L ({formatINR(todayConsumptionValue)})
+                {t('finance.utilities.dieselTab.todaySummary', {
+                  liters: todayConsumptionLiters.toFixed(1),
+                  cost: formatINR(todayConsumptionValue),
+                })}
               </Badge>
             )}
           </CardHeader>
@@ -536,9 +545,9 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
             {recentMovements.length === 0 ? (
               <div className="py-16 text-center text-stone-400 text-xs space-y-2">
                 <History className="h-8 w-8 mx-auto text-stone-300" />
-                <div>No diesel stock movements recorded yet.</div>
+                <div>{t('finance.utilities.dieselTab.noMovements')}</div>
                 <div className="text-[11px] text-stone-400">
-                  Record an inward purchase or generator refill to start the ledger.
+                  {t('finance.utilities.dieselTab.noMovementsSub')}
                 </div>
               </div>
             ) : (
@@ -546,12 +555,12 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Date / Time</th>
-                      <th className="py-2.5 px-3">Action</th>
-                      <th className="py-2.5 px-3 text-right">Quantity</th>
-                      <th className="py-2.5 px-3 text-right">Rate</th>
-                      <th className="py-2.5 px-3 text-right">Total Value</th>
-                      <th className="py-2.5 px-3">Reference / Notes</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.dieselTab.colDateTime')}</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.dieselTab.colAction')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.dieselTab.colQuantity')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.dieselTab.colRate')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('finance.utilities.dieselTab.colTotalValue')}</th>
+                      <th className="py-2.5 px-3">{t('finance.utilities.dieselTab.colNotes')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -563,7 +572,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <div className="font-semibold text-stone-900">{m.business_date}</div>
                             <div className="text-[10px] text-stone-400">
-                              {new Date(m.created_at).toLocaleTimeString('en-IN', {
+                              {new Date(m.created_at).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
                                 hour: 'numeric',
                                 minute: '2-digit',
                                 hour12: true,
@@ -572,7 +581,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                           </td>
                           <td className="py-2.5 px-3">
                             <Badge variant={isPurchase ? 'info' : isConsumption ? 'warning' : 'outline'}>
-                              {isPurchase ? 'Purchase Inward' : isConsumption ? 'Generator Refill' : m.movement_type}
+                              {isPurchase ? t('finance.utilities.dieselTab.actionPurchase') : isConsumption ? t('finance.utilities.dieselTab.actionConsumption') : m.movement_type}
                             </Badge>
                           </td>
                           <td className={`py-2.5 px-3 text-right font-mono font-bold ${
@@ -589,8 +598,9 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
                           <td className="py-2.5 px-3 text-stone-500 max-w-xs truncate">
                             {(() => {
                               const vendor = vendors.find((v) => v.id === m.reference_id);
-                              if (vendor && m.notes) return `${vendor.name} • ${m.notes}`;
-                              if (vendor) return vendor.name;
+                              const vendorName = vendor ? getLocalizedMasterName(vendor, locale) : '';
+                              if (vendor && m.notes) return `${vendorName} • ${m.notes}`;
+                              if (vendor) return vendorName;
                               return m.notes || m.purpose || '—';
                             })()}
                           </td>
