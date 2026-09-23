@@ -7,8 +7,6 @@ import { formatINR } from '@/lib/utils';
 import { MonthlyPerformanceStatus } from '@/lib/finance-engine';
 
 export interface MonthlyPerformanceProps {
-  monthlyRevenueTarget?: number;
-  planningBreakEven?: number; // backwards compatibility alias
   calculatedBreakEven: number;
   mtdRevenue: number;
   daysElapsed: number;
@@ -17,12 +15,14 @@ export interface MonthlyPerformanceProps {
   averageDailyRevenue: number;
   requiredDailyRevenue: number;
   projectedMonthEndRevenue: number;
+  breakEvenProgressPercent?: number;
   status: MonthlyPerformanceStatus | string;
+  // Deprecated backwards-compatibility props
+  monthlyRevenueTarget?: number;
+  planningBreakEven?: number;
 }
 
 export function MonthlyPerformance({
-  monthlyRevenueTarget,
-  planningBreakEven = 3000000,
   calculatedBreakEven,
   mtdRevenue,
   daysElapsed,
@@ -31,19 +31,20 @@ export function MonthlyPerformance({
   averageDailyRevenue,
   requiredDailyRevenue,
   projectedMonthEndRevenue,
+  breakEvenProgressPercent,
   status,
 }: MonthlyPerformanceProps) {
-  const target = monthlyRevenueTarget ?? planningBreakEven;
   const remainingDays = Math.max(0, daysInMonth - daysElapsed);
-  const percentOfTarget = target > 0 ? Math.round((mtdRevenue / target) * 100) : 0;
+  const progress = breakEvenProgressPercent ?? (calculatedBreakEven > 0 ? Math.round((projectedMonthEndRevenue / calculatedBreakEven) * 100) : 0);
+
   const getBadgeVariant = (s: string): 'success' | 'warning' | 'danger' | 'info' | 'default' => {
-    switch (s) {
+    const norm = (s || '').toUpperCase();
+    switch (norm) {
+      case 'HEALTHY':
       case 'ON TARGET':
-      case 'Healthy':
         return 'success';
-      case 'BELOW TARGET':
-        return 'info';
       case 'AT RISK':
+      case 'BELOW TARGET':
         return 'warning';
       case 'BELOW BREAK-EVEN':
         return 'danger';
@@ -98,26 +99,25 @@ export function MonthlyPerformance({
           </div>
         </div>
 
-        {/* Bottom Summary Strip: Clearly separating Monthly Revenue Target and Calculated Break-Even Point */}
+        {/* Bottom Summary Strip: Single Benchmark = Calculated Break-Even Point */}
         <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-stone-700 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <span className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider block">
-              Monthly Revenue Target
+              Calculated Break-Even Point
             </span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="font-extrabold text-stone-900 text-sm">{formatINR(target)}</span>
-              <span className="text-[11px] text-stone-500 font-medium">
-                ({percentOfTarget}% of Monthly Target Achieved)
-              </span>
+            <div className="font-extrabold text-stone-900 text-base mt-0.5">
+              {formatINR(calculatedBreakEven)}
             </div>
           </div>
 
           <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-stone-200">
             <span className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider block">
-              Calculated Break-Even Point
+              % Break-Even Progress
             </span>
-            <div className="font-extrabold text-stone-900 text-sm mt-0.5">
-              {formatINR(calculatedBreakEven)}
+            <div className="font-extrabold text-stone-900 text-base mt-0.5">
+              <span className={progress >= 100 ? 'text-emerald-700' : 'text-rose-700'}>
+                {progress}%
+              </span>
             </div>
           </div>
         </div>

@@ -15,6 +15,7 @@ export interface InsightInput {
   spendPerVisitor: number;
   breakEvenProjected: number;
   planningBreakEven: number;
+  calculatedBreakEven?: number;
   lowStockItemsCount: number;
   absentStaffCount: number;
   foodCostPercent: number;
@@ -73,15 +74,15 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
     }
   }
 
-  // 3. Profitability & Revenue Target Insight
-  if (input.planningBreakEven > 0) {
-    if (input.breakEvenProjected < input.planningBreakEven) {
-      const gap = Math.round((input.planningBreakEven - input.breakEvenProjected) / 100000);
+  // 3. Profitability & Break-Even Insight
+  const bep = input.calculatedBreakEven ?? input.planningBreakEven;
+  if (bep > 0) {
+    if (input.breakEvenProjected < bep) {
       insights.push({
         id: 'be-below',
         category: 'Profitability',
         type: 'Projection',
-        statement: `At current month-to-date pace, projected month-end revenue is ₹${gap}L below the ₹30 Lakhs monthly revenue target.`,
+        statement: 'At current month-to-date pace, projected month-end revenue is below the Calculated Break-Even Point.',
         detail: 'Management intervention required on highway visibility and weekend dinner footfall.',
         severity: 'critical',
       });
@@ -91,7 +92,7 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
         id: 'be-on-track',
         category: 'Profitability',
         type: 'Projection',
-        statement: 'Current monthly revenue pace is on track to achieve and exceed the ₹30 Lakhs monthly revenue target.',
+        statement: 'Current monthly revenue pace is on track to achieve and exceed the Calculated Break-Even Point.',
         detail: `Projected month-end: ₹${projLakhs}L.`,
         severity: 'positive',
       });

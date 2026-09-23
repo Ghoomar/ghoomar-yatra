@@ -36,8 +36,9 @@ import {
   UtensilsCrossed,
   UserCheck,
   Edit2,
-  Power,
-  Trash2
+  Trash2,
+  ShieldAlert,
+  Save,
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -56,6 +57,8 @@ export default function AdminSettingsPage() {
   const [roles, setRoles] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [healthBufferInput, setHealthBufferInput] = useState<string>('10');
+  const [savingBuffer, setSavingBuffer] = useState(false);
 
   // Modals
   const [orgModalOpen, setOrgModalOpen] = useState(false);
@@ -109,6 +112,8 @@ export default function AdminSettingsPage() {
       setPaymentMethods(pmData || []);
       setCostRules(crData || []);
       setTargets(tgData || []);
+      const bufferTg = (tgData || []).find((t: any) => t.target_type === 'break_even_health_buffer_percent');
+      if (bufferTg) setHealthBufferInput(String(Number(bufferTg.target_value) || 10));
       setRoles(rData || []);
       setInventoryCategories(icData || []);
       setProfiles(pData || []);
@@ -116,6 +121,40 @@ export default function AdminSettingsPage() {
       console.error('Error loading admin masters:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveHealthBuffer = async () => {
+    const val = Number(healthBufferInput);
+    if (isNaN(val) || val < 0 || val > 100) {
+      alert('Please enter a valid buffer percentage between 0 and 100.');
+      return;
+    }
+    setSavingBuffer(true);
+    try {
+      const existing = targets.find((t) => t.target_type === 'break_even_health_buffer_percent');
+      if (existing) {
+        await supabase
+          .from('financial_targets')
+          .update({ target_value: val, updated_at: new Date().toISOString() })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('financial_targets')
+          .insert({
+            target_type: 'break_even_health_buffer_percent',
+            target_value: val,
+            notes: 'Break-Even Health Buffer % (default 10% above BEP for Healthy status)',
+            is_active: true,
+          });
+      }
+      await loadData();
+      alert(`Break-Even Health Buffer updated to ${val}%. Healthy status requires ≥ ${100 + val}% of Calculated BEP.`);
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to update buffer: ' + err.message);
+    } finally {
+      setSavingBuffer(false);
     }
   };
 
@@ -572,48 +611,119 @@ export default function AdminSettingsPage() {
 
       {/* TAB 3: TARGETS */}
       {activeTab === 'targets' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Operational Daily &amp; Planning Targets</CardTitle>
-            <CardDescription>Configured by day of the week to align highway rush expectations</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {loading ? (
-              <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading targets...
+        <div className="space-y-6">
+          {/* Break-Even Health Buffer Configuration Card */}
+          <Card className="border-amber-200/90 bg-gradient-to-r from-amber-50/60 to-white shadow-xs">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold text-stone-900 flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-amber-600" />
+                    Break-Even Health Threshold Configuration
+                  </CardTitle>
+                  <CardDescription className="text-xs text-stone-500">
+                    Controls financial health status badges across Central Command Center, Monthly Performance, and Reports
+                  </CardDescription>
+                </div>
+                <Badge variant="success" className="text-xs py-1 px-2.5 font-bold shrink-0 self-start sm:self-auto">
+                  HEALTHY ≥ {100 + (Number(healthBufferInput) || 10)}% of BEP
+                </Badge>
               </div>
-            ) : (
-              <div className="overflow-x-auto text-xs">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
-                      <th className="py-2.5 px-3">Target Scope</th>
-                      <th className="py-2.5 px-3">Day / Type</th>
-                      <th className="py-2.5 px-3 text-right">Configured Target Value</th>
-                      <th className="py-2.5 px-3">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {targets.map((tg) => (
-                      <tr key={tg.id} className="hover:bg-stone-50/80">
-                        <td className="py-3 px-3 font-semibold text-stone-900 font-mono">{tg.target_type}</td>
-                        <td className="py-3 px-3 text-stone-700 font-medium">
-                          {tg.weekday !== null ? weekdayNames[tg.weekday] : 'Facility Level'}
-                        </td>
-                        <td className="py-3 px-3 text-right font-bold text-amber-700 text-sm">
-                          {tg.target_type === 'visitor_spend'
-                            ? `${formatINR(Number(tg.target_value))} / visitor`
-                            : formatINR(Number(tg.target_value))}
-                        </td>
-                        <td className="py-3 px-3 text-stone-500">{tg.notes || '—'}</td>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-3 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="font-semibold text-stone-700">Health Buffer Above BEP (%):</label>
+                <div className="flex items-center gap-1.5 bg-white border border-stone-300 rounded-lg px-3 py-1.5 shadow-2xs">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={healthBufferInput}
+                    onChange={(e) => setHealthBufferInput(e.target.value)}
+                    className="w-16 font-extrabold text-stone-900 text-sm focus:outline-none"
+                  />
+                  <span className="text-xs font-bold text-stone-500">%</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="amber"
+                  onClick={saveHealthBuffer}
+                  disabled={savingBuffer}
+                  className="gap-1.5"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {savingBuffer ? 'Saving...' : 'Update Health Threshold'}
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-stone-50 rounded-xl border border-stone-200/70 text-xs">
+                <div>
+                  <span className="font-bold text-emerald-800">● HEALTHY:</span>
+                  <p className="text-[11px] text-stone-600 mt-0.5">
+                    Projected Revenue ≥ <strong>{100 + (Number(healthBufferInput) || 10)}%</strong> of Calculated BEP
+                  </p>
+                </div>
+                <div>
+                  <span className="font-bold text-amber-800">● AT RISK:</span>
+                  <p className="text-[11px] text-stone-600 mt-0.5">
+                    Revenue ≥ <strong>100%</strong> and &lt; <strong>{100 + (Number(healthBufferInput) || 10)}%</strong> of Calculated BEP
+                  </p>
+                </div>
+                <div>
+                  <span className="font-bold text-rose-800">● BELOW BREAK-EVEN:</span>
+                  <p className="text-[11px] text-stone-600 mt-0.5">
+                    Projected Revenue &lt; <strong>100%</strong> of Calculated BEP
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Operational Daily &amp; Planning Targets</CardTitle>
+              <CardDescription>Configured by day of the week to align highway rush expectations</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {loading ? (
+                <div className="py-12 text-center text-stone-400 text-xs flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading targets...
+                </div>
+              ) : (
+                <div className="overflow-x-auto text-xs">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                        <th className="py-2.5 px-3">Target Scope</th>
+                        <th className="py-2.5 px-3">Day / Type</th>
+                        <th className="py-2.5 px-3 text-right">Configured Target Value</th>
+                        <th className="py-2.5 px-3">Notes</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {targets.map((tg) => (
+                        <tr key={tg.id} className="hover:bg-stone-50/80">
+                          <td className="py-3 px-3 font-semibold text-stone-900 font-mono">{tg.target_type}</td>
+                          <td className="py-3 px-3 text-stone-700 font-medium">
+                            {tg.weekday !== null ? weekdayNames[tg.weekday] : 'Facility Level'}
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-amber-700 text-sm">
+                            {tg.target_type === 'visitor_spend'
+                              ? `${formatINR(Number(tg.target_value))} / visitor`
+                              : tg.target_type === 'break_even_health_buffer_percent'
+                              ? `${Number(tg.target_value)}% buffer`
+                              : formatINR(Number(tg.target_value))}
+                          </td>
+                          <td className="py-3 px-3 text-stone-500">{tg.notes || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* TAB 4: USERS & RBAC ROLES */}

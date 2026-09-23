@@ -122,28 +122,31 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
 
 
 export type MonthlyPerformanceStatus =
-  | 'ON TARGET'
-  | 'BELOW TARGET'
+  | 'HEALTHY'
   | 'AT RISK'
   | 'BELOW BREAK-EVEN'
-  | 'NOT REPORTED';
+  | 'NOT REPORTED'
+  | 'Healthy'
+  | 'At Risk'
+  | 'Below Break-Even'
+  | 'ON TARGET'
+  | 'BELOW TARGET';
 
-export type BreakEvenStatus = MonthlyPerformanceStatus | 'Healthy';
+export type BreakEvenStatus = MonthlyPerformanceStatus;
 
 export interface BreakEvenInput {
   mtdRevenue: number;
   daysElapsed: number;
   daysInMonth: number;
-  monthlyRevenueTarget?: number; // e.g. 30,00,000
-  planningBreakEven?: number; // alias for backwards compatibility
+  healthBufferPercent?: number; // default 10% (i.e. >= 110% of BEP for Healthy)
+  monthlyRevenueTarget?: number; // backwards compatibility alias
+  planningBreakEven?: number; // backwards compatibility alias
   totalMonthlyFixedCosts: number;
   mtdContributionMargin: number;
   daysReported?: number;
 }
 
 export interface BreakEvenOutput {
-  monthlyRevenueTarget: number;
-  planningBreakEven: number; // alias for backwards compatibility
   calculatedBreakEven: number;
   mtdRevenue: number;
   daysElapsed: number;
@@ -151,25 +154,31 @@ export interface BreakEvenOutput {
   daysReported: number;
   averageDailyRevenue: number;
   requiredDailyRevenue: number;
-  requiredDailyRevenuePlanning: number; // alias
-  requiredDailyRevenueCalculated: number;
   projectedMonthEndRevenue: number;
-  targetVariance: number;
-  planningVariance: number; // alias
+  breakEvenProgressPercent: number; // (projectedMonthEndRevenue / calculatedBreakEven) * 100
+  healthBufferPercent: number;
+  healthyThresholdRevenue: number; // calculatedBreakEven * (1 + healthBufferPercent / 100)
   status: MonthlyPerformanceStatus;
+  // Aliases for backwards compatibility
+  monthlyRevenueTarget: number;
+  planningBreakEven: number;
+  requiredDailyRevenuePlanning: number;
+  requiredDailyRevenueCalculated: number;
+  targetVariance: number;
+  planningVariance: number;
 }
 
 export function calculateBreakEvenPacing({
   mtdRevenue,
   daysElapsed,
   daysInMonth,
+  healthBufferPercent = 10,
   monthlyRevenueTarget,
-  planningBreakEven = 3000000,
+  planningBreakEven,
   totalMonthlyFixedCosts,
   mtdContributionMargin,
   daysReported,
 }: BreakEvenInput): BreakEvenOutput {
-  const target = monthlyRevenueTarget ?? planningBreakEven;
   const elapsed = Math.max(1, daysElapsed);
   const daysRemaining = Math.max(0, daysInMonth - elapsed);
 
@@ -187,40 +196,40 @@ export function calculateBreakEvenPacing({
     ? Number((totalMonthlyFixedCosts / cmRatio).toFixed(2))
     : 0;
 
-  const remainingRevenue = Math.max(0, target - mtdRevenue);
+  // Single benchmark: Calculated Break-Even Point
+  // Required daily revenue across remaining days to achieve Break-Even
+  const remainingRevenueToBreakEven = Math.max(0, calculatedBreakEven - mtdRevenue);
   const requiredDailyRevenue = daysRemaining > 0
-    ? Number((remainingRevenue / daysRemaining).toFixed(2))
+    ? Number((remainingRevenueToBreakEven / daysRemaining).toFixed(2))
     : 0;
 
-  const remainingRevenueCalculated = Math.max(0, calculatedBreakEven - mtdRevenue);
-  const requiredDailyRevenueCalculated = daysRemaining > 0
-    ? Number((remainingRevenueCalculated / daysRemaining).toFixed(2))
+  // % Break-Even Progress = (Projected Month-End Revenue ÷ Calculated BEP) × 100
+  const breakEvenProgressPercent = calculatedBreakEven > 0
+    ? Number(((projectedMonthEndRevenue / calculatedBreakEven) * 100).toFixed(1))
     : 0;
 
-  const targetVariance = Number((projectedMonthEndRevenue - target).toFixed(2));
+  const buffer = Number(healthBufferPercent) || 10;
+  const healthyThresholdRevenue = Number((calculatedBreakEven * (1 + buffer / 100)).toFixed(2));
 
-  // Status labels based strictly on business rules:
-  // - "NOT REPORTED": No sales reported for the month
-  // - "BELOW BREAK-EVEN": ONLY when projected revenue fails to cover calculated break-even point
-  // - "ON TARGET": Projected revenue meets or exceeds monthly revenue target
-  // - "BELOW TARGET": Projected revenue is below target (>= 85%) but healthy and above break-even
-  // - "AT RISK": Materially behind monthly target (< 85%) while still above break-even
-  let status: MonthlyPerformanceStatus = 'ON TARGET';
+  // Status badges based solely on Calculated BEP:
+  // - "NOT REPORTED": No Petpooja sales days reported
+  // - "BELOW BREAK-EVEN": Projected Revenue < 100% of BEP
+  // - "HEALTHY": Projected Revenue >= (100% + buffer) of BEP (e.g. >= 110%)
+  // - "AT RISK": Projected Revenue >= 100% of BEP but < Healthy threshold
+  let status: MonthlyPerformanceStatus = 'HEALTHY';
   if (daysReported === 0 || mtdRevenue === 0) {
     status = 'NOT REPORTED';
   } else if (projectedMonthEndRevenue < calculatedBreakEven) {
     status = 'BELOW BREAK-EVEN';
-  } else if (projectedMonthEndRevenue >= target) {
-    status = 'ON TARGET';
-  } else if (projectedMonthEndRevenue >= target * 0.85) {
-    status = 'BELOW TARGET';
+  } else if (projectedMonthEndRevenue >= healthyThresholdRevenue) {
+    status = 'HEALTHY';
   } else {
     status = 'AT RISK';
   }
 
+  const targetVariance = Number((projectedMonthEndRevenue - calculatedBreakEven).toFixed(2));
+
   return {
-    monthlyRevenueTarget: target,
-    planningBreakEven: target,
     calculatedBreakEven,
     mtdRevenue,
     daysElapsed: elapsed,
@@ -228,12 +237,18 @@ export function calculateBreakEvenPacing({
     daysReported: daysReported ?? 0,
     averageDailyRevenue,
     requiredDailyRevenue,
-    requiredDailyRevenuePlanning: requiredDailyRevenue,
-    requiredDailyRevenueCalculated,
     projectedMonthEndRevenue,
+    breakEvenProgressPercent,
+    healthBufferPercent: buffer,
+    healthyThresholdRevenue,
+    status,
+    // Backwards compatibility aliases
+    monthlyRevenueTarget: calculatedBreakEven,
+    planningBreakEven: calculatedBreakEven,
+    requiredDailyRevenuePlanning: requiredDailyRevenue,
+    requiredDailyRevenueCalculated: requiredDailyRevenue,
     targetVariance,
     planningVariance: targetVariance,
-    status,
   };
 }
 
@@ -293,6 +308,8 @@ export async function fetchMTDFinancialSummary(
         mtd_payment_commissions: Number(row.mtd_payment_commissions) || 0,
         mtd_gross_operating_surplus: Number(row.mtd_gross_operating_surplus) || 0,
         days_reported: Number(row.days_reported) || 0,
+        mtd_property_rent: Number(((Number(row.mtd_net_sales) || 0) * 0.10).toFixed(2)),
+        mtd_investor_share: Number(((Number(row.mtd_net_sales) || 0) * 0.10).toFixed(2)),
       };
     }
   } catch (e) {
@@ -327,6 +344,8 @@ export async function fetchMTDFinancialSummary(
   const mtd_variable_expenses = (finRows || []).reduce((s: number, r: any) => s + (Number(r.variable_expenses) || 0), 0);
   const mtd_payment_commissions = (finRows || []).reduce((s: number, r: any) => s + (Number(r.payment_commissions) || 0), 0);
   const mtd_gross_operating_surplus = (finRows || []).reduce((s: number, r: any) => s + (Number(r.gross_operating_surplus) || 0), 0);
+  const mtd_property_rent = Number((mtd_net_sales * 0.10).toFixed(2));
+  const mtd_investor_share = Number((mtd_net_sales * 0.10).toFixed(2));
 
   return {
     month_start_date: monthStart,
@@ -346,6 +365,8 @@ export async function fetchMTDFinancialSummary(
     mtd_payment_commissions,
     mtd_gross_operating_surplus,
     days_reported,
+    mtd_property_rent,
+    mtd_investor_share,
   };
 }
 

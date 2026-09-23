@@ -42,6 +42,7 @@ export default function ProfitabilityPage() {
   const [totalSalaries, setTotalSalaries] = useState(68000);
   const [monthlyOtherFixed, setMonthlyOtherFixed] = useState(3500);
   const [planningBreakEven, setPlanningBreakEven] = useState(3000000);
+  const [healthBufferPercent, setHealthBufferPercent] = useState(10);
   const [rentRate, setRentRate] = useState(0.10);
   const [investorRate, setInvestorRate] = useState(0.08);
   const [mtdSummary, setMtdSummary] = useState<MTDFinancialSummary | null>(null);
@@ -149,14 +150,18 @@ export default function ProfitabilityPage() {
       setTotalSalaries(payroll > 0 ? payroll : 68000);
 
       // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules, Electricity Ledger & Break-Even Targets
-      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: elecReadings }] = await Promise.all([
+      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecReadings }] = await Promise.all([
         fetchMTDFinancialSummary(supabase, businessDate),
         supabase.from('financial_cost_rules').select('*').eq('is_active', true),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
+        supabase.from('financial_targets').select('target_value').eq('target_type', 'break_even_health_buffer_percent').eq('is_active', true).maybeSingle(),
         supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
       ]);
 
       setMtdSummary(mtdRes);
+      if (bufferTarget?.target_value) {
+        setHealthBufferPercent(Number(bufferTarget.target_value) || 10);
+      }
 
       // Calculate Electricity Cost from Continuous Ledger & Configured Rule
       const totalKvah = (elecReadings || []).reduce((sum, r) => sum + (Number(r.delta_consumption) || 0), 0);
@@ -241,7 +246,7 @@ export default function ProfitabilityPage() {
     daysElapsed: daysElapsed,
     daysInMonth: daysInMonth,
     daysReported: mtdSummary?.days_reported,
-    planningBreakEven: planningBreakEven,
+    healthBufferPercent: healthBufferPercent,
     totalMonthlyFixedCosts: totalSalaries + monthlyOtherFixed,
     mtdContributionMargin: mtdContribution,
   });
@@ -297,16 +302,15 @@ export default function ProfitabilityPage() {
           <CardDescription>Monthly Performance</CardDescription>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant={
-              breakEven.status === 'ON TARGET' ? 'success' :
-              breakEven.status === 'BELOW TARGET' ? 'info' :
-              breakEven.status === 'AT RISK' ? 'warning' :
-              breakEven.status === 'BELOW BREAK-EVEN' ? 'danger' : 'default'
+              breakEven.status === 'HEALTHY' || breakEven.status === 'Healthy' || breakEven.status === 'ON TARGET' ? 'success' :
+              breakEven.status === 'AT RISK' || breakEven.status === 'At Risk' || breakEven.status === 'BELOW TARGET' ? 'warning' :
+              breakEven.status === 'BELOW BREAK-EVEN' || breakEven.status === 'Below Break-Even' ? 'danger' : 'default'
             } className="text-xs py-1 px-2.5 font-bold">
               {breakEven.status}
             </Badge>
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            Projected Month-End Revenue: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (Target: {formatINR(planningBreakEven, true)})
+            Projected Month-End Revenue: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong> (BEP: {formatINR(breakEven.calculatedBreakEven, true)})
           </div>
         </Card>
       </div>
@@ -454,28 +458,33 @@ export default function ProfitabilityPage() {
         </div>
       </Card>
 
-      {/* Target & Break-Even Analysis */}
+      {/* Break-Even Analysis */}
       <Card>
         <CardHeader>
-          <CardTitle>Target &amp; Break-Even</CardTitle>
+          <CardTitle>Calculated Break-Even</CardTitle>
         </CardHeader>
         <CardContent className="pt-0 text-xs space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">Monthly Revenue Target</div>
-              <div className="text-2xl font-black text-stone-900">{formatINR(planningBreakEven)} / month</div>
-              <p className="text-stone-500 text-[11px]">
-                Requires <strong>{formatINR(breakEven.requiredDailyRevenuePlanning)}/day</strong> across the remaining {breakEven.daysRemaining} days.
-              </p>
-            </div>
-
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
               <div className="text-xs font-bold text-stone-700 uppercase">Calculated Break-Even Point</div>
               <div className="text-2xl font-black text-amber-700">
                 {formatINR(breakEven.calculatedBreakEven)} / month
               </div>
               <p className="text-stone-500 text-[11px]">
-                Fixed overhead coverage based on current operational margin.
+                {breakEven.requiredDailyRevenue > 0
+                  ? <>Requires <strong>{formatINR(breakEven.requiredDailyRevenue)}/day</strong> across the remaining {breakEven.daysRemaining} days.</>
+                  : <>Break-Even already achieved for the month.</>
+                }
+              </p>
+            </div>
+
+            <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
+              <div className="text-xs font-bold text-stone-700 uppercase">% Break-Even Progress</div>
+              <div className={`text-2xl font-black ${breakEven.breakEvenProgressPercent >= 100 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {breakEven.breakEvenProgressPercent}%
+              </div>
+              <p className="text-stone-500 text-[11px]">
+                Projected Month-End Revenue: <strong>{formatINR(breakEven.projectedMonthEndRevenue, true)}</strong>
               </p>
             </div>
           </div>

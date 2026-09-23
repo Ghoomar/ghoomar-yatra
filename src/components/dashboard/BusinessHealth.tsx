@@ -36,8 +36,8 @@ export function BusinessHealth({
       <CardContent className="pt-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
           {healthItems.map((item, idx) => {
-            const isGood = item.status === 'Healthy' || item.status === 'ON TARGET';
-            const isWarn = item.status === 'Warning' || item.status === 'Pending' || item.status === 'BELOW TARGET' || item.status === 'At Risk' || item.status === 'AT RISK';
+            const isGood = item.status === 'Healthy' || item.status === 'HEALTHY' || item.status === 'ON TARGET';
+            const isWarn = item.status === 'Warning' || item.status === 'Pending' || item.status === 'At Risk' || item.status === 'AT RISK' || item.status === 'BELOW TARGET';
             const isDanger = item.status === 'Below Break-Even' || item.status === 'BELOW BREAK-EVEN';
             return (
               <div

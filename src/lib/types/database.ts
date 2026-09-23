@@ -315,6 +315,8 @@ export interface MTDFinancialSummary {
   mtd_payment_commissions: number;
   mtd_gross_operating_surplus: number;
   days_reported: number;
+  mtd_property_rent?: number;
+  mtd_investor_share?: number;
 }
 
 export type EmploymentStatus = 'Active' | 'On Leave' | 'Resigned' | 'Terminated';

@@ -20,6 +20,7 @@ interface KPICardsProps {
   profitMarginPercent: number;
   breakEvenPacingStatus: BreakEvenStatus | string;
   projectedMonthEndRevenue: number;
+  calculatedBreakEven?: number;
 }
 
 export function KPICards({
@@ -37,18 +38,18 @@ export function KPICards({
   profitMarginPercent,
   breakEvenPacingStatus,
   projectedMonthEndRevenue,
+  calculatedBreakEven,
 }: KPICardsProps) {
   const getBadgeClass = (status: BreakEvenStatus | string) => {
-    switch (status) {
+    const norm = (status || '').toUpperCase();
+    switch (norm) {
+      case 'HEALTHY':
       case 'ON TARGET':
-      case 'Healthy':
         return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
-      case 'BELOW TARGET':
       case 'AT RISK':
-      case 'At Risk':
+      case 'BELOW TARGET':
         return 'bg-amber-100 text-amber-800 border border-amber-200';
       case 'BELOW BREAK-EVEN':
-      case 'Below Break-Even':
         return 'bg-rose-100 text-rose-800 border border-rose-200';
       case 'NOT REPORTED':
       default:
@@ -222,7 +223,9 @@ export function KPICards({
           <div className="text-xl sm:text-2xl font-black text-stone-900 mt-1.5 tracking-tight">
             {formatINR(projectedMonthEndRevenue, true)} Proj.
           </div>
-          <div className="text-[11px] text-stone-500 mt-1">Vs ₹30L Target</div>
+          <div className="text-[11px] text-stone-500 mt-1">
+            {calculatedBreakEven ? `BEP: ${formatINR(calculatedBreakEven, true)}` : 'Calculated Break-Even'}
+          </div>
         </Card>
       </Link>
     </div>

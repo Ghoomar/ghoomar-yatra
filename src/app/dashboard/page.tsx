@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [monthlySalaries, setMonthlySalaries] = useState<number>(0);
   const [otherFixedCosts, setOtherFixedCosts] = useState<number>(3500);
   const [planningBreakEven, setPlanningBreakEven] = useState<number>(3000000);
+  const [healthBufferPercent, setHealthBufferPercent] = useState<number>(10);
   const [rentRate, setRentRate] = useState<number>(0.10);
   const [investorRate, setInvestorRate] = useState<number>(0.08);
   const [operationalUtilitiesCost, setOperationalUtilitiesCost] = useState({
@@ -105,10 +106,11 @@ export default function DashboardPage() {
       setIsDayClosed(bDay?.status === 'closed');
 
       // 7. Authoritative MTD Financial RPC, Fixed Cost Rules, Electricity & Fuel
-      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: elecReadings }, { data: fuelMovs }] = await Promise.all([
+      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecReadings }, { data: fuelMovs }] = await Promise.all([
         fetchMTDFinancialSummary(supabase, businessDate),
         supabase.from('financial_cost_rules').select('*').eq('is_active', true),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
+        supabase.from('financial_targets').select('target_value').eq('target_type', 'break_even_health_buffer_percent').eq('is_active', true).maybeSingle(),
         supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
         supabase.from('stock_movements').select('purpose, movement_type, total_value')
           .eq('business_date', businessDate)
@@ -116,6 +118,9 @@ export default function DashboardPage() {
       ]);
 
       setMtdSummary(mtdRes);
+      if (bufferTarget?.target_value) {
+        setHealthBufferPercent(Number(bufferTarget.target_value) || 10);
+      }
 
       let elecRate = 10.00;
       if (costRules && costRules.length > 0) {
@@ -211,7 +216,7 @@ export default function DashboardPage() {
     daysElapsed: mtdSummary?.days_elapsed || daysElapsed,
     daysInMonth: mtdSummary?.days_in_month || daysInMonth,
     daysReported: mtdSummary?.days_reported,
-    planningBreakEven: planningBreakEven,
+    healthBufferPercent: healthBufferPercent,
     totalMonthlyFixedCosts: actualSalariesPool + otherFixedCosts,
     mtdContributionMargin: mtdContribution,
   });
@@ -303,6 +308,7 @@ export default function DashboardPage() {
         profitMarginPercent={profitResult.netProfitMarginPercent}
         breakEvenPacingStatus={breakEven.status}
         projectedMonthEndRevenue={breakEven.projectedMonthEndRevenue}
+        calculatedBreakEven={breakEven.calculatedBreakEven}
       />
 
       {/* Row 2: Target Pacing and Monthly Performance */}
@@ -317,16 +323,15 @@ export default function DashboardPage() {
         />
 
         <MonthlyPosition
-          monthlyRevenueTarget={breakEven.monthlyRevenueTarget}
-          planningBreakEven={breakEven.planningBreakEven}
           calculatedBreakEven={breakEven.calculatedBreakEven}
           mtdRevenue={breakEven.mtdRevenue}
           daysElapsed={breakEven.daysElapsed}
           daysInMonth={mtdSummary?.days_in_month || daysInMonth}
           daysReported={mtdSummary?.days_reported}
           averageDailyRevenue={breakEven.averageDailyRevenue}
-          requiredDailyRevenue={breakEven.requiredDailyRevenuePlanning}
+          requiredDailyRevenue={breakEven.requiredDailyRevenue}
           projectedMonthEndRevenue={breakEven.projectedMonthEndRevenue}
+          breakEvenProgressPercent={breakEven.breakEvenProgressPercent}
           status={breakEven.status}
         />
       </div>
