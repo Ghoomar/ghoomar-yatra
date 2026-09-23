@@ -293,6 +293,27 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.netSales - a.netSales);
 
+    // Derived Breakdown 7: Diagnostic for Unmatched Petpooja Items
+    const unmatchedItemsMap = new Map<string, { quantity: number; amount: number }>();
+    hourlyItems.forEach((item) => {
+      if (item.parent_category === 'Uncategorized') {
+        const name = item.item_name;
+        const prev = unmatchedItemsMap.get(name) || { quantity: 0, amount: 0 };
+        unmatchedItemsMap.set(name, {
+          quantity: prev.quantity + (Number(item.quantity) || 0),
+          amount: prev.amount + (Number(item.net_sales) || 0),
+        });
+      }
+    });
+
+    const unmatchedItems = Array.from(unmatchedItemsMap.entries())
+      .map(([name, d]) => ({
+        itemName: name,
+        quantity: Math.round(d.quantity * 100) / 100,
+        amount: Math.round(d.amount * 100) / 100,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
     // Filter Options
     const { data: allMenu } = await supabase
       .from('pos_menu_items')
@@ -326,6 +347,7 @@ export async function GET(request: NextRequest) {
         byPaymentMode,
         byCaptain,
         byOrderType,
+        unmatchedItems,
       },
       reconciliation,
       allBills: orders,

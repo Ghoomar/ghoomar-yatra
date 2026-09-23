@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
+import { buildMenuMasterLookup, resolveItemCategory } from '@/lib/petpooja/matcher';
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,25 +84,19 @@ export async function POST(request: NextRequest) {
 
     // 4. Ingest parsed data based on report type
     if (reportType === 'HOURLY_ITEM_SALES') {
-      // Fetch Menu Master mapping to snapshot categories
+      // Fetch authoritative Menu Master mapping & aliases to snapshot categories
       const { data: menuItems } = await supabase
         .from('pos_menu_items')
-        .select('name, parent_category, category');
+        .select('name, parent_category, category, price, normalized_name');
 
-      const menuMap = new Map<string, { parentCategory: string; category: string }>();
-      (menuItems || []).forEach((m) => {
-        menuMap.set(m.name.toLowerCase().trim(), {
-          parentCategory: m.parent_category,
-          category: m.category,
-        });
-      });
+      const { data: aliases } = await supabase
+        .from('pos_menu_item_aliases')
+        .select('alias, normalized_alias, menu_item_id, pos_menu_items(name, category, parent_category, price)');
+
+      const lookup = buildMenuMasterLookup(menuItems || [], (aliases as any) || []);
 
       const hourlyPayload = data.map((item) => {
-        const lowerName = item.item_name.toLowerCase().trim();
-        const mapping = menuMap.get(lowerName) || {
-          parentCategory: 'Uncategorized',
-          category: 'General',
-        };
+        const resolution = resolveItemCategory(item.item_name, lookup);
 
         return {
           batch_id: newBatch.id,
@@ -109,8 +104,8 @@ export async function POST(request: NextRequest) {
           hour_of_day: item.hour_of_day,
           hour_label: item.hour_label,
           item_name: item.item_name,
-          parent_category: mapping.parentCategory,
-          category: mapping.category,
+          parent_category: resolution.parentCategory,
+          category: resolution.category,
           unit_price: item.unit_price,
           quantity: item.quantity,
           net_amount: item.net_amount,

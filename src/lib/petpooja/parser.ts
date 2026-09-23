@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import crypto from 'crypto';
 import { PetpoojaReportType } from '@/lib/types/sales';
+import { normalizeItemName, resolveParentCategory } from './matcher';
 
 export interface ParseResult {
   reportType: PetpoojaReportType;
@@ -697,8 +698,10 @@ function parseMenuMasterReport(sheetRows: any[][], fileName: string, fileChecksu
     const name = String(row[col.name !== undefined ? col.name : 2] || '').trim();
     if (!name) continue;
 
-    const parentCategory = String(row[col.parentCategory !== undefined ? col.parentCategory : 0] || 'Uncategorized').trim();
-    const category = String(row[col.category !== undefined ? col.category : 1] || 'General').trim();
+    const category = col.category !== undefined ? String(row[col.category] || '').trim() : 'General';
+    const rawParent = col.parentCategory !== undefined ? String(row[col.parentCategory] || '').trim() : '';
+    const parentCategory = resolveParentCategory(category, rawParent);
+    const normalizedName = normalizeItemName(name);
     const price = cleanNumericValue(row[col.price !== undefined ? col.price : 3]);
     const gstPercent = cleanNumericValue(row[col.gstPercent !== undefined ? col.gstPercent : 4]);
     const description = col.description !== undefined ? String(row[col.description] || '').trim() : null;
@@ -706,6 +709,7 @@ function parseMenuMasterReport(sheetRows: any[][], fileName: string, fileChecksu
 
     data.push({
       name,
+      normalized_name: normalizedName,
       parent_category: parentCategory || 'Uncategorized',
       category: category || 'General',
       price,

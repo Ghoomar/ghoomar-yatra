@@ -152,6 +152,7 @@ export interface SalesAnalyticsResponse {
     byPaymentMode: { name: string; amount: number; sharePercent: number }[];
     byCaptain: { name: string; ordersCount: number; coversPax: number; netSales: number; avgOrder: number }[];
     byOrderType: { name: string; count: number; netSales: number; sharePercent: number }[];
+    unmatchedItems?: { itemName: string; quantity: number; amount: number }[];
   };
   reconciliation: DailySalesReconciliationRow | null;
   allBills?: SalesOrder[];
