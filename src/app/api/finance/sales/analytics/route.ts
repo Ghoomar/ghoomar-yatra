@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       ordersQuery = ordersQuery.eq('order_type', orderTypeFilter);
     }
 
-    // 3. Fetch Reconciliation Row
+    // 3. Fetch Reconciliation Row & Executive Summary
     const reconQuery = supabase
       .from('daily_sales_reconciliation')
       .select('*')
@@ -78,11 +78,20 @@ export async function GET(request: NextRequest) {
       .lte('business_date', endDate)
       .limit(1);
 
-    const [hourlyRes, ordersRes, reconRes] = await Promise.all([hourlyQuery, ordersQuery, reconQuery]);
+    const execQuery = supabase
+      .from('sales_executive_summaries')
+      .select('*')
+      .gte('business_date', startDate)
+      .lte('business_date', endDate)
+      .order('business_date', { ascending: false })
+      .limit(1);
+
+    const [hourlyRes, ordersRes, reconRes, execRes] = await Promise.all([hourlyQuery, ordersQuery, reconQuery, execQuery]);
 
     const hourlyItems = hourlyRes.data || [];
     const orders = ordersRes.data || [];
     const reconciliation = reconRes.data && reconRes.data.length > 0 ? reconRes.data[0] : null;
+    const execSummary = execRes.data && execRes.data.length > 0 ? execRes.data[0] : null;
 
     // Compute Executive KPIs
     let netSales = 0;
@@ -96,17 +105,25 @@ export async function GET(request: NextRequest) {
       parentCategoryFilter || categoryFilter || itemFilter || captainFilter || paymentTypeFilter || orderTypeFilter
     );
 
-    if (!hasGranularFilters && reconciliation && reconciliation.exec_grand_total) {
+    if (!hasGranularFilters && (execSummary || (reconciliation && reconciliation.exec_grand_total))) {
       // 1. Authoritative Executive Summary standard of truth
-      netSales = Number(reconciliation.exec_net_sales) || 0;
-      grossSales = Number(reconciliation.exec_grand_total) || 0;
-      totalBills = orders.length > 0 ? orders.length : Number(reconciliation.exec_bills_count) || 0;
-      totalTax = orders.length > 0
-        ? orders.reduce((sum, o) => sum + (Number(o.tax_amount) || 0), 0)
-        : hourlyItems.reduce((sum, h) => sum + (Number(h.tax_amount) || 0), 0);
-      totalDiscounts = orders.length > 0
-        ? orders.reduce((sum, o) => sum + (Number(o.discount_amount) || 0), 0)
-        : hourlyItems.reduce((sum, h) => sum + (Number(h.discount_amount) || 0), 0);
+      netSales = execSummary ? Number(execSummary.net_sales) || 0 : Number(reconciliation?.exec_net_sales) || 0;
+      grossSales = execSummary ? Number(execSummary.grand_total) || 0 : Number(reconciliation?.exec_grand_total) || 0;
+      totalBills = orders.length > 0 ? orders.length : (execSummary ? Number(execSummary.successful_bills_count) || 0 : Number(reconciliation?.exec_bills_count) || 0);
+      
+      const execTax = execSummary ? (Number(execSummary.total_tax) || (Number(execSummary.cgst || 0) + Number(execSummary.sgst || 0))) : 0;
+      totalTax = execTax > 0 
+        ? execTax 
+        : (orders.length > 0
+          ? orders.reduce((sum, o) => sum + (Number(o.tax_amount) || 0), 0)
+          : hourlyItems.reduce((sum, h) => sum + (Number(h.tax_amount) || 0), 0));
+
+      const execDiscount = execSummary ? Number(execSummary.discount) || 0 : 0;
+      totalDiscounts = execDiscount > 0
+        ? execDiscount
+        : (orders.length > 0
+          ? orders.reduce((sum, o) => sum + (Number(o.discount_amount) || 0), 0)
+          : hourlyItems.reduce((sum, h) => sum + (Number(h.discount_amount) || 0), 0));
     } else if (orders.length > 0) {
       // 2. Authoritative Orders Master bills standard
       netSales = orders.reduce((sum, o) => sum + (Number(o.net_sales) || 0), 0);

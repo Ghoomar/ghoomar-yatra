@@ -380,13 +380,13 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
   const rawHeaders = sheetRows[headerIndex].map((h) => String(h || '').trim());
   const col: Record<string, number> = {};
   rawHeaders.forEach((h, idx) => {
-    const clean = h.toLowerCase();
+    const clean = h.toLowerCase().trim();
     if (clean.includes('invoice no.')) col.invoiceNo = idx;
     if (clean.includes('date') || clean.includes('timestamp')) col.timestamp = idx;
     if (clean === 'biller') col.biller = idx;
     if (clean.includes('kot no.')) col.kotNo = idx;
     if (clean.includes('payment type')) col.paymentType = idx;
-    if (clean.includes('order type')) col.orderType = idx;
+    if (clean === 'order type' || (clean.startsWith('order type') && !clean.includes('sub'))) col.orderType = idx;
     if (clean === 'status') col.status = idx;
     if (clean === 'area') col.area = idx;
     if (clean.includes('assign to') || clean.includes('captain')) col.assignTo = idx;
@@ -394,9 +394,11 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     if (clean === 'phone' || clean.includes('mobile')) col.phone = idx;
     if (clean.includes('covers') || clean.includes('pax') || clean.includes('persons')) col.covers = idx;
     if (clean.includes('gross amount') || clean.includes('my amount')) col.grossAmount = idx;
-    if (clean.includes('discount')) col.discount = idx;
+    if (clean.startsWith('discount')) col.discount = idx;
     if (clean.includes('net sales')) col.netSales = idx;
-    if (clean.includes('tax')) col.tax = idx;
+    if (clean.startsWith('total tax') || clean === 'total tax (₹)' || clean === 'total tax') col.totalTax = idx;
+    if (clean === 'cgst' || clean === 'cgst (₹)' || (clean.startsWith('cgst') && !clean.includes('amount') && !clean.includes('-') && !clean.includes('@'))) col.cgst = idx;
+    if (clean === 'sgst' || clean === 'sgst (₹)' || (clean.startsWith('sgst') && !clean.includes('amount') && !clean.includes('-') && !clean.includes('@'))) col.sgst = idx;
     if (clean.includes('round off')) col.roundOff = idx;
     if (clean.includes('waived off')) col.waivedOff = idx;
     if (clean.includes('grand total') || clean.includes('total (') || clean === 'total') col.grandTotal = idx;
@@ -431,7 +433,11 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     const grossAmount = cleanNumericValue(row[col.grossAmount]);
     const discountAmount = cleanNumericValue(row[col.discount]);
     const netSales = cleanNumericValue(row[col.netSales]);
-    const taxAmount = cleanNumericValue(row[col.tax]);
+    const totalTaxVal = col.totalTax !== undefined ? cleanNumericValue(row[col.totalTax]) : 0;
+    const cgstVal = col.cgst !== undefined ? cleanNumericValue(row[col.cgst]) : 0;
+    const sgstVal = col.sgst !== undefined ? cleanNumericValue(row[col.sgst]) : 0;
+    const gstSum = Math.round((cgstVal + sgstVal) * 100) / 100;
+    const taxAmount = totalTaxVal > 0 ? totalTaxVal : gstSum;
     const roundOff = cleanNumericValue(row[col.roundOff]);
     const waivedOff = cleanNumericValue(row[col.waivedOff]);
     const grandTotal = cleanNumericValue(row[col.grandTotal]);
