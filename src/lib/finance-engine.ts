@@ -127,9 +127,10 @@ export interface BreakEvenInput {
   mtdRevenue: number;
   daysElapsed: number;
   daysInMonth: number;
-  planningBreakEven: number; // e.g. 30,00,000
+  planningBreakEven?: number; // e.g. 30,00,000
   totalMonthlyFixedCosts: number;
   mtdContributionMargin: number;
+  daysReported?: number;
 }
 
 export interface BreakEvenOutput {
@@ -153,10 +154,13 @@ export function calculateBreakEvenPacing({
   planningBreakEven = 3000000,
   totalMonthlyFixedCosts,
   mtdContributionMargin,
+  daysReported,
 }: BreakEvenInput): BreakEvenOutput {
   const elapsed = Math.max(1, daysElapsed);
   const daysRemaining = Math.max(0, daysInMonth - elapsed);
-  const averageDailyRevenue = mtdRevenue / elapsed;
+  // Average daily revenue is calculated over days actually reported to avoid penalizing unreported dates
+  const divisor = (daysReported !== undefined && daysReported > 0) ? daysReported : elapsed;
+  const averageDailyRevenue = mtdRevenue > 0 ? mtdRevenue / divisor : 0;
   const projectedMonthEndRevenue = Number((averageDailyRevenue * daysInMonth).toFixed(2));
 
   // Dynamic Calculated Break-Even based on actual contribution margin ratio

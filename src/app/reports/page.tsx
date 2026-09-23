@@ -215,10 +215,10 @@ export default function ReportsPage() {
     execSummary?.grand_total ?? salesSummary?.gross_sales ?? 0
   );
   const consolidatedNet = Number(
-    execSummary?.net_sales ?? salesSummary?.net_sales ?? dailyData?.revenue ?? 0
+    execSummary?.net_sales ?? salesSummary?.net_sales ?? 0
   );
   const totalBillsCount = Number(
-    execSummary?.successful_bills_count ?? orders.filter((o) => o.status === 'Success').length ?? salesSummary?.bill_count ?? 0
+    execSummary?.successful_bills_count ?? salesSummary?.bill_count ?? orders.filter((o) => o.status === 'Success').length ?? 0
   );
 
   // 2. Restaurant Dine-In (STRICTLY Dine-In, excludes Takeaway and Snacks Stall)

@@ -338,7 +338,7 @@ async function checkUserDependencies(
     adminClient.from('inventory_counts').select('id', { count: 'exact', head: true }).eq('approved_by', targetUserId),
     adminClient.from('purchase_headers').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
     adminClient.from('vendor_payments').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
-    adminClient.from('sales_reports').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
+    adminClient.from('sales_import_batches').select('id', { count: 'exact', head: true }).eq('imported_by', targetUserId),
     adminClient.from('visitor_counter_events').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
     adminClient.from('vehicle_counter_events').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
     adminClient.from('activity_daily_records').select('id', { count: 'exact', head: true }).eq('entered_by', targetUserId),
@@ -376,7 +376,7 @@ async function checkUserDependencies(
 
   if ((vpayCreated.count || 0) > 0) dependencies.push({ table: 'vendor_payments', label: 'Vendor Payment Records', count: vpayCreated.count! });
 
-  if ((salesEntered.count || 0) > 0) dependencies.push({ table: 'sales_reports', label: 'Daily Sales Reports', count: salesEntered.count! });
+  if ((salesEntered.count || 0) > 0) dependencies.push({ table: 'sales_import_batches', label: 'Petpooja Sales Import Batches', count: salesEntered.count! });
 
   if ((visEntered.count || 0) > 0) dependencies.push({ table: 'visitor_counter_events', label: 'Gate Visitor Counters', count: visEntered.count! });
 

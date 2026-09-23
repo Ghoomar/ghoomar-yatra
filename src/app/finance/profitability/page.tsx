@@ -240,6 +240,7 @@ export default function ProfitabilityPage() {
     mtdRevenue: mtdNetSales,
     daysElapsed: daysElapsed,
     daysInMonth: daysInMonth,
+    daysReported: mtdSummary?.days_reported,
     planningBreakEven: planningBreakEven,
     totalMonthlyFixedCosts: totalSalaries + monthlyOtherFixed,
     mtdContributionMargin: mtdContribution,
@@ -281,7 +282,7 @@ export default function ProfitabilityPage() {
             {pnl.isReported ? formatINR(pnl.estimatedNetProfit) : 'NOT REPORTED'}
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            {pnl.isReported ? `Margin: ${pnl.netProfitMarginPercent}%` : 'Sales not entered'}
+            {pnl.isReported ? `Margin: ${pnl.netProfitMarginPercent}%` : 'Sales not uploaded'}
           </div>
         </Card>
 
@@ -313,9 +314,15 @@ export default function ProfitabilityPage() {
             <div className="flex items-center gap-2">
               <Receipt className="h-4 w-4 text-emerald-600" />
               <span>Net Sales</span>
-              <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">ACTUAL</span>
+              {pnl.isReported ? (
+                <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">PETPOOJA ACTUAL</span>
+              ) : (
+                <span className="text-[10px] text-rose-800 font-normal bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">NOT UPLOADED</span>
+              )}
             </div>
-            <span className="text-emerald-700 text-base font-extrabold">{formatINR(pnl.revenue)}</span>
+            <span className={pnl.isReported ? "text-emerald-700 text-base font-extrabold" : "text-stone-400 text-sm font-semibold"}>
+              {pnl.isReported ? formatINR(pnl.revenue) : 'Not Reported'}
+            </span>
           </div>
 
           {/* Direct Material Consumption */}

@@ -210,6 +210,7 @@ export default function DashboardPage() {
     mtdRevenue: mtdNetSales,
     daysElapsed: mtdSummary?.days_elapsed || daysElapsed,
     daysInMonth: mtdSummary?.days_in_month || daysInMonth,
+    daysReported: mtdSummary?.days_reported,
     planningBreakEven: planningBreakEven,
     totalMonthlyFixedCosts: actualSalariesPool + otherFixedCosts,
     mtdContributionMargin: mtdContribution,
@@ -232,9 +233,9 @@ export default function DashboardPage() {
     flags.push({
       id: 'missing_sales',
       severity: 'warning',
-      title: 'Petpooja Sales Report Not Entered',
-      description: `Midnight day-end figures for ${businessDate} have not been submitted yet.`,
-      linkText: 'Enter Petpooja Sales',
+      title: 'Petpooja Sales Not Uploaded',
+      description: `Authoritative Petpooja reports for ${businessDate} have not been uploaded yet.`,
+      linkText: 'Upload Petpooja Sales',
       href: '/finance/sales',
     });
   }

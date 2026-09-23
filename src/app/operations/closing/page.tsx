@@ -86,7 +86,7 @@ export default function DailyClosingPage() {
           isComplete: isSalesVerified,
           statusText: isSalesVerified && sales
             ? `Verified: ${formatINR(Number(sales.net_sales || 0))} (${sales.bill_count || 0} bills)`
-            : 'Missing — No Petpooja sales import found',
+            : 'Not Reported / Not Uploaded',
           isRequired: true,
         },
         {
