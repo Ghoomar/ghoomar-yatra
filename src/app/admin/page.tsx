@@ -17,6 +17,7 @@ import { DepartmentCategoryModal } from '@/components/admin/DepartmentCategoryMo
 import { RolePermissionMatrix } from '@/components/admin/RolePermissionMatrix';
 import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { EditCostRuleModal } from '@/components/admin/EditCostRuleModal';
+import { MenuMasterView } from '@/components/admin/menu/MenuMasterView';
 import { logAuditAction } from '@/lib/audit-logger';
 import {
   Settings,
@@ -41,7 +42,7 @@ import {
 
 export default function AdminSettingsPage() {
   const supabase = createClient();
-  const [activeTab, setActiveTab] = useState<'masters' | 'cost_rules' | 'targets' | 'users' | 'audit'>('masters');
+  const [activeTab, setActiveTab] = useState<'menu_master' | 'masters' | 'cost_rules' | 'targets' | 'users' | 'audit'>('menu_master');
 
   const [departments, setDepartments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -147,6 +148,17 @@ export default function AdminSettingsPage() {
       {/* Tabs */}
       <div className="flex border-b border-stone-200 gap-6 text-sm font-semibold overflow-x-auto">
         <button
+          onClick={() => setActiveTab('menu_master')}
+          className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+            activeTab === 'menu_master'
+              ? 'border-amber-600 text-amber-600'
+              : 'border-transparent text-stone-500 hover:text-stone-700'
+          }`}
+        >
+          <UtensilsCrossed className="h-4 w-4" />
+          <span>Menu Master</span>
+        </button>
+        <button
           onClick={() => setActiveTab('masters')}
           className={`pb-3 border-b-2 transition-colors cursor-pointer shrink-0 ${
             activeTab === 'masters'
@@ -197,6 +209,9 @@ export default function AdminSettingsPage() {
           System Audit Trail
         </button>
       </div>
+
+      {/* TAB 0: MENU MASTER */}
+      {activeTab === 'menu_master' && <MenuMasterView />}
 
       {/* TAB 1: OPERATIONAL MASTERS */}
       {activeTab === 'masters' && (

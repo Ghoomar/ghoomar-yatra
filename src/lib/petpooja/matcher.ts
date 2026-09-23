@@ -2,8 +2,8 @@
  * Authoritative Petpooja Menu Master & Category Matching Engine
  * 
  * Maps Petpooja sales item names to canonical Menu Master items,
- * resolving both the granular Category (27 subcategories) and
- * the management Parent Category (7 major groups).
+ * resolving both the granular Category and the management Parent Category
+ * driven directly by the database configuration.
  */
 
 export const CATEGORY_TO_PARENT_MAP: Record<string, string> = {
@@ -31,8 +31,11 @@ export const CATEGORY_TO_PARENT_MAP: Record<string, string> = {
   'chinese main course': 'Chinese',
   'chinese noodles & rice': 'Chinese',
 
+  // Rajasthani (Dedicated Parent Category)
+  'rajasthani specialities': 'Rajasthani',
+  'rajasthani specilities': 'Rajasthani', // legacy typo compatibility
+
   // Main Course
-  'rajasthani specilities': 'Main Course',
   'others': 'Main Course',
 
   // Indian
@@ -51,14 +54,20 @@ export const CATEGORY_TO_PARENT_MAP: Record<string, string> = {
 
 /**
  * Resolves the parent category for a given category name.
- * If already provided and not 'Uncategorized', retains it.
- * Otherwise uses the authoritative 27-category mapping.
+ * Uses dynamic categories map if provided, otherwise falls back to static dictionary.
  */
-export function resolveParentCategory(category: string, existingParent?: string | null): string {
+export function resolveParentCategory(
+  category: string,
+  existingParent?: string | null,
+  dynamicCategoryMap?: Map<string, string>
+): string {
   if (existingParent && existingParent.trim() && existingParent.trim() !== 'Uncategorized') {
     return existingParent.trim();
   }
   const cleanCat = (category || '').toLowerCase().trim();
+  if (dynamicCategoryMap && dynamicCategoryMap.has(cleanCat)) {
+    return dynamicCategoryMap.get(cleanCat)!;
+  }
   return CATEGORY_TO_PARENT_MAP[cleanCat] || 'Uncategorized';
 }
 
@@ -111,10 +120,11 @@ export interface MenuMasterLookup {
   exactMap: Map<string, MenuItemMapping>;
   normalizedMap: Map<string, MenuItemMapping>;
   aliasMap: Map<string, MenuItemMapping>;
+  categoryToParentMap: Map<string, string>;
 }
 
 /**
- * Builds fast lookup maps from pos_menu_items and pos_menu_item_aliases.
+ * Builds fast lookup maps from pos_menu_items, pos_menu_item_aliases, and pos_categories.
  */
 export function buildMenuMasterLookup(
   menuItems: Array<{
@@ -134,14 +144,25 @@ export function buildMenuMasterLookup(
       parent_category: string;
       price?: number;
     } | null;
+  }>,
+  dbCategories?: Array<{
+    name: string;
+    parent_category_name: string;
   }>
 ): MenuMasterLookup {
   const exactMap = new Map<string, MenuItemMapping>();
   const normalizedMap = new Map<string, MenuItemMapping>();
   const aliasMap = new Map<string, MenuItemMapping>();
+  const categoryToParentMap = new Map<string, string>();
 
+  // 1. Populate category to parent from database if provided
+  (dbCategories || []).forEach((c) => {
+    categoryToParentMap.set(c.name.toLowerCase().trim(), c.parent_category_name);
+  });
+
+  // 2. Populate menu items
   (menuItems || []).forEach((m) => {
-    const parentCat = resolveParentCategory(m.category, m.parent_category);
+    const parentCat = resolveParentCategory(m.category, m.parent_category, categoryToParentMap);
     const itemData: MenuItemMapping = {
       name: m.name,
       category: m.category,
@@ -149,19 +170,21 @@ export function buildMenuMasterLookup(
       price: m.price ? Number(m.price) : undefined,
     };
 
-    // 1. Raw exact lookup
+    // Raw exact lookup
     exactMap.set(m.name, itemData);
 
-    // 2. Normalized lookup
+    // Normalized lookup
     const norm = m.normalized_name || normalizeItemName(m.name);
     normalizedMap.set(norm, itemData);
   });
 
+  // 3. Populate aliases
   (aliases || []).forEach((a) => {
     if (a.pos_menu_items) {
       const parentCat = resolveParentCategory(
         a.pos_menu_items.category,
-        a.pos_menu_items.parent_category
+        a.pos_menu_items.parent_category,
+        categoryToParentMap
       );
       const itemData: MenuItemMapping = {
         name: a.pos_menu_items.name,
@@ -174,7 +197,24 @@ export function buildMenuMasterLookup(
     }
   });
 
-  return { exactMap, normalizedMap, aliasMap };
+  return { exactMap, normalizedMap, aliasMap, categoryToParentMap };
+}
+
+/**
+ * Loads the complete Menu Master lookup directly from the database tables.
+ */
+export async function loadMenuMasterLookupFromDb(supabase: any): Promise<MenuMasterLookup> {
+  const [
+    { data: categories },
+    { data: menuItems },
+    { data: aliases },
+  ] = await Promise.all([
+    supabase.from('pos_categories').select('name, parent_category_name').eq('is_active', true),
+    supabase.from('pos_menu_items').select('name, parent_category, category, price, normalized_name').eq('is_active', true),
+    supabase.from('pos_menu_item_aliases').select('alias, normalized_alias, menu_item_id, pos_menu_items(name, category, parent_category, price)'),
+  ]);
+
+  return buildMenuMasterLookup(menuItems || [], (aliases as any) || [], categories || []);
 }
 
 /**

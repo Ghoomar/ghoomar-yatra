@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
-import { buildMenuMasterLookup, resolveItemCategory } from '@/lib/petpooja/matcher';
+import { loadMenuMasterLookupFromDb, resolveItemCategory } from '@/lib/petpooja/matcher';
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,16 +84,8 @@ export async function POST(request: NextRequest) {
 
     // 4. Ingest parsed data based on report type
     if (reportType === 'HOURLY_ITEM_SALES') {
-      // Fetch authoritative Menu Master mapping & aliases to snapshot categories
-      const { data: menuItems } = await supabase
-        .from('pos_menu_items')
-        .select('name, parent_category, category, price, normalized_name');
-
-      const { data: aliases } = await supabase
-        .from('pos_menu_item_aliases')
-        .select('alias, normalized_alias, menu_item_id, pos_menu_items(name, category, parent_category, price)');
-
-      const lookup = buildMenuMasterLookup(menuItems || [], (aliases as any) || []);
+      // Fetch authoritative Menu Master mapping & hierarchy directly from database
+      const lookup = await loadMenuMasterLookupFromDb(supabase);
 
       const hourlyPayload = data.map((item) => {
         const resolution = resolveItemCategory(item.item_name, lookup);

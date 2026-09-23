@@ -315,13 +315,23 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.amount - a.amount);
 
     // Filter Options
-    const { data: allMenu } = await supabase
-      .from('pos_menu_items')
-      .select('parent_category, category, name')
-      .order('parent_category');
+    const [
+      { data: dbParents },
+      { data: dbCats },
+      { data: allMenu }
+    ] = await Promise.all([
+      supabase.from('pos_parent_categories').select('name').eq('is_active', true).order('display_order'),
+      supabase.from('pos_categories').select('name').eq('is_active', true).order('display_order'),
+      supabase.from('pos_menu_items').select('parent_category, category, name').order('name'),
+    ]);
 
-    const parentCatOptions = Array.from(new Set((allMenu || []).map((m) => m.parent_category).filter(Boolean)));
-    const catOptions = Array.from(new Set((allMenu || []).map((m) => m.category).filter(Boolean)));
+    const parentCatOptions = dbParents && dbParents.length > 0
+      ? dbParents.map((p) => p.name)
+      : Array.from(new Set((allMenu || []).map((m) => m.parent_category).filter(Boolean)));
+
+    const catOptions = dbCats && dbCats.length > 0
+      ? dbCats.map((c) => c.name)
+      : Array.from(new Set((allMenu || []).map((m) => m.category).filter(Boolean)));
     const itemOptions = Array.from(new Set((allMenu || []).map((m) => m.name).filter(Boolean)));
     const captainOptions = Array.from(new Set(orders.map((o) => o.captain_name).filter(Boolean)));
     const paymentOptions = Array.from(new Set(orders.map((o) => o.payment_type).filter(Boolean)));
