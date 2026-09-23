@@ -60,7 +60,12 @@ export default function ProfitabilityPage() {
       const grossSales = Number(execSummary?.grand_total ?? salesSummary?.gross_sales ?? 0);
       const netSales = Number(execSummary?.net_sales ?? salesSummary?.net_sales ?? 0);
       const discounts = Number(execSummary?.discount ?? salesSummary?.discounts ?? 0);
-      const taxAmount = Number(execSummary?.total_tax ?? salesSummary?.tax_amount ?? 0);
+      const taxAmount = Number(
+        execSummary?.total_tax ??
+        (execSummary?.cgst != null ? Number(execSummary.cgst) + Number(execSummary.sgst || 0) : null) ??
+        salesSummary?.tax_amount ??
+        0
+      );
       const billCount = Number(execSummary?.successful_bills_count ?? salesSummary?.bill_count ?? 0);
       const customerCount = Number(salesSummary?.customer_count ?? 0);
 
@@ -319,19 +324,51 @@ export default function ProfitabilityPage() {
       <Card>
         <div className="divide-y divide-stone-100 text-xs sm:text-sm">
           {/* Revenue */}
-          <div className="py-3 flex items-center justify-between font-bold text-stone-900 bg-stone-50/50 px-2 rounded-lg">
-            <div className="flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-emerald-600" />
-              <span>Net Sales</span>
-              {pnl.isReported ? (
-                <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">PETPOOJA ACTUAL</span>
-              ) : (
-                <span className="text-[10px] text-rose-800 font-normal bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">NOT UPLOADED</span>
+          <div className="py-3.5 space-y-2 px-2">
+            <div className="flex items-center justify-between font-bold text-stone-900">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-emerald-600" />
+                <span className="tracking-wider uppercase text-xs sm:text-sm font-bold text-stone-900">Revenue</span>
+                {pnl.isReported ? (
+                  <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    PETPOOJA ACTUAL
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-rose-800 font-normal bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                    NOT UPLOADED
+                  </span>
+                )}
+              </div>
+              {!pnl.isReported && (
+                <span className="text-stone-400 text-sm font-semibold">Not Reported</span>
               )}
             </div>
-            <span className={pnl.isReported ? "text-emerald-700 text-base font-extrabold" : "text-stone-400 text-sm font-semibold"}>
-              {pnl.isReported ? formatINR(pnl.revenue) : 'Not Reported'}
-            </span>
+
+            {pnl.isReported && salesReport && (
+              <div className="space-y-1.5 pt-0.5">
+                <div className="pl-4 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between text-stone-700">
+                    <span>Gross Bill Value</span>
+                    <span className="font-mono font-medium text-stone-900">{formatINR(salesReport.gross_sales)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-stone-500">
+                    <span>Less: Discounts</span>
+                    <span className="font-mono text-stone-600">− {formatINR(salesReport.discounts || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-stone-500">
+                    <span>Less: GST / Taxes</span>
+                    <span className="font-mono text-stone-600">− {formatINR(salesReport.tax_amount || 0)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-stone-200 flex items-center justify-between font-bold text-stone-900 bg-stone-50/70 px-2.5 py-2 rounded-lg">
+                  <span className="font-bold text-stone-900">Net Sales</span>
+                  <span className="text-emerald-700 text-base font-extrabold font-mono">
+                    {formatINR(pnl.revenue)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Direct Material Consumption */}
