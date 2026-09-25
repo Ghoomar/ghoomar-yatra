@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
 import { X, Plus, Edit2, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
 
 interface Activity {
   id: string;
@@ -24,6 +25,7 @@ interface ActivityMasterModalProps {
 }
 
 export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMasterModalProps) {
+  const { t } = useI18n();
   const supabase = createClient();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -298,9 +300,9 @@ export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMast
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-stone-900 text-sm">{act.name}</span>
                         {act.is_active ? (
-                          <Badge variant="success">Active</Badge>
+                          <Badge variant="success">{t('statuses.active')}</Badge>
                         ) : (
-                          <Badge variant="outline">Archived / Inactive</Badge>
+                          <Badge variant="outline">{t('statuses.inactive')}</Badge>
                         )}
                         <span className="font-mono font-bold text-amber-700 ml-auto sm:ml-0">
                           {formatINR(act.default_price)}

@@ -1544,10 +1544,14 @@ export default function ReportsPage() {
                             const maxGross = Math.max(...act.hourlyData.map((x) => x.amount), 1);
                             return act.hourlyData.map((pt) => {
                               const pct = Math.max((pt.amount / maxGross) * 100, 3);
+                              const displayH = pt.hour % 12 === 0 ? 12 : pt.hour % 12;
+                              const timeOfDay = pt.hour < 12 ? 'सुबह' : pt.hour < 16 ? 'दोपहर' : pt.hour < 20 ? 'शाम' : 'रात';
                               const hourText =
                                 pt.hour === 1
-                                  ? (locale === 'hi' ? '01:00 AM (Petpooja पोस्टिंग समय)' : '01:00 AM (Petpooja posting time)')
-                                  : pt.label;
+                                  ? (locale === 'hi' ? 'रात 01:00 बजे (Petpooja पोस्टिंग समय)' : '01:00 AM (Petpooja posting time)')
+                                  : (locale === 'hi'
+                                      ? `${String(displayH).padStart(2, '0')}:00 ${timeOfDay}`
+                                      : pt.label);
 
                               return (
                                 <div key={pt.hour} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 py-1.5 border-b border-[#F0ECE3] last:border-b-0">

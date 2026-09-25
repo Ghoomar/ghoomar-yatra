@@ -19,6 +19,7 @@ import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { EditCostRuleModal } from '@/components/admin/EditCostRuleModal';
 import { MenuMasterView } from '@/components/admin/menu/MenuMasterView';
 import { logAuditAction } from '@/lib/audit-logger';
+import { useI18n } from '@/lib/i18n/context';
 import {
   Settings,
   Shield,
@@ -42,6 +43,7 @@ import {
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
+  const { t } = useI18n();
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'menu_master' | 'masters' | 'cost_rules' | 'targets' | 'users' | 'audit'>('menu_master');
 
@@ -797,9 +799,9 @@ export default function AdminSettingsPage() {
                             </td>
                             <td className="py-3 px-3 text-center">
                               {isActive ? (
-                                <Badge variant="success">Active</Badge>
+                                <Badge variant="success">{t('statuses.active')}</Badge>
                               ) : (
-                                <Badge variant="outline">Inactive</Badge>
+                                <Badge variant="outline">{t('statuses.inactive')}</Badge>
                               )}
                             </td>
                             <td className="py-3 px-3 text-right">
@@ -815,7 +817,7 @@ export default function AdminSettingsPage() {
                                   title="Edit user details"
                                 >
                                   <Edit2 className="h-3.5 w-3.5 mr-1" />
-                                  <span>Edit</span>
+                                  <span>{t('common.actions.edit')}</span>
                                 </Button>
                                 <Button
                                   variant={isActive ? 'secondary' : 'amber'}
@@ -840,7 +842,7 @@ export default function AdminSettingsPage() {
                                   }}
                                   className="h-7 px-2 text-[11px]"
                                 >
-                                  {isActive ? 'Deactivate' : 'Activate'}
+                                  {isActive ? t('statuses.inactive') : t('statuses.active')}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -853,7 +855,7 @@ export default function AdminSettingsPage() {
                                   title="Delete user account"
                                 >
                                   <Trash2 className="h-3.5 w-3.5 mr-1" />
-                                  <span>Delete</span>
+                                  <span>{t('common.actions.delete')}</span>
                                 </Button>
                               </div>
                             </td>

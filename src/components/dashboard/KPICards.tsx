@@ -43,7 +43,7 @@ export function KPICards({
   projectedMonthEndRevenue,
   calculatedBreakEven,
 }: KPICardsProps) {
-  const { t } = useI18n();
+  const { t, formatTime } = useI18n();
 
   const getBadgeClass = (status: BreakEvenStatus | string) => {
     const norm = (status || '').toUpperCase();
@@ -96,7 +96,7 @@ export function KPICards({
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
-              <Clock className="h-3 w-3" /> {formatTimeAgo(revenueUpdatedAt)}
+              <Clock className="h-3 w-3" /> {formatTime(revenueUpdatedAt)}
             </span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
@@ -122,7 +122,7 @@ export function KPICards({
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
-              <Clock className="h-3 w-3" /> {formatTimeAgo(visitorsUpdatedAt)}
+              <Clock className="h-3 w-3" /> {formatTime(visitorsUpdatedAt)}
             </span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
@@ -143,7 +143,7 @@ export function KPICards({
               <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
             </CardDescription>
             <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
-              <Clock className="h-3 w-3" /> {formatTimeAgo(carsUpdatedAt)}
+              <Clock className="h-3 w-3" /> {formatTime(carsUpdatedAt)}
             </span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
