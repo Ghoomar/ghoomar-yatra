@@ -1,13 +1,13 @@
 {
   "employees": {
-    "title": "Staff Directory & Team Roster",
-    "subtitle": "Master records of resort workforce, roles, compensation, and active statuses.",
-    "addEmployee": "Add New Employee",
-    "orgHierarchy": "Manage Org Structure",
+    "title": "Staff Directory",
+    "subtitle": "Active staff, roles, and compensation.",
+    "addEmployee": "Add Employee",
+    "orgHierarchy": "Org Structure",
     "searchPlaceholder": "Search staff...",
     "allDepartments": "All Departments",
     "allStatuses": "All Statuses",
-    "noEmployeesFound": "No employees found matching criteria. Click \"Add Employee\" to create staff records.",
+    "noEmployeesFound": "No employees found. Click \"Add Employee\" to create staff records.",
     "loading": "Loading staff directory...",
     "staffCount": "Staff ({count})",
     "contractor": "Contractor: {name}",
@@ -21,12 +21,12 @@
     "kpi": {
       "employees": "Employees",
       "inactive": "(+{count} inactive)",
-      "departmentsRoles": "Across {departments} departments & {roles} operational roles",
+      "departmentsRoles": "{departments} departments • {roles} roles",
       "payroll": "Monthly Payroll",
-      "dailyCost": "Daily fixed cost allocation: {cost}/day",
+      "dailyCost": "Daily allocation: {cost}/day",
       "hierarchy": "Hierarchy",
       "hierarchyFlow": "Department → Team → Role",
-      "hierarchyDesc": "Configurable organizational structure with store issue permissions"
+      "hierarchyDesc": "Department, team, and role structure"
     },
     "table": {
       "code": "Code",
@@ -91,9 +91,9 @@
     "saveFailed": "Failed to save employee: {error}"
   },
   "drawer": {
-    "title": "Staff Profile & Operational Ledger",
-    "financialTab": "Financials & Salary",
-    "uniformTab": "Uniform & Inventory",
+    "title": "Staff Profile & Ledger",
+    "financialTab": "Financials",
+    "uniformTab": "Uniforms",
     "close": "Close Ledger",
     "employeeDetails": "Employee Details",
     "salarySummary": "Salary Summary by Month",
@@ -123,15 +123,15 @@
     }
   },
   "financials": {
-    "title": "Staff Financials & Salary Ledger",
-    "subtitle": "Monthly earned salary calculation, advances, settlements, and payment disbursement.",
+    "title": "Staff Financials & Payroll",
+    "subtitle": "Monthly salary calculation, staff advances, and payouts.",
     "salaryMonth": "Salary Month:",
     "allStaff": "All Staff ({count})",
     "pendingOnly": "Pending Balance Only",
     "searchStaff": "Search staff...",
-    "syncAttendance": "Recalculate / Sync Attendance",
+    "syncAttendance": "Sync Attendance",
     "syncing": "Syncing...",
-    "closePeriod": "Close / Lock Month",
+    "closePeriod": "Lock Month",
     "closing": "Closing Month...",
     "periodClosed": "Month Locked",
     "kpi": {
@@ -139,13 +139,13 @@
       "totalDisbursed": "Total Disbursed",
       "pendingBalance": "Pending Balance",
       "staffCount": "Total Active Staff",
-      "dailyCost": "Daily fixed cost allocation: {cost}/day"
+      "dailyCost": "Daily allocation: {cost}/day"
     },
-    "registerTitle": "Staff Salary Payable Register",
+    "registerTitle": "Staff Salary Register",
     "accruedFor": "Accrued for {count} staff members",
     "disbursedIn": "Disbursed in {month}",
     "payableBadge": "PAYABLE",
-    "outstandingDesc": "Outstanding liability to be paid",
+    "outstandingDesc": "Pending balance to disburse",
     "netOfDeductions": "Net of {amount} deductions",
     "employeeCount": "{count} employees",
     "draft": "Draft",
@@ -187,8 +187,8 @@
     }
   },
   "paymentModal": {
-    "title": "Record Staff Payment / Advance",
-    "subtitle": "Disburse salary or advance toward pending liability",
+    "title": "Record Payment / Advance",
+    "subtitle": "Disburse salary or staff advance",
     "employee": "Staff Member",
     "month": "Salary Month",
     "balanceDue": "Current Pending Balance",

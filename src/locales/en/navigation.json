@@ -1,12 +1,12 @@
 {
   "sections": {
-    "commandCenter": "Command Center",
+    "commandCenter": "Dashboard",
     "operations": "Operations",
     "finance": "Finance",
-    "inventory": "Inventory & Store",
-    "people": "People & Attendance",
+    "inventory": "Store & Inventory",
+    "people": "Staff & Attendance",
     "uniforms": "Uniforms",
-    "reports": "Intelligence & Reports",
+    "reports": "Reports",
     "system": "System"
   },
   "items": {
@@ -15,13 +15,13 @@
     "gateCounter": "Gate Counter",
     "dailyClosing": "Daily Closing",
     "dailySales": "Daily Sales",
-    "purchases": "Purchases & Bills",
+    "purchases": "Purchases",
     "vendors": "Vendors",
     "expenses": "Expenses",
     "utilities": "Utilities & Fuel",
-    "profitability": "Daily P&L",
+    "profitability": "Daily Profit & Loss",
     "inventory": "Stock & Items",
-    "storeIssues": "Store Issues & Transfers",
+    "storeIssues": "Store Issues",
     "physicalAssets": "Physical Assets",
     "physicalCount": "Physical Count",
     "staffDirectory": "Staff Directory",

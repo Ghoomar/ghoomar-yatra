@@ -1,7 +1,7 @@
 {
-  "title": "Executive Command Center",
-  "centralTitle": "Central Command Center",
-  "subtitle": "Real-time executive cockpit tracking live operational health, sales pacing against targets, and action flags.",
+  "title": "Operations Dashboard",
+  "centralTitle": "Dashboard",
+  "subtitle": "Live operations, sales pacing, footfall, and business health.",
   "dateLabel": "Date:",
   "refreshTitle": "Refresh dashboard data",
   "kpis": {
@@ -36,7 +36,7 @@
     "bepProgressSub": "{percent}% benchmark achieved"
   },
   "health": {
-    "title": "Operational Health Radar",
+    "title": "Operational Health",
     "systemStatus": "System Status",
     "salesPos": "Sales & POS",
     "footfallFlow": "Footfall Flow",
@@ -59,7 +59,7 @@
     "statusNotReported": "Not Reported"
   },
   "targetPacing": {
-    "title": "Monthly Target & Pacing Analysis",
+    "title": "Sales Targets & Pacing",
     "dailyTargetTitle": "Daily Target",
     "goalLabel": "Goal: {amount}",
     "achieved": "Achieved",
@@ -68,7 +68,7 @@
     "perPerson": "{amount}/person",
     "visitorsNeeded": "Visitors Needed",
     "targetMet": "Target Met",
-    "guidance": "Operating Guidance: At the current pace of {spend} per person, Ghoomar Yatra requires {count} more visitors before midnight to hit today's {target} revenue target.",
+    "guidance": "At the current pace of {spend} per person, {count} more visitors are needed to hit today's {target} target.",
     "subtitle": "Performance pacing towards monthly break-even and targets",
     "target": "Monthly Benchmark",
     "actual": "Actual MTD Sales",
@@ -79,7 +79,7 @@
     "statusBehind": "Behind Target"
   },
   "monthlyPosition": {
-    "title": "Monthly Position Snapshot",
+    "title": "Monthly Performance",
     "performanceTitle": "Monthly Performance",
     "subtitle": "Current month-to-date aggregate performance",
     "mtdSales": "MTD Net Sales",

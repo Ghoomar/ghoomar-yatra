@@ -154,6 +154,7 @@ export interface SalesAnalyticsResponse {
     byOrderType: { name: string; count: number; netSales: number; sharePercent: number }[];
     unmatchedItems?: { itemName: string; quantity: number; amount: number }[];
   };
+  parentCategoryColors?: Record<string, string>;
   reconciliation: DailySalesReconciliationRow | null;
   allBills?: SalesOrder[];
   activeFilterOptions: {
@@ -165,3 +166,6 @@ export interface SalesAnalyticsResponse {
     orderTypes: string[];
   };
 }
+
+export * from '@/lib/sales/business-units';
+

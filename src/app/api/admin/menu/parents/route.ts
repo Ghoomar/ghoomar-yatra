@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { name, display_order, is_active } = body;
+    const { name, display_order, is_active, color } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Parent Category name is required.' }, { status: 400 });
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         display_order: Number(display_order) || 0,
         is_active: is_active !== false,
+        color: color ? String(color).trim() : null,
       })
       .select()
       .single();
@@ -70,7 +71,7 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { id, name, display_order, is_active } = body;
+    const { id, name, display_order, is_active, color } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required.' }, { status: 400 });
@@ -90,6 +91,7 @@ export async function PUT(request: NextRequest) {
         name: newName,
         display_order: display_order !== undefined ? Number(display_order) : oldParent.display_order,
         is_active: is_active !== undefined ? Boolean(is_active) : oldParent.is_active,
+        color: color !== undefined ? (color ? String(color).trim() : null) : oldParent.color,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

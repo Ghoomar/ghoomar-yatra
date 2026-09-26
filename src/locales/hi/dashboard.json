@@ -1,6 +1,6 @@
 {
-  "title": "मुख्य कमांड सेंटर",
-  "centralTitle": "कमांड सेंटर",
+  "title": "डैशबोर्ड",
+  "centralTitle": "डैशबोर्ड",
   "subtitle": "आज की सेल, आने वाले लोग, स्टाफ और स्टोर का लाइव हाल।",
   "dateLabel": "तारीख:",
   "refreshTitle": "डैशबोर्ड डेटा रीफ्रेश करें",
@@ -59,7 +59,7 @@
     "statusNotReported": "दर्ज नहीं है"
   },
   "targetPacing": {
-    "title": "महीने का टारगेट और पेसिंग",
+    "title": "टारगेट और पेसिंग",
     "dailyTargetTitle": "आज का टारगेट",
     "goalLabel": "टारगेट: {amount}",
     "achieved": "हो गया",

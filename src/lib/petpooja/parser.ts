@@ -110,6 +110,25 @@ export function parseHourString(hourStr: string): { hourOfDay: number; hourLabel
 }
 
 /**
+ * Normalizes Petpooja POS order types to canonical application types
+ * (Snacks Stall, Takeaway, Dine In)
+ */
+export function normalizeOrderType(rawType: any): string {
+  const clean = String(rawType || '').trim();
+  const lower = clean.toLowerCase();
+  if (lower === 'delivery(parcel)' || lower === 'snacks stall' || lower === 'lancho') {
+    return 'Snacks Stall';
+  }
+  if (lower === 'pick up' || lower === 'takeaway') {
+    return 'Takeaway';
+  }
+  if (lower === 'dine in' || lower === 'dine-in') {
+    return 'Dine In';
+  }
+  return clean || 'Dine In';
+}
+
+/**
  * Parses raw Petpooja Excel (.xlsx, .xls) or CSV buffer into structured rows
  */
 export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResult {
@@ -454,7 +473,7 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
       biller: String(row[col.biller] || '').trim() || null,
       kot_numbers: String(row[col.kotNo] || '').trim() || null,
       payment_type: String(row[col.paymentType] || 'Cash').trim(),
-      order_type: String(row[col.orderType] || 'Dine In').trim(),
+      order_type: String(row[col.orderType] || '').trim() || 'Dine In',
       status: String(row[col.status] || 'Success').trim(),
       area: String(row[col.area] || '').trim() || null,
       captain_name: String(row[col.assignTo] || '').trim() || null,

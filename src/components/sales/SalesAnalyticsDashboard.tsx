@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/Badge';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { SalesAnalyticsResponse } from '@/lib/types/sales';
 import { useI18n } from '@/lib/i18n/context';
+import { getCategoryColor, getCategoryBadgeClasses } from '@/lib/constants/category-colors';
+import { getOrderBusinessUnit } from '@/lib/sales/business-units';
 import { HourlyCategoryStackedBarChart } from './HourlyCategoryStackedBarChart';
 import { SalesReconciliationBanner } from './SalesReconciliationBanner';
 import {
@@ -287,6 +289,7 @@ export function SalesAnalyticsDashboard({
             <HourlyCategoryStackedBarChart
               hourlyData={data.hourly}
               parentCategoriesList={data.parentCategoriesList}
+              categoryColors={data.parentCategoryColors}
             />
           )}
         </CardContent>
@@ -478,8 +481,12 @@ export function SalesAnalyticsDashboard({
                 <tbody className="divide-y divide-stone-100">
                   {data?.breakdowns.byParentCategory.map((cat) => (
                     <tr key={cat.name} className="hover:bg-stone-50/50">
-                      <td className="p-3 font-semibold text-stone-900">
-                        {cat.name}
+                      <td className="p-3 font-semibold text-stone-900 flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: getCategoryColor(cat.name, data?.parentCategoryColors) }}
+                        />
+                        <span>{cat.name}</span>
                       </td>
                       <td className="p-3 text-center font-medium text-stone-700">
                         {cat.quantity}
@@ -491,8 +498,11 @@ export function SalesAnalyticsDashboard({
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 bg-stone-100 h-1.5 rounded-full overflow-hidden">
                             <div
-                              className="bg-amber-500 h-full rounded-full"
-                              style={{ width: `${Math.min(100, cat.sharePercent)}%` }}
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.min(100, cat.sharePercent)}%`,
+                                backgroundColor: getCategoryColor(cat.name, data?.parentCategoryColors),
+                              }}
                             />
                           </div>
                           <span>{cat.sharePercent}%</span>
@@ -527,9 +537,13 @@ export function SalesAnalyticsDashboard({
                         {item.name}
                       </td>
                       <td className="p-3 text-stone-500">
-                        <Badge variant="outline" className="text-[10px]">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${getCategoryBadgeClasses(
+                            item.parentCategory
+                          )}`}
+                        >
                           {item.parentCategory}
-                        </Badge>
+                        </span>
                       </td>
                       <td className="p-3 text-center font-bold text-stone-800">
                         {item.quantity}
@@ -784,18 +798,27 @@ export function SalesAnalyticsDashboard({
                                 {timeStr}
                               </td>
                               <td className="p-2.5">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] font-semibold ${
-                                    bill.order_type === 'Dine In'
+                                {(() => {
+                                  const bu = getOrderBusinessUnit(bill);
+                                  const badgeClass =
+                                    bu === 'Dine In'
                                       ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                                      : bill.order_type === 'Snacks Stall'
+                                      : bu === 'Snacks Stall'
                                       ? 'border-amber-300 bg-amber-50 text-amber-800'
-                                      : 'border-stone-300 bg-stone-50 text-stone-700'
-                                  }`}
-                                >
-                                  {bill.order_type || 'General'}
-                                </Badge>
+                                      : bu === 'Lancho'
+                                      ? 'border-purple-300 bg-purple-50 text-purple-800'
+                                      : 'border-sky-300 bg-sky-50 text-sky-800';
+                                  return (
+                                    <Badge variant="outline" className={`text-[10px] font-semibold ${badgeClass}`}>
+                                      {bu}
+                                    </Badge>
+                                  );
+                                })()}
+                                {bill.order_type && bill.order_type !== getOrderBusinessUnit(bill) && (
+                                  <span className="block text-[9px] text-stone-400 mt-0.5">
+                                    POS: {bill.order_type}
+                                  </span>
+                                )}
                                 {bill.area && (
                                   <span className="block text-[10px] text-stone-400 mt-0.5">
                                     {bill.area}

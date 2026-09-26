@@ -1,11 +1,11 @@
 {
-  "title": "Executive Management Reports",
-  "subtitle": "Unified operational and revenue performance dashboard across all estate channels.",
+  "title": "Daily Reports",
+  "subtitle": "Daily revenue, sales channels, and operational metrics.",
   "dateLabel": "Business Date:",
   "tabs": {
-    "sales": "Revenue & Operations Intelligence",
-    "inventory": "Store Consumption Ledger",
-    "vendors": "Vendor Outstanding Ledger"
+    "sales": "Sales & Operations",
+    "inventory": "Store Consumption",
+    "vendors": "Vendor Payables"
   },
   "kpis": {
     "netRevenue": "Net Revenue",
@@ -48,8 +48,8 @@
     "varianceText": "Consolidated Gross ({gross}) differs from granular channel bills total ({streams}) by {diff}. Review Daily Sales batches."
   },
   "operationsSummary": {
-    "title": "Daily Operations Summary",
-    "subtitle": "Unified operational and financial performance overview",
+    "title": "Operations Summary",
+    "subtitle": "Daily performance overview and operational metrics",
     "loading": "Loading operational summary...",
     "hideSummary": "Hide summary",
     "viewSummary": "View full summary",

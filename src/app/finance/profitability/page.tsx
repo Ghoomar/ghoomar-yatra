@@ -9,6 +9,7 @@ import { formatINR, getTodayBusinessDate, getMonthDateRange } from '@/lib/utils'
 import { calculateDailyProfitability, calculateBreakEvenPacing, fetchMTDFinancialSummary } from '@/lib/finance-engine';
 import { MTDFinancialSummary } from '@/lib/types/database';
 import { useI18n } from '@/lib/i18n/context';
+import { isLanchoOrder } from '@/lib/sales/business-units';
 import { TrendingUp, RefreshCw, Zap, Receipt, UtensilsCrossed, IndianRupee, Building2 } from 'lucide-react';
 
 const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
@@ -19,6 +20,7 @@ export default function ProfitabilityPage() {
   const { t } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [loading, setLoading] = useState(true);
+  const [paymentCommissions, setPaymentCommissions] = useState(0);
 
   // Financial Figures
   const [salesReport, setSalesReport] = useState<any>(null);
@@ -207,6 +209,51 @@ export default function ProfitabilityPage() {
       if (bepTarget?.target_value) {
         setPlanningBreakEven(Number(bepTarget.target_value) || 3000000);
       }
+
+      // 6. Fetch Payment Methods & Sales Orders for Dynamic Commission Calculation (Lancho & Card MDR)
+      const [
+        { data: pMethods },
+        { data: dayOrders },
+      ] = await Promise.all([
+        supabase.from('payment_methods').select('name, commission_percent').eq('is_active', true),
+        supabase.from('sales_orders').select('order_type, area, payment_type, net_sales, status').eq('business_date', businessDate),
+      ]);
+
+      let totalComm = 0;
+      const lanchoMethod = (pMethods || []).find((p) => p.name.toLowerCase() === 'lancho');
+      const lanchoRate = lanchoMethod && lanchoMethod.commission_percent != null && !isNaN(Number(lanchoMethod.commission_percent))
+        ? Number(lanchoMethod.commission_percent)
+        : 18.0;
+
+      const cardMethod = (pMethods || []).find((p) => p.name.toLowerCase() === 'card');
+      const cardRate = cardMethod && cardMethod.commission_percent != null && !isNaN(Number(cardMethod.commission_percent))
+        ? Number(cardMethod.commission_percent)
+        : 1.5;
+
+      if (dayOrders && dayOrders.length > 0) {
+        dayOrders.forEach((o) => {
+          if (o.status !== 'Success') return;
+          const net = Number(o.net_sales) || 0;
+          if (isLanchoOrder(o)) {
+            totalComm += net * (lanchoRate / 100);
+          } else if ((o.payment_type || '').toLowerCase().includes('card')) {
+            totalComm += net * (cardRate / 100);
+          }
+        });
+      } else if (execSummary?.payment_mode_breakdown) {
+        const pmb = execSummary.payment_mode_breakdown as Record<string, number>;
+        Object.entries(pmb).forEach(([mode, amount]) => {
+          const mLower = mode.toLowerCase();
+          const amt = Number(amount) || 0;
+          if (mLower.includes('lancho')) {
+            totalComm += amt * (lanchoRate / 100);
+          } else if (mLower.includes('card')) {
+            totalComm += amt * (cardRate / 100);
+          }
+        });
+      }
+
+      setPaymentCommissions(Math.round(totalComm * 100) / 100);
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -226,7 +273,7 @@ export default function ProfitabilityPage() {
     grossSales: Number(salesReport?.gross_sales) || 0,
     discounts: Number(salesReport?.discounts) || 0,
     netSales: Number(salesReport?.net_sales) || 0,
-    paymentCommissions: 0,
+    paymentCommissions: paymentCommissions,
     customerFoodConsumption: materialConsumption.customerFood,
     staffFoodConsumption: materialConsumption.staffFood,
     wastageCost: materialConsumption.wastage,
@@ -295,10 +342,10 @@ export default function ProfitabilityPage() {
         <Card className="border-2 border-stone-200/80">
           <CardDescription>{t('finance.profitability.ebitda')}</CardDescription>
           <div className={`text-3xl font-black mt-1 ${pnl.estimatedNetProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-            {pnl.isReported ? formatINR(pnl.estimatedNetProfit) : 'NOT REPORTED'}
+            {pnl.isReported ? formatINR(pnl.estimatedNetProfit) : '—'}
           </div>
           <div className="text-[11px] text-stone-500 mt-1">
-            {pnl.isReported ? `Margin: ${pnl.netProfitMarginPercent}%` : 'Sales not uploaded'}
+            {pnl.isReported ? `Margin: ${pnl.netProfitMarginPercent}%` : t('statuses.notReported')}
           </div>
         </Card>
 
@@ -338,17 +385,17 @@ export default function ProfitabilityPage() {
                   {t('finance.profitability.revenueBridge')}
                 </span>
                 {pnl.isReported ? (
-                  <span className="text-[10px] text-emerald-800 font-normal bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                    PETPOOJA ACTUAL
-                  </span>
+                  <Badge variant="success" className="text-[10px] font-medium">
+                    Petpooja
+                  </Badge>
                 ) : (
-                  <span className="text-[10px] text-rose-800 font-normal bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                    NOT UPLOADED
-                  </span>
+                  <Badge variant="danger" className="text-[10px] font-medium">
+                    {t('statuses.pending')}
+                  </Badge>
                 )}
               </div>
               {!pnl.isReported && (
-                <span className="text-stone-400 text-sm font-semibold">Not Reported</span>
+                <span className="text-stone-400 text-sm font-semibold">{t('statuses.notReported')}</span>
               )}
             </div>
 
@@ -467,6 +514,12 @@ export default function ProfitabilityPage() {
                 <span>• {t('finance.profitability.investorShare', { percent: (investorRate * 100).toFixed(0) })}</span>
                 <span>{formatINR(pnl.revenue * investorRate)}</span>
               </div>
+              {paymentCommissions > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>• Gateway &amp; Channel Commissions (MDR / Lancho)</span>
+                  <span className="font-mono text-stone-700">{formatINR(paymentCommissions)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span>• {t('finance.profitability.otherVariableExps')}</span>
                 <span>{formatINR(variableExpenses)}</span>
@@ -480,7 +533,6 @@ export default function ProfitabilityPage() {
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-amber-600" />
                 <span>{t('finance.profitability.payrollFixed')}</span>
-                <span className="text-[10px] text-amber-800 font-normal bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">ALLOCATED ESTIMATE</span>
               </div>
               <span className="text-rose-600">− {formatINR(pnl.dailyAllocatedFixedCosts)}</span>
             </div>
@@ -522,14 +574,14 @@ export default function ProfitabilityPage() {
               </div>
               <p className="text-stone-500 text-[11px]">
                 {breakEven.requiredDailyRevenue > 0
-                  ? <>Requires <strong>{formatINR(breakEven.requiredDailyRevenue)}/day</strong> across the remaining {breakEven.daysRemaining} days.</>
-                  : <>Break-Even already achieved for the month.</>
+                  ? <>Requires <strong>{formatINR(breakEven.requiredDailyRevenue)}/day</strong> across {breakEven.daysRemaining} days remaining.</>
+                  : <>Break-Even reached for the month.</>
                 }
               </p>
             </div>
 
             <div className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-2">
-              <div className="text-xs font-bold text-stone-700 uppercase">% Break-Even Progress</div>
+              <div className="text-xs font-bold text-stone-700 uppercase">{t('dashboard.monthlyPosition.bepProgressPercent')}</div>
               <div className={`text-2xl font-black ${breakEven.breakEvenProgressPercent >= 100 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {breakEven.breakEvenProgressPercent}%
               </div>

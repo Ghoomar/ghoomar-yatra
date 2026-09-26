@@ -10,10 +10,24 @@ interface ParentCategoryModalProps {
   parentCategory?: {
     id: string;
     name: string;
+    color?: string | null;
     display_order: number;
     is_active: boolean;
   } | null;
 }
+
+const PRESET_COLORS = [
+  { name: 'Amber', hex: '#d97706' },
+  { name: 'Orange', hex: '#ea580c' },
+  { name: 'Yellow', hex: '#ca8a04' },
+  { name: 'Red', hex: '#dc2626' },
+  { name: 'Rose', hex: '#e11d48' },
+  { name: 'Sky Blue', hex: '#0284c7' },
+  { name: 'Emerald', hex: '#16a34a' },
+  { name: 'Purple', hex: '#7c3aed' },
+  { name: 'Brown', hex: '#92400e' },
+  { name: 'Teal', hex: '#0d9488' },
+];
 
 export function ParentCategoryModal({
   isOpen,
@@ -22,6 +36,7 @@ export function ParentCategoryModal({
   parentCategory,
 }: ParentCategoryModalProps) {
   const [name, setName] = useState('');
+  const [color, setColor] = useState('#d97706');
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -30,10 +45,12 @@ export function ParentCategoryModal({
   useEffect(() => {
     if (parentCategory) {
       setName(parentCategory.name);
+      setColor(parentCategory.color || '#d97706');
       setDisplayOrder(parentCategory.display_order || 0);
       setIsActive(parentCategory.is_active !== false);
     } else {
       setName('');
+      setColor('#d97706');
       setDisplayOrder(0);
       setIsActive(true);
     }
@@ -57,6 +74,7 @@ export function ParentCategoryModal({
       const method = parentCategory ? 'PUT' : 'POST';
       const payload: any = {
         name: name.trim(),
+        color: color.trim(),
         display_order: Number(displayOrder) || 0,
         is_active: isActive,
       };
@@ -123,6 +141,47 @@ export function ParentCategoryModal({
               className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              Reporting & Chart Colour
+            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <div
+                className="w-7 h-7 rounded-lg border border-stone-300 shrink-0 shadow-inner"
+                style={{ backgroundColor: color }}
+              />
+              <input
+                type="text"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                placeholder="#d97706"
+                className="w-24 rounded-xl border border-stone-200 px-2.5 py-1 text-xs font-mono uppercase bg-stone-50/30"
+              />
+              <input
+                type="color"
+                value={color.startsWith('#') && color.length === 7 ? color : '#d97706'}
+                onChange={(e) => setColor(e.target.value)}
+                className="w-7 h-7 rounded-lg cursor-pointer border border-stone-200 bg-transparent p-0"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  onClick={() => setColor(c.hex)}
+                  className={`w-5 h-5 rounded-md border transition-all ${
+                    color.toLowerCase() === c.hex.toLowerCase()
+                      ? 'ring-2 ring-stone-900 ring-offset-1 border-transparent scale-110'
+                      : 'border-stone-200 hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                  title={c.name}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

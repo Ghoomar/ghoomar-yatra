@@ -1,6 +1,6 @@
 {
-  "title": "Daily Staff Attendance Register",
-  "subtitle": "Digital muster roll recorded from physical attendance register for midnight operational reporting.",
+  "title": "Daily Staff Attendance",
+  "subtitle": "Record daily attendance, overtime, and shift status.",
   "statusLabel": "Attendance Status:",
   "recorded": "RECORDED",
   "notSubmitted": "NOT SUBMITTED FOR TODAY",
@@ -14,8 +14,8 @@
     "leave": "Leave",
     "overtimeHours": "Overtime Hours"
   },
-  "rosterTitle": "Attendance Roster ({count} Staff)",
-  "rosterSubtitle": "Rapid status selection with overtime and penalty logging",
+  "rosterTitle": "Staff Attendance ({count})",
+  "rosterSubtitle": "Log daily attendance, overtime, and deductions",
   "noStaffFound": "No active employees found. Please register employees first.",
   "table": {
     "staffMember": "Staff Member",

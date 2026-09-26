@@ -4,42 +4,18 @@ import React, { useState, useMemo } from 'react';
 import { HourlyCategoryDataPoint } from '@/lib/types/sales';
 import { formatINR } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
+import { getCategoryColor } from '@/lib/constants/category-colors';
 
 interface HourlyCategoryStackedBarChartProps {
   hourlyData: HourlyCategoryDataPoint[];
   parentCategoriesList: string[];
+  categoryColors?: Record<string, string>;
 }
-
-// Consistent color palette for parent categories
-const CATEGORY_COLORS: Record<string, string> = {
-  'Beverages': '#0284c7', // sky-600
-  'Indian Main Course': '#d97706', // amber-600
-  'Indian': '#d97706',
-  'Rajasthani Special': '#ea580c', // orange-600
-  'Rajasthani': '#ea580c',
-  'Thali': '#7c3aed', // purple-600
-  'Chinese': '#dc2626', // red-600
-  'Desserts': '#059669', // emerald-600
-  'All Day Breakfast': '#ca8a04', // yellow-600
-  'Soups & Starters': '#0d9488', // teal-600
-  'Starters': '#0d9488',
-  'Tandoori Breads': '#92400e', // amber-800
-  'Breads': '#92400e',
-  'Raita & Salads': '#4f46e5', // indigo-600
-  'Italian': '#e11d48', // rose-600
-  'Snacks': '#f59e0b', // amber-500
-  'Other': '#78716c', // stone-500
-  'Uncategorized': '#a8a29e', // stone-400
-};
-
-const FALLBACK_PALETTE = [
-  '#2563eb', '#16a34a', '#d97706', '#9333ea', '#e11d48',
-  '#0d9488', '#f97316', '#475569', '#0284c7', '#84cc16'
-];
 
 export function HourlyCategoryStackedBarChart({
   hourlyData,
   parentCategoriesList,
+  categoryColors,
 }: HourlyCategoryStackedBarChartProps) {
   const { t } = useI18n();
   const [hoveredHour, setHoveredHour] = useState<HourlyCategoryDataPoint | null>(null);
@@ -63,11 +39,6 @@ export function HourlyCategoryStackedBarChart({
     const maxVal = Math.max(...activeHours.map((h) => h.total_sales), 1000);
     return Math.ceil(maxVal / 1000) * 1000;
   }, [activeHours]);
-
-  const getCategoryColor = (cat: string, idx: number) => {
-    if (CATEGORY_COLORS[cat]) return CATEGORY_COLORS[cat];
-    return FALLBACK_PALETTE[idx % FALLBACK_PALETTE.length];
-  };
 
   // SVG dimensions
   const height = 260;
@@ -158,7 +129,7 @@ export function HourlyCategoryStackedBarChart({
                       y={segY}
                       width={colWidth}
                       height={Math.max(1, segHeight)}
-                      fill={getCategoryColor(catName, segIdx)}
+                      fill={getCategoryColor(catName, categoryColors)}
                       rx={segIdx === categoryEntries.length - 1 ? 3 : 0}
                       className="transition-all duration-200"
                     />
@@ -214,7 +185,7 @@ export function HourlyCategoryStackedBarChart({
                     <div className="flex items-center gap-1.5 truncate">
                       <div
                         className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: getCategoryColor(cat, idx) }}
+                        style={{ backgroundColor: getCategoryColor(cat, categoryColors) }}
                       />
                       <span className="truncate">{cat}</span>
                     </div>
@@ -231,11 +202,11 @@ export function HourlyCategoryStackedBarChart({
 
       {/* Category Legend */}
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-3 border-t border-stone-100 text-xs">
-        {parentCategoriesList.slice(0, 10).map((cat, idx) => (
+        {parentCategoriesList.slice(0, 10).map((cat) => (
           <div key={cat} className="flex items-center gap-1.5">
             <div
               className="w-2.5 h-2.5 rounded-sm"
-              style={{ backgroundColor: getCategoryColor(cat, idx) }}
+              style={{ backgroundColor: getCategoryColor(cat, categoryColors) }}
             />
             <span className="text-stone-600 font-medium text-[11px]">{cat}</span>
           </div>

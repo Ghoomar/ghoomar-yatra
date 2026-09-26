@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { HourlyCategoryDataPoint, SalesAnalyticsResponse } from '@/lib/types/sales';
+import { getOrderBusinessUnit } from '@/lib/sales/business-units';
 
 export async function GET(request: NextRequest) {
   try {
@@ -290,10 +291,10 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.netSales - a.netSales);
 
-    // Derived Breakdown 6: Order Types
+    // Derived Breakdown 6: Order Types / Business Units
     const orderTypeMap = new Map<string, { count: number; net: number }>();
     orders.forEach((o) => {
-      const t = o.order_type || 'Dine In';
+      const t = getOrderBusinessUnit(o);
       const prev = orderTypeMap.get(t) || { count: 0, net: 0 };
       orderTypeMap.set(t, {
         count: prev.count + 1,
@@ -337,10 +338,17 @@ export async function GET(request: NextRequest) {
       { data: dbCats },
       { data: allMenu }
     ] = await Promise.all([
-      supabase.from('pos_parent_categories').select('name').eq('is_active', true).order('display_order'),
+      supabase.from('pos_parent_categories').select('name, color').eq('is_active', true).order('display_order'),
       supabase.from('pos_categories').select('name').eq('is_active', true).order('display_order'),
       supabase.from('pos_menu_items').select('parent_category, category, name').order('name'),
     ]);
+
+    const parentCategoryColors: Record<string, string> = {};
+    (dbParents || []).forEach((p: any) => {
+      if (p.name && p.color) {
+        parentCategoryColors[p.name.trim().toLowerCase()] = p.color;
+      }
+    });
 
     const parentCatOptions = dbParents && dbParents.length > 0
       ? dbParents.map((p) => p.name)
@@ -352,7 +360,7 @@ export async function GET(request: NextRequest) {
     const itemOptions = Array.from(new Set((allMenu || []).map((m) => m.name).filter(Boolean)));
     const captainOptions = Array.from(new Set(orders.map((o) => o.captain_name).filter(Boolean)));
     const paymentOptions = Array.from(new Set(orders.map((o) => o.payment_type).filter(Boolean)));
-    const orderTypeOptions = Array.from(new Set(orders.map((o) => o.order_type).filter(Boolean)));
+    const orderTypeOptions = ['Dine In', 'Snacks Stall', 'Takeaway', 'Lancho'];
 
     const response: SalesAnalyticsResponse = {
       dateRange: { start: startDate || '', end: endDate || startDate || '' },
@@ -376,6 +384,7 @@ export async function GET(request: NextRequest) {
         byOrderType,
         unmatchedItems,
       },
+      parentCategoryColors,
       reconciliation,
       allBills: orders,
       activeFilterOptions: {

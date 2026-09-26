@@ -37,3 +37,38 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 8. **Parity Verification**:
    - All translation keys in `src/locales/en/` must exist in `src/locales/hi/`.
    - Run `npm run check:i18n` to verify 100% key parity across all namespaces before committing.
+
+# Ghoomar Yatra: Sales, Business Units & Channel Architecture
+
+## 1. Snacks Stall vs. Lancho Delivery Rules
+1. **Snacks Stall Derived Classification**:
+   - In Petpooja POS at Ghoomar Yatra, order type `Delivery(Parcel)` / `Delivery (Parcel)` is **exclusively** used for the physical Snacks Stall counter.
+   - In Yatra analytics and reporting, `Delivery (Parcel)` maps to Business Unit: **Snacks Stall**.
+2. **Raw Database Preservation**:
+   - The original Petpooja `order_type` must remain **verbatim and unchanged** in the raw imported database (`sales_orders`). Never mutate raw imported order types to `Snacks Stall` in the database.
+   - Business Unit classification is strictly an application-level derived calculation using `@/lib/sales/business-units`.
+3. **Lancho is NEVER Snacks Stall**:
+   - Lancho is an independent delivery platform/channel. Orders associated with Lancho (`area = 'LANCHO'`, `order_type = 'LANCHO'`, or `payment_type ILIKE '%lancho%'`) must be classified as **Lancho**, never Snacks Stall.
+4. **Configurable Lancho Commission**:
+   - Lancho operates with a variable commission (currently ~15–20%). Never hardcode this percentage.
+   - Managed under `Settings -> Payment Methods & Commissions` (`payment_methods.commission_percent`) and dynamically applied as a variable operating cost to Lancho sales in Daily P&L.
+
+# Ghoomar Yatra: Menu Category & Colour Architecture
+
+## 1. Single Source of Truth
+- `Settings → Menu Master` (`src/components/admin/menu/`) is the **single source of truth** for `Parent Category → Category → Menu Item`.
+- **Strict Hierarchy**: ONE menu item record belongs to ONE Category, which belongs to ONE Parent Category. No duplicate English/Hindi records or parallel category systems.
+
+## 2. Complete Self-Service UI Management
+- Managers can perform all hierarchy actions directly in the UI without developer intervention or CSV re-uploads:
+  1. Create / edit Parent Categories.
+  2. Create / edit Subcategories under Parent Categories.
+  3. Edit any Menu Item and reassign both its Parent Category and Subcategory.
+  4. Move items dynamically across categories.
+  5. Add brand-new menu items and integrate them into the hierarchy.
+
+## 3. Parent Category Colour Architecture
+- Each Parent Category has an authoritative color stored in `pos_parent_categories.color`.
+- Managers can select and update Parent Category colors via the color picker and preset palette in Menu Master.
+- **Deterministic Color Resolution**: All reports, hourly stacked bar charts, tables, badges, and legends resolve colors strictly from this Parent Category mapping (falling back to canonical colors or deterministic string hashing). **Array-index (`idx`) and chart-order-based color assignment are strictly prohibited**.
+

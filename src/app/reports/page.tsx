@@ -35,6 +35,7 @@ import { SalesAnalyticsDashboard } from '@/components/sales/SalesAnalyticsDashbo
 import { GateTimeAnalyticsChart } from '@/components/reports/GateTimeAnalyticsChart';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
+import { isSnacksStallOrder, isLanchoOrder, isTakeawayOrder, isDineInOrder } from '@/lib/sales/business-units';
 
 type DrilldownType = 'restaurant' | 'snacks' | 'camel' | 'games' | 'mehendi' | 'champi' | null;
 
@@ -224,9 +225,9 @@ export default function ReportsPage() {
     execSummary?.successful_bills_count ?? salesSummary?.bill_count ?? orders.filter((o) => o.status === 'Success').length ?? 0
   );
 
-  // 2. Restaurant Dine-In (STRICTLY Dine-In, excludes Takeaway and Snacks Stall)
+  // 2. Restaurant Dine-In (STRICTLY Dine-In, excludes Takeaway, Snacks Stall, and Lancho)
   const dineInOrders = useMemo(() => {
-    return orders.filter((o) => o.order_type === 'Dine In' && o.status === 'Success');
+    return orders.filter((o) => isDineInOrder(o) && o.status === 'Success');
   }, [orders]);
 
   const dineInNet = useMemo(() => {
@@ -260,9 +261,9 @@ export default function ReportsPage() {
   const dinerConversionRate = gateFootfall > 0 ? (dineInPax / gateFootfall) * 100 : null;
   const spendPerGateVisitor = gateFootfall > 0 ? dineInNet / gateFootfall : null;
 
-  // 4. Snacks Stall (authoritative order_type = 'Snacks Stall' in Orders Master)
+  // 4. Snacks Stall (authoritative order_type = 'Delivery(Parcel)' / 'Snacks Stall' in Orders Master, EXCLUDES Lancho)
   const snacksOrders = useMemo(() => {
-    return orders.filter((o) => o.order_type === 'Snacks Stall' && o.status === 'Success');
+    return orders.filter((o) => isSnacksStallOrder(o) && o.status === 'Success');
   }, [orders]);
 
   const snacksNet = useMemo(() => {
@@ -866,9 +867,6 @@ export default function ReportsPage() {
                       <span>{showFullExecutiveSummary ? t('reports.operationsSummary.hideSummary') : t('reports.operationsSummary.viewSummary')}</span>
                       {showFullExecutiveSummary ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     </button>
-                    <span className="text-[11px] text-stone-400 hidden sm:inline">
-                      {t('reports.operationsSummary.factualCrossSystem')}
-                    </span>
                   </div>
 
                   {showFullExecutiveSummary && (

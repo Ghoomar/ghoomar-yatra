@@ -18,6 +18,7 @@ import { RolePermissionMatrix } from '@/components/admin/RolePermissionMatrix';
 import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { EditCostRuleModal } from '@/components/admin/EditCostRuleModal';
 import { MenuMasterView } from '@/components/admin/menu/MenuMasterView';
+import { PaymentMethodModal } from '@/components/admin/PaymentMethodModal';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
 import {
@@ -76,6 +77,7 @@ export default function AdminSettingsPage() {
   const [userToDelete, setUserToDelete] = useState<any | null>(null);
   const [costRuleModalOpen, setCostRuleModalOpen] = useState(false);
   const [editingCostRule, setEditingCostRule] = useState<any | null>(null);
+  const [paymentMethodModalOpen, setPaymentMethodModalOpen] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -476,8 +478,16 @@ export default function AdminSettingsPage() {
                     <CreditCard className="h-4 w-4 text-amber-600" />
                     Payment Methods &amp; Commissions
                   </CardTitle>
-                  <CardDescription>Gateway and card merchant discount rates (MDR)</CardDescription>
+                  <CardDescription>Gateway MDR and delivery channel commissions (Lancho 15–20%)</CardDescription>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPaymentMethodModalOpen(true)}
+                  className="h-7 text-xs font-semibold"
+                >
+                  Manage
+                </Button>
               </CardHeader>
               <CardContent className="pt-0">
                 {loading ? (
@@ -486,8 +496,15 @@ export default function AdminSettingsPage() {
                   <div className="divide-y divide-stone-100 text-xs max-h-56 overflow-y-auto">
                     {paymentMethods.map((pm) => (
                       <div key={pm.id} className="py-2 flex items-center justify-between">
-                        <span className="font-semibold text-stone-900">{pm.name}</span>
-                        <span className="text-stone-600 font-mono">MDR: {pm.commission_percent}%</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-stone-900">{pm.name}</span>
+                          {pm.name_hi && (
+                            <span className="text-[11px] text-stone-400">({pm.name_hi})</span>
+                          )}
+                        </div>
+                        <span className="text-stone-600 font-mono font-medium">
+                          {pm.commission_percent}% {pm.name.toLowerCase() === 'lancho' ? 'Commission' : 'MDR'}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -513,6 +530,12 @@ export default function AdminSettingsPage() {
           <VendorCategoryModal
             isOpen={vendorCategoryModalOpen}
             onClose={() => setVendorCategoryModalOpen(false)}
+            onUpdated={loadData}
+          />
+
+          <PaymentMethodModal
+            isOpen={paymentMethodModalOpen}
+            onClose={() => setPaymentMethodModalOpen(false)}
             onUpdated={loadData}
           />
         </div>

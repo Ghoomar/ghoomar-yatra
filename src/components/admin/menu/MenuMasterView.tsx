@@ -27,6 +27,7 @@ import { ParentCategoryModal } from './ParentCategoryModal';
 import { CategoryModal } from './CategoryModal';
 import { MenuItemModal } from './MenuItemModal';
 import { ReclassifySalesModal } from './ReclassifySalesModal';
+import { getCategoryColor, getCategoryBadgeClasses } from '@/lib/constants/category-colors';
 
 export function MenuMasterView() {
   const [viewTab, setViewTab] = useState<'tree' | 'items' | 'categories' | 'parents' | 'aliases'>('tree');
@@ -98,6 +99,7 @@ export function MenuMasterView() {
         pList.push({
           id: p.id,
           name: p.name,
+          color: p.color,
           display_order: p.display_order,
           is_active: p.is_active,
           categoryCount: p.categoryCount,
@@ -384,6 +386,10 @@ export function MenuMasterView() {
                                   <ChevronDown className="h-4 w-4" />
                                 )}
                               </button>
+                              <span
+                                className="w-3 h-3 rounded-full shrink-0 border border-black/10 shadow-2xs"
+                                style={{ backgroundColor: parent.color || getCategoryColor(parent.name) }}
+                              />
                               <span className="font-bold text-stone-900 text-sm">{parent.name}</span>
                               <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                                 {parent.categoryCount} Categories
@@ -597,7 +603,7 @@ export function MenuMasterView() {
                                 </span>
                               </td>
                               <td className="p-3 font-medium text-stone-600">
-                                <span className="px-2 py-0.5 rounded bg-amber-50/70 border border-amber-200 text-amber-800 text-[11px] font-semibold">
+                                <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getCategoryBadgeClasses(item.parent_category)}`}>
                                   {item.parent_category}
                                 </span>
                               </td>
@@ -678,7 +684,7 @@ export function MenuMasterView() {
                               {cat.name}
                             </td>
                             <td className="p-3">
-                              <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getCategoryBadgeClasses(cat.parent_category_name)}`}>
                                 {cat.parent_category_name}
                               </span>
                             </td>
@@ -738,7 +744,18 @@ export function MenuMasterView() {
                         {parentsList.map((p) => (
                           <tr key={p.id} className="hover:bg-stone-50/50">
                             <td className="p-3 font-bold text-stone-900 text-sm">
-                              {p.name}
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  className="w-3.5 h-3.5 rounded-full shrink-0 border border-black/10 shadow-2xs"
+                                  style={{ backgroundColor: p.color || getCategoryColor(p.name) }}
+                                />
+                                <span>{p.name}</span>
+                                {p.color && (
+                                  <span className="text-[10px] font-mono font-normal text-stone-400 uppercase">
+                                    {p.color}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="p-3 text-center font-semibold text-amber-700">
                               {p.categoryCount} categories
@@ -870,6 +887,7 @@ export function MenuMasterView() {
         onClose={() => setItemModalOpen(false)}
         onSuccess={loadData}
         categories={categoriesList}
+        parents={parentsList}
         item={editingItem}
       />
 

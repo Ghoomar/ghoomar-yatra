@@ -7,7 +7,8 @@ interface MenuItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  categories: Array<{ id: string; name: string; parent_category_name: string }>;
+  categories: Array<{ id: string; name: string; parent_category_id?: string; parent_category_name: string }>;
+  parents?: Array<{ id: string; name: string; color?: string | null }>;
   item?: {
     id: string;
     name: string;
@@ -27,9 +28,11 @@ export function MenuItemModal({
   onClose,
   onSuccess,
   categories,
+  parents = [],
   item,
 }: MenuItemModalProps) {
   const [name, setName] = useState('');
+  const [selectedParent, setSelectedParent] = useState<string>('');
   const [categoryId, setCategoryId] = useState('');
   const [price, setPrice] = useState<number | string>(0);
   const [isActive, setIsActive] = useState(true);
@@ -38,23 +41,56 @@ export function MenuItemModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Compute unique parent names if parents array not explicitly passed
+  const parentNames = React.useMemo(() => {
+    if (parents.length > 0) return parents.map((p) => p.name);
+    return Array.from(new Set(categories.map((c) => c.parent_category_name).filter(Boolean)));
+  }, [parents, categories]);
+
   useEffect(() => {
     if (item) {
       setName(item.name);
-      setCategoryId(item.category_id || categories.find((c) => c.name === item.category)?.id || categories[0]?.id || '');
+      const matchedCat = categories.find((c) => c.id === item.category_id || c.name === item.category);
+      const initialCatId = matchedCat?.id || item.category_id || categories[0]?.id || '';
+      setCategoryId(initialCatId);
+      setSelectedParent(matchedCat?.parent_category_name || item.parent_category || parentNames[0] || '');
       setPrice(item.price !== undefined ? item.price : 0);
       setIsActive(item.is_active !== false);
       setAliases(item.aliases || []);
     } else {
       setName('');
-      setCategoryId(categories[0]?.id || '');
+      const defaultParent = parentNames[0] || '';
+      setSelectedParent(defaultParent);
+      const firstCatInParent = categories.find((c) => c.parent_category_name === defaultParent) || categories[0];
+      setCategoryId(firstCatInParent?.id || '');
       setPrice(0);
       setIsActive(true);
       setAliases([]);
     }
     setAliasInput('');
     setError(null);
-  }, [item, categories, isOpen]);
+  }, [item, categories, parentNames, isOpen]);
+
+  const availableCategories = React.useMemo(() => {
+    if (!selectedParent) return categories;
+    return categories.filter((c) => c.parent_category_name === selectedParent);
+  }, [categories, selectedParent]);
+
+  const handleParentChange = (newParent: string) => {
+    setSelectedParent(newParent);
+    const matching = categories.filter((c) => c.parent_category_name === newParent);
+    if (matching.length > 0 && !matching.some((c) => c.id === categoryId)) {
+      setCategoryId(matching[0].id);
+    }
+  };
+
+  const handleCategoryChange = (newCatId: string) => {
+    setCategoryId(newCatId);
+    const matched = categories.find((c) => c.id === newCatId);
+    if (matched?.parent_category_name) {
+      setSelectedParent(matched.parent_category_name);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -163,18 +199,18 @@ export function MenuItemModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Category *
+                Parent Category *
               </label>
               <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30"
+                value={selectedParent}
+                onChange={(e) => handleParentChange(e.target.value)}
+                className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30 font-medium"
                 required
               >
-                <option value="">Select Category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.parent_category_name})
+                <option value="">Select Parent</option>
+                {parentNames.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
                   </option>
                 ))}
               </select>
@@ -182,15 +218,21 @@ export function MenuItemModal({
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Parent Category (Derived)
+                Category *
               </label>
-              <input
-                type="text"
-                readOnly
-                disabled
-                value={selectedCategory?.parent_category_name || item?.parent_category || '—'}
-                className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs bg-stone-100 text-stone-600 font-semibold cursor-not-allowed"
-              />
+              <select
+                value={categoryId}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30 font-medium"
+                required
+              >
+                <option value="">Select Category</option>
+                {availableCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
