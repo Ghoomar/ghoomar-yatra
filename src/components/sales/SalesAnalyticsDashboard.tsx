@@ -110,6 +110,46 @@ export function SalesAnalyticsDashboard({
     setOrderType('');
   };
 
+  const getLocalizedParentCategory = (pName: string) => {
+    if (locale !== 'hi' || !pName) return pName;
+    return data?.parentCategoryTranslations?.[pName] || pName;
+  };
+
+  const getLocalizedCategory = (cName: string) => {
+    if (locale !== 'hi' || !cName) return cName;
+    return data?.categoryTranslations?.[cName] || cName;
+  };
+
+  const getLocalizedPaymentMode = (pm: string) => {
+    if (locale !== 'hi' || !pm) return pm;
+    const pmLower = pm.toLowerCase();
+    if (pmLower.includes('cash')) return 'नकद';
+    if (pmLower.includes('card')) return 'कार्ड';
+    if (pmLower.includes('upi')) return 'यूपीआई';
+    if (pmLower.includes('lancho')) return 'लाँचो';
+    if (pmLower.includes('complimentary')) return 'कॉम्प्लिमेंटरी';
+    return pm;
+  };
+
+  const getLocalizedOrderType = (ot: string) => {
+    if (locale !== 'hi' || !ot) return ot;
+    switch (ot) {
+      case 'Dine In':
+        return 'डाइन-इन';
+      case 'Snacks Stall':
+        return 'स्नैक्स स्टॉल';
+      case 'Takeaway':
+      case 'Take Away':
+        return 'टेकअवे';
+      case 'Lancho':
+        return 'लाँचो';
+      case 'Delivery (Parcel)':
+        return 'डिलीवरी (पार्सल)';
+      default:
+        return ot;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Date & Action Controls */}
@@ -290,6 +330,7 @@ export function SalesAnalyticsDashboard({
               hourlyData={data.hourly}
               parentCategoriesList={data.parentCategoriesList}
               categoryColors={data.parentCategoryColors}
+              parentCategoryTranslations={data.parentCategoryTranslations}
             />
           )}
         </CardContent>
@@ -313,7 +354,7 @@ export function SalesAnalyticsDashboard({
               <option value="">{t('finance.sales.analytics.filters.allParents')}</option>
               {data.activeFilterOptions.parentCategories.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {getLocalizedParentCategory(p)}
                 </option>
               ))}
             </select>
@@ -327,7 +368,7 @@ export function SalesAnalyticsDashboard({
               <option value="">{t('finance.sales.analytics.filters.allCategories')}</option>
               {data.activeFilterOptions.categories.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {getLocalizedCategory(c)}
                 </option>
               ))}
             </select>
@@ -355,7 +396,7 @@ export function SalesAnalyticsDashboard({
               <option value="">{t('finance.sales.analytics.filters.allPayments')}</option>
               {data.activeFilterOptions.paymentTypes.map((pm) => (
                 <option key={pm} value={pm}>
-                  {pm}
+                  {getLocalizedPaymentMode(pm)}
                 </option>
               ))}
             </select>
@@ -369,7 +410,7 @@ export function SalesAnalyticsDashboard({
               <option value="">{t('finance.sales.analytics.filters.allOrderTypes')}</option>
               {data.activeFilterOptions.orderTypes.map((ot) => (
                 <option key={ot} value={ot}>
-                  {ot}
+                  {getLocalizedOrderType(ot)}
                 </option>
               ))}
             </select>
@@ -486,7 +527,7 @@ export function SalesAnalyticsDashboard({
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: getCategoryColor(cat.name, data?.parentCategoryColors) }}
                         />
-                        <span>{cat.name}</span>
+                        <span>{getLocalizedParentCategory(cat.name)}</span>
                       </td>
                       <td className="p-3 text-center font-medium text-stone-700">
                         {cat.quantity}
@@ -542,7 +583,7 @@ export function SalesAnalyticsDashboard({
                             item.parentCategory
                           )}`}
                         >
-                          {item.parentCategory}
+                          {getLocalizedParentCategory(item.parentCategory)}
                         </span>
                       </td>
                       <td className="p-3 text-center font-bold text-stone-800">
@@ -574,7 +615,7 @@ export function SalesAnalyticsDashboard({
                     <tr key={p.name} className="hover:bg-stone-50/50">
                       <td className="p-3 font-semibold text-stone-900 flex items-center gap-2">
                         <CreditCard className="h-4 w-4 text-stone-400" />
-                        {p.name}
+                        {getLocalizedPaymentMode(p.name)}
                       </td>
                       <td className="p-3 text-right font-bold text-emerald-700">
                         {formatINR(p.amount)}
@@ -651,7 +692,7 @@ export function SalesAnalyticsDashboard({
                   {data?.breakdowns.byOrderType.map((ot) => (
                     <tr key={ot.name} className="hover:bg-stone-50/50">
                       <td className="p-3 font-semibold text-stone-900">
-                        {ot.name}
+                        {getLocalizedOrderType(ot.name)}
                       </td>
                       <td className="p-3 text-center font-medium text-stone-700">
                         {ot.count}
@@ -704,7 +745,7 @@ export function SalesAnalyticsDashboard({
                         type="text"
                         value={billSearchTerm}
                         onChange={(e) => setBillSearchTerm(e.target.value)}
-                        placeholder="Search invoice #, customer, captain, area..."
+                        placeholder={locale === 'hi' ? 'बिल नं, ग्राहक, कैप्टन, एरिया खोजें...' : 'Search invoice #, customer, captain, area...'}
                         className="w-full pl-8 pr-3 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
                       />
                       {billSearchTerm && (
@@ -726,7 +767,7 @@ export function SalesAnalyticsDashboard({
                             : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                         }`}
                       >
-                        All ({allBills.length})
+                        {locale === 'hi' ? `सभी (${allBills.length})` : `All (${allBills.length})`}
                       </button>
                       {distinctOrderTypes.map((ot) => {
                         const count = allBills.filter((b) => b.order_type === ot).length;
@@ -740,7 +781,7 @@ export function SalesAnalyticsDashboard({
                                 : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                             }`}
                           >
-                            {ot} ({count})
+                            {getLocalizedOrderType(ot!)} ({count})
                           </button>
                         );
                       })}
@@ -748,7 +789,7 @@ export function SalesAnalyticsDashboard({
                   </div>
 
                   <div className="text-[11px] text-stone-500 font-medium self-end sm:self-center">
-                    Showing <span className="font-bold text-stone-900">{filteredBills.length}</span> of {allBills.length} bills | Total: <span className="font-bold text-amber-800">{formatINR(totalFilteredGrand)}</span>
+                    {locale === 'hi' ? `कुल ${allBills.length} में से ${filteredBills.length} बिल | कुल योग: ` : `Showing ${filteredBills.length} of ${allBills.length} bills | Total: `}<span className="font-bold text-amber-800">{formatINR(totalFilteredGrand)}</span>
                   </div>
                 </div>
 
@@ -762,13 +803,13 @@ export function SalesAnalyticsDashboard({
                         <th className="p-2.5">{t('finance.sales.analytics.tables.colOrderType')}</th>
                         <th className="p-2.5 text-center">{t('finance.sales.analytics.tables.colPax')}</th>
                         <th className="p-2.5">{t('finance.sales.analytics.tables.colCaptain')}</th>
-                        <th className="p-2.5">Customer</th>
+                        <th className="p-2.5">{locale === 'hi' ? 'ग्राहक' : 'Customer'}</th>
                         <th className="p-2.5">{t('finance.sales.analytics.tables.colPayment')}</th>
                         <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colGross')}</th>
                         <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colDiscounts')}</th>
                         <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colNet')}</th>
                         <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colTaxes')}</th>
-                        <th className="p-2.5 text-right">Grand Total</th>
+                        <th className="p-2.5 text-right">{t('finance.sales.analytics.kpis.grandTotal')}</th>
                         <th className="p-2.5 text-center">{t('common.status')}</th>
                       </tr>
                     </thead>
@@ -810,7 +851,7 @@ export function SalesAnalyticsDashboard({
                                       : 'border-sky-300 bg-sky-50 text-sky-800';
                                   return (
                                     <Badge variant="outline" className={`text-[10px] font-semibold ${badgeClass}`}>
-                                      {bu}
+                                      {getLocalizedOrderType(bu)}
                                     </Badge>
                                   );
                                 })()}
@@ -848,7 +889,7 @@ export function SalesAnalyticsDashboard({
                               </td>
                               <td className="p-2.5">
                                 <Badge variant="outline" className="text-[10px] font-medium">
-                                  {bill.payment_type || 'Cash'}
+                                  {getLocalizedPaymentMode(bill.payment_type || 'Cash')}
                                 </Badge>
                               </td>
                               <td className="p-2.5 text-right font-mono text-stone-600">
@@ -891,7 +932,7 @@ export function SalesAnalyticsDashboard({
                     {filteredBills.length > 0 && (
                       <tfoot className="bg-stone-100/80 font-bold text-stone-900 border-t border-stone-200">
                         <tr>
-                          <td colSpan={3} className="p-2.5">Total ({filteredBills.length} Bills)</td>
+                          <td colSpan={3} className="p-2.5">{locale === 'hi' ? `कुल (${filteredBills.length} बिल)` : `Total (${filteredBills.length} Bills)`}</td>
                           <td className="p-2.5 text-center">{totalFilteredCovers}</td>
                           <td colSpan={3}></td>
                           <td className="p-2.5 text-right font-mono"></td>

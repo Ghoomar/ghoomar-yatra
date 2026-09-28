@@ -37,6 +37,7 @@ export default function VendorsPage() {
   const [rawVendors, setRawVendors] = useState<Vendor[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]);
   const [vendorItems, setVendorItems] = useState<any[]>([]);
+  const [vendorCategories, setVendorCategories] = useState<{ name: string; name_hi?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -62,12 +63,14 @@ export default function VendorsPage() {
         { data: vSummary, error: summaryErr },
         { data: vFull, error: fullErr },
         { data: itemsData },
-        { data: viData }
+        { data: viData },
+        { data: vcData }
       ] = await Promise.all([
         supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
         supabase.from('vendors').select('*').order('name'),
         supabase.from('inventory_items').select('id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi)').eq('is_active', true).order('name'),
         supabase.from('vendor_items').select('id, vendor_id, inventory_item_id, last_purchase_rate, last_purchase_date'),
+        supabase.from('vendor_categories').select('name, name_hi'),
       ]);
 
       if (summaryErr) throw summaryErr;
@@ -77,6 +80,7 @@ export default function VendorsPage() {
       setRawVendors(vFull || []);
       setCatalogItems(itemsData || []);
       setVendorItems(viData || []);
+      setVendorCategories(vcData || []);
     } catch (err: any) {
       console.error('Failed to load vendors:', err);
       setMessage({ type: 'error', text: t('purchases.bills.errLoad') + ' ' + (err.message || '') });
@@ -99,6 +103,45 @@ export default function VendorsPage() {
     });
     return Array.from(set).sort();
   }, [vendors]);
+
+  const vendorCatMap = useMemo(() => {
+    const map = new Map<string, string>();
+    vendorCategories.forEach((vc) => {
+      if (vc.name && vc.name_hi) {
+        map.set(vc.name.toLowerCase(), vc.name_hi);
+      }
+    });
+    return map;
+  }, [vendorCategories]);
+
+  const getCategoryDisplay = (catName: string) => {
+    if (locale === 'hi') {
+      return vendorCatMap.get(catName.toLowerCase()) || catName;
+    }
+    return catName;
+  };
+
+  const formatPaymentTerms = (term?: string | null) => {
+    if (!term) return locale === 'hi' ? '7 दिन की अवधि' : 'Net 7 Days';
+    if (locale !== 'hi') return term;
+    if (term.includes('Immediate') || term.includes('Cash')) return 'तत्काल / नकद';
+    if (term.includes('7 Days')) return '7 दिन की अवधि';
+    if (term.includes('15 Days')) return '15 दिन की अवधि';
+    if (term.includes('30 Days')) return '30 दिन की अवधि';
+    if (term.includes('Advance')) return 'एडवांस पेमेंट';
+    return term;
+  };
+
+  const formatFrequency = (freq?: string | null) => {
+    if (!freq) return '';
+    if (locale !== 'hi') return freq;
+    if (freq === 'Per Delivery') return 'प्रत्येक डिलीवरी';
+    if (freq === 'Weekly') return 'साप्ताहिक';
+    if (freq === 'Bi-weekly') return 'हर 15 दिन';
+    if (freq === 'Monthly') return 'मासिक';
+    if (freq === 'As Needed') return 'ज़रूरत के अनुसार';
+    return freq;
+  };
 
   // Filtered vendors
   const filteredVendors = useMemo(() => {
@@ -370,7 +413,7 @@ export default function VendorsPage() {
                   <option value="all">{t('purchases.vendors.filter.all')}</option>
                   {allCategories.map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {getCategoryDisplay(c)}
                     </option>
                   ))}
                 </select>
@@ -488,10 +531,10 @@ export default function VendorsPage() {
                             const rate = vi.agreed_rate ?? vi.last_purchase_rate;
                             return (
                               <div className="mt-1 flex items-center gap-1.5 text-[11px] font-normal text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/70 w-fit">
-                                <span className="font-semibold">Agreed / Last Purchase Rate:</span>
+                                <span className="font-semibold">{locale === 'hi' ? 'सहमति / अंतिम खरीद दर:' : 'Agreed / Last Purchase Rate:'}</span>
                                 <span>{rate != null ? `₹${rate}` : 'N/A'}</span>
                                 {vi.last_purchase_date && (
-                                  <span className="text-stone-500">(Date: {vi.last_purchase_date})</span>
+                                  <span className="text-stone-500">({locale === 'hi' ? 'दिनांक' : 'Date'}: {vi.last_purchase_date})</span>
                                 )}
                               </div>
                             );
@@ -507,7 +550,7 @@ export default function VendorsPage() {
                                   key={c}
                                   className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap"
                                 >
-                                  {c}
+                                  {getCategoryDisplay(c)}
                                 </span>
                               ))
                             ) : (
@@ -529,10 +572,10 @@ export default function VendorsPage() {
 
                         {/* Payment Terms */}
                         <td className="py-3 px-3 text-stone-600 whitespace-nowrap">
-                          <div>{v.payment_terms || 'Net 7 Days'}</div>
+                          <div>{formatPaymentTerms(v.payment_terms)}</div>
                           {v.payment_frequency && (
                             <div className="text-[10px] text-stone-400 mt-0.5">
-                              {v.payment_frequency}
+                              {formatFrequency(v.payment_frequency)}
                             </div>
                           )}
                         </td>

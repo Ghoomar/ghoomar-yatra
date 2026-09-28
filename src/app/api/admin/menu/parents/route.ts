@@ -43,16 +43,20 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { name, display_order, is_active, color } = body;
+    const { name, name_hi, display_order, is_active, color } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Parent Category name is required.' }, { status: 400 });
     }
 
+    const cleanName = name.trim();
+    const finalNameHi = name_hi && name_hi.trim() ? name_hi.trim() : null;
+
     const { data, error } = await supabase
       .from('pos_parent_categories')
       .insert({
-        name: name.trim(),
+        name: cleanName,
+        name_hi: finalNameHi,
         display_order: Number(display_order) || 0,
         is_active: is_active !== false,
         color: color ? String(color).trim() : null,
@@ -71,7 +75,7 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { id, name, display_order, is_active, color } = body;
+    const { id, name, name_hi, display_order, is_active, color } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required.' }, { status: 400 });
@@ -84,11 +88,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const newName = name ? name.trim() : oldParent.name;
+    const finalNameHi = name_hi !== undefined ? (name_hi ? String(name_hi).trim() : null) : oldParent.name_hi;
 
     const { data, error } = await supabase
       .from('pos_parent_categories')
       .update({
         name: newName,
+        name_hi: finalNameHi,
         display_order: display_order !== undefined ? Number(display_order) : oldParent.display_order,
         is_active: is_active !== undefined ? Boolean(is_active) : oldParent.is_active,
         color: color !== undefined ? (color ? String(color).trim() : null) : oldParent.color,

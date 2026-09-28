@@ -201,7 +201,7 @@ export default function DailyOperationsPage() {
             sourceKey: 'assetRegister',
             name: localizedName,
             quantity: `${ev.quantity} pcs`,
-            notes: ev.notes || (locale === 'hi' ? 'एसेट गुम / अनुपलब्ध' : 'Asset missing / lost'),
+            notes: ev.notes || (locale === 'hi' ? 'एसेट गुम / नहीं मिला' : 'Asset missing / lost'),
           });
         } else if (ev.event_type === 'breakage') {
           breakage.push({

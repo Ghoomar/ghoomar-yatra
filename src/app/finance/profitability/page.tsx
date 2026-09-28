@@ -17,7 +17,7 @@ const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
 
 export default function ProfitabilityPage() {
   const supabase = createClient();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [loading, setLoading] = useState(true);
   const [paymentCommissions, setPaymentCommissions] = useState(0);
@@ -516,7 +516,7 @@ export default function ProfitabilityPage() {
               </div>
               {paymentCommissions > 0 && (
                 <div className="flex items-center justify-between">
-                  <span>• Gateway &amp; Channel Commissions (MDR / Lancho)</span>
+                  <span>• {t('finance.profitability.channelCommissions')}</span>
                   <span className="font-mono text-stone-700">{formatINR(paymentCommissions)}</span>
                 </div>
               )}
@@ -538,11 +538,11 @@ export default function ProfitabilityPage() {
             </div>
             <div className="pl-4 space-y-1 text-xs text-stone-500">
               <div className="flex items-center justify-between">
-                <span>• {t('finance.profitability.staffSalaries')} ({formatINR(totalSalaries)} ÷ {daysInMonth} days)</span>
+                <span>• {t('finance.profitability.staffSalaries')} ({formatINR(totalSalaries)} ÷ {daysInMonth} {locale === 'hi' ? 'दिन' : 'days'})</span>
                 <span>{formatINR(totalSalaries / daysInMonth)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• {t('finance.profitability.otherFixed')} ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} days)</span>
+                <span>• {t('finance.profitability.otherFixed')} ({formatINR(monthlyOtherFixed)} ÷ {daysInMonth} {locale === 'hi' ? 'दिन' : 'days'})</span>
                 <span>{formatINR(monthlyOtherFixed / daysInMonth)}</span>
               </div>
             </div>

@@ -8,10 +8,12 @@ import { formatINR } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
 import { X, Plus, Edit2, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
 interface Activity {
   id: string;
   name: string;
+  name_hi?: string | null;
   description: string | null;
   default_price: number;
   is_active: boolean;
@@ -35,6 +37,7 @@ export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMast
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
   const [description, setDescription] = useState('');
   const [defaultPrice, setDefaultPrice] = useState<number>(50);
   const [isActive, setIsActive] = useState(true);
@@ -66,6 +69,7 @@ export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMast
   const resetForm = () => {
     setEditingId(null);
     setName('');
+    setNameHi('');
     setDescription('');
     setDefaultPrice(50);
     setIsActive(true);
@@ -75,6 +79,7 @@ export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMast
   const handleEdit = (act: Activity) => {
     setEditingId(act.id);
     setName(act.name);
+    setNameHi(act.name_hi || '');
     setDescription(act.description || '');
     setDefaultPrice(Number(act.default_price) || 0);
     setIsActive(act.is_active !== false);
@@ -95,8 +100,9 @@ export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMast
     setErrorMessage(null);
 
     try {
-      const payload = {
+      const payload: any = {
         name: name.trim(),
+        name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
         description: description.trim() || null,
         default_price: defaultPrice,
         is_active: isActive,
@@ -215,31 +221,30 @@ export function ActivityMasterModal({ isOpen, onClose, onUpdated }: ActivityMast
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-stone-700 font-medium mb-1">Activity Name *</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Pottery Workshop, Puppet Show"
-                  required
-                  className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
+            <BilingualNameInput
+              englishName={name}
+              onChangeEnglish={setName}
+              hindiName={nameHi}
+              onChangeHindi={(val) => setNameHi(val)}
+              entityType="role"
+              englishLabel="Activity Name (English)"
+              hindiLabel="Activity Name (Hindi)"
+              placeholderEnglish="e.g. Pottery Workshop, Puppet Show"
+              placeholderHindi="उदा. मिट्टी के बर्तन कार्यशाला, कठपुतली शो"
+              required
+            />
 
-              <div>
-                <label className="block text-stone-700 font-medium mb-1">Default Ticket / Ride Price (₹) *</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="5"
-                  value={defaultPrice}
-                  onChange={(e) => setDefaultPrice(Number(e.target.value))}
-                  required
-                  className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white font-semibold focus:outline-none focus:border-amber-500"
-                />
-              </div>
+            <div>
+              <label className="block text-stone-700 font-medium mb-1">Default Ticket / Ride Price (₹) *</label>
+              <input
+                type="number"
+                min="0"
+                step="5"
+                value={defaultPrice}
+                onChange={(e) => setDefaultPrice(Number(e.target.value))}
+                required
+                className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white font-semibold focus:outline-none focus:border-amber-500"
+              />
             </div>
 
             <div>

@@ -25,7 +25,7 @@
     },
     "sales": {
       "title": "Petpooja सेल और कस्टमर संख्या",
-      "subtitle": "Petpooja से आई प्रामाणिक रिपोर्ट",
+      "subtitle": "Petpooja से आई रिपोर्ट",
       "viewSales": "सेल रिपोर्ट देखें",
       "noData": "{date} के लिए अभी कोई Petpooja रिपोर्ट अपलोड नहीं हुई।",
       "uploadReport": "Petpooja रिपोर्ट अपलोड करें",

@@ -50,6 +50,7 @@ export interface InventoryItem {
   item_code: string;
   name: string;
   name_hi?: string | null;
+  name_hi_is_custom?: boolean;
   category_id: string;
   inventory_class: 'Food Raw Material' | 'Non-Food Consumable' | 'Physical Asset' | 'Uniform';
   unit_id: string;
@@ -292,7 +293,9 @@ export interface EmployeeSalarySummaryRow {
   employee_name: string;
   employment_status: string;
   department_name?: string | null;
+  department_name_hi?: string | null;
   role_name?: string | null;
+  role_name_hi?: string | null;
   contractor_name?: string | null;
   salary_month: string;
   monthly_salary: number;
@@ -324,7 +327,9 @@ export interface EmployeeFinancialBalance {
   employment_status: string;
   monthly_salary: number;
   department_name?: string;
+  department_name_hi?: string;
   role_name?: string;
+  role_name_hi?: string;
   outstanding_advance_balance: number;
   last_transaction_at?: string;
 }

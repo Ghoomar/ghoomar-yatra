@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { name, category_id, price, is_active, aliases } = body;
+    const { name, name_hi, name_hi_is_custom, category_id, price, is_active, aliases } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Item name is required.' }, { status: 400 });
@@ -84,12 +84,16 @@ export async function POST(request: NextRequest) {
 
     const cleanName = name.trim();
     const normalized = normalizeItemName(cleanName);
+    const finalNameHi = name_hi && name_hi.trim() ? name_hi.trim() : null;
 
     // Business rule: GST = 5%, Tax Type = Forward Tax
     const { data: item, error } = await supabase
       .from('pos_menu_items')
       .insert({
         name: cleanName,
+        name_hi: finalNameHi,
+        name_hi_is_custom: Boolean(name_hi_is_custom),
+        needs_setup: false,
         normalized_name: normalized,
         category: cat.name,
         category_id,
@@ -133,7 +137,7 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { id, name, category_id, price, is_active, aliases } = body;
+    const { id, name, name_hi, name_hi_is_custom, category_id, price, is_active, aliases } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required.' }, { status: 400 });
@@ -164,9 +168,13 @@ export async function PUT(request: NextRequest) {
 
     const finalName = name ? name.trim() : oldItem.name;
     const normalized = normalizeItemName(finalName);
+    const finalNameHi = name_hi !== undefined ? (name_hi && name_hi.trim() ? name_hi.trim() : null) : oldItem.name_hi;
 
     const updatePayload: Record<string, any> = {
       name: finalName,
+      name_hi: finalNameHi,
+      name_hi_is_custom: name_hi_is_custom !== undefined ? Boolean(name_hi_is_custom) : oldItem.name_hi_is_custom,
+      needs_setup: false,
       normalized_name: normalized,
       category: catName,
       category_id: finalCatId,
@@ -193,6 +201,17 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // If item was previously uncategorized or had needs_setup, or categories changed, sync historical sales rows
+    if (catName && catName !== 'Uncategorized' && (oldItem.category !== catName || oldItem.parent_category !== parentName || oldItem.needs_setup)) {
+      await supabase
+        .from('sales_hourly_items')
+        .update({
+          category: catName,
+          parent_category: parentName,
+        })
+        .ilike('item_name', oldItem.name.trim());
+    }
 
     // Synchronize aliases if provided
     if (Array.isArray(aliases)) {

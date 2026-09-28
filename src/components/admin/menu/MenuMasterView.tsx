@@ -22,15 +22,19 @@ import {
   ExternalLink,
   ShieldCheck,
   Building,
+  Sparkles,
 } from 'lucide-react';
 import { ParentCategoryModal } from './ParentCategoryModal';
 import { CategoryModal } from './CategoryModal';
 import { MenuItemModal } from './MenuItemModal';
 import { ReclassifySalesModal } from './ReclassifySalesModal';
 import { getCategoryColor, getCategoryBadgeClasses } from '@/lib/constants/category-colors';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 export function MenuMasterView() {
-  const [viewTab, setViewTab] = useState<'tree' | 'items' | 'categories' | 'parents' | 'aliases'>('tree');
+  const { t, locale } = useI18n();
+  const [viewTab, setViewTab] = useState<'tree' | 'items' | 'needs_setup' | 'categories' | 'parents' | 'aliases'>('tree');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +46,7 @@ export function MenuMasterView() {
     totalItems: 0,
     activeItems: 0,
     totalAliases: 0,
+    needsSetupCount: 0,
   });
 
   // Flat lists for tables and selects
@@ -99,6 +104,7 @@ export function MenuMasterView() {
         pList.push({
           id: p.id,
           name: p.name,
+          name_hi: p.name_hi,
           color: p.color,
           display_order: p.display_order,
           is_active: p.is_active,
@@ -110,8 +116,10 @@ export function MenuMasterView() {
           cList.push({
             id: c.id,
             name: c.name,
+            name_hi: c.name_hi,
             parent_category_id: p.id,
             parent_category_name: p.name,
+            parent_category_name_hi: p.name_hi,
             display_order: c.display_order,
             is_active: c.is_active,
             itemCount: c.itemCount,
@@ -121,7 +129,9 @@ export function MenuMasterView() {
             iList.push({
               ...it,
               category_name: c.name,
+              category_name_hi: c.name_hi,
               parent_category_name: p.name,
+              parent_category_name_hi: p.name_hi,
             });
           });
         });
@@ -129,11 +139,27 @@ export function MenuMasterView() {
 
       setParentsList(pList);
       setCategoriesList(cList);
-      setItemsList(iList);
+      setItemsList(hJson.allItems && hJson.allItems.length > 0 ? hJson.allItems : iList);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [discovering, setDiscovering] = useState(false);
+
+  const handleDiscoverSalesItems = async () => {
+    try {
+      setDiscovering(true);
+      const res = await fetch('/api/admin/menu/discover', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to discover sales items');
+      await loadData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setDiscovering(false);
     }
   };
 
@@ -152,9 +178,15 @@ export function MenuMasterView() {
   // Filtered items
   const filteredItems = useMemo(() => {
     return itemsList.filter((item) => {
+      if (viewTab === 'needs_setup') {
+        const isNeedsSetup = item.needs_setup || item.category === 'Uncategorized' || !item.category;
+        if (!isNeedsSetup) return false;
+      }
+
       const matchSearch =
         !searchTerm ||
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.name_hi && item.name_hi.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.aliases && item.aliases.some((a: string) => a.toLowerCase().includes(searchTerm.toLowerCase())));
 
       const matchParent = !filterParent || item.parent_category === filterParent;
@@ -168,39 +200,58 @@ export function MenuMasterView() {
 
       return matchSearch && matchParent && matchCat && matchActive;
     });
-  }, [itemsList, searchTerm, filterParent, filterCategory, filterActive]);
+  }, [itemsList, searchTerm, filterParent, filterCategory, filterActive, viewTab]);
 
   return (
     <div className="space-y-4">
       {/* Top Banner & Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <div className="bg-white border border-stone-200 rounded-xl p-3.5 shadow-2xs">
           <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
-            Parent Categories
+            {locale === 'hi' ? 'मुख्य श्रेणियां' : 'Parent Categories'}
           </span>
           <div className="flex items-baseline gap-1 mt-1">
             <span className="text-xl font-extrabold text-stone-900">{stats.totalParents}</span>
-            <span className="text-[11px] text-stone-400 font-medium">groups</span>
+            <span className="text-[11px] text-stone-400 font-medium">{locale === 'hi' ? 'ग्रुप' : 'groups'}</span>
           </div>
         </div>
 
         <div className="bg-white border border-stone-200 rounded-xl p-3.5 shadow-2xs">
           <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
-            Categories
+            {locale === 'hi' ? 'उप-श्रेणियां' : 'Categories'}
           </span>
           <div className="flex items-baseline gap-1 mt-1">
             <span className="text-xl font-extrabold text-stone-900">{stats.totalCategories}</span>
-            <span className="text-[11px] text-stone-400 font-medium">subcategories</span>
+            <span className="text-[11px] text-stone-400 font-medium">{locale === 'hi' ? 'श्रेणियां' : 'subcategories'}</span>
           </div>
         </div>
 
         <div className="bg-white border border-stone-200 rounded-xl p-3.5 shadow-2xs">
           <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
-            Canonical Menu Items
+            {locale === 'hi' ? 'मेनू आइटम' : 'Menu Items'}
           </span>
           <div className="flex items-baseline gap-1 mt-1">
             <span className="text-xl font-extrabold text-amber-600">{stats.totalItems}</span>
-            <span className="text-[11px] text-stone-400 font-medium">items</span>
+            <span className="text-[11px] text-stone-400 font-medium">{locale === 'hi' ? 'आइटम' : 'items'}</span>
+          </div>
+        </div>
+
+        <div
+          onClick={() => setViewTab('needs_setup')}
+          className={`border rounded-xl p-3.5 shadow-2xs cursor-pointer transition ${
+            stats.needsSetupCount > 0
+              ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400'
+              : 'bg-white border-stone-200 hover:border-stone-300'
+          }`}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wider block text-amber-700">
+            {locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'}
+          </span>
+          <div className="flex items-baseline gap-1 mt-1">
+            <span className={`text-xl font-extrabold ${stats.needsSetupCount > 0 ? 'text-amber-600' : 'text-stone-400'}`}>
+              {stats.needsSetupCount}
+            </span>
+            <span className="text-[11px] text-stone-400 font-medium">{locale === 'hi' ? 'अनसेट' : 'pending'}</span>
           </div>
         </div>
 
@@ -252,6 +303,16 @@ export function MenuMasterView() {
             <Button
               variant="outline"
               size="sm"
+              onClick={handleDiscoverSalesItems}
+              disabled={discovering}
+              className="text-stone-700 border-stone-300 hover:bg-stone-100 flex items-center gap-1.5"
+            >
+              <Sparkles className={`h-3.5 w-3.5 text-amber-600 ${discovering ? 'animate-spin' : ''}`} />
+              <span>{locale === 'hi' ? 'बिक्री से सिंक करें' : 'Sync from Sales'}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setEditingParent(null);
                 setParentModalOpen(true);
@@ -289,54 +350,67 @@ export function MenuMasterView() {
         </div>
 
         {/* View Tabs */}
-        <div className="flex border-b border-stone-200 bg-white px-4">
+        <div className="flex border-b border-stone-200 bg-white px-4 overflow-x-auto">
           <button
             onClick={() => setViewTab('tree')}
-            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition ${
+            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition shrink-0 ${
               viewTab === 'tree'
                 ? 'border-amber-600 text-amber-700 bg-amber-50/30'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
             }`}
           >
             <FolderTree className="h-4 w-4" />
-            <span>Hierarchy Tree View</span>
+            <span>{locale === 'hi' ? 'ट्री व्यू' : 'Hierarchy Tree View'}</span>
           </button>
           <button
             onClick={() => setViewTab('items')}
-            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition ${
+            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition shrink-0 ${
               viewTab === 'items'
                 ? 'border-amber-600 text-amber-700 bg-amber-50/30'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
             }`}
           >
             <UtensilsCrossed className="h-4 w-4" />
-            <span>Items Master ({stats.totalItems})</span>
+            <span>{locale === 'hi' ? 'सभी आइटम' : 'Items Master'} ({stats.totalItems})</span>
+          </button>
+          <button
+            onClick={() => setViewTab('needs_setup')}
+            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition shrink-0 ${
+              viewTab === 'needs_setup'
+                ? 'border-amber-600 text-amber-700 bg-amber-50/30'
+                : stats.needsSetupCount > 0
+                ? 'border-transparent text-amber-700 hover:text-amber-900'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <AlertCircle className={`h-4 w-4 ${stats.needsSetupCount > 0 ? 'text-amber-600' : ''}`} />
+            <span>{locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'} ({stats.needsSetupCount})</span>
           </button>
           <button
             onClick={() => setViewTab('categories')}
-            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition ${
+            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition shrink-0 ${
               viewTab === 'categories'
                 ? 'border-amber-600 text-amber-700 bg-amber-50/30'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
             }`}
           >
             <Layers className="h-4 w-4" />
-            <span>Categories ({stats.totalCategories})</span>
+            <span>{locale === 'hi' ? 'श्रेणियां' : 'Categories'} ({stats.totalCategories})</span>
           </button>
           <button
             onClick={() => setViewTab('parents')}
-            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition ${
+            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition shrink-0 ${
               viewTab === 'parents'
                 ? 'border-amber-600 text-amber-700 bg-amber-50/30'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
             }`}
           >
             <Building className="h-4 w-4" />
-            <span>Parent Categories ({stats.totalParents})</span>
+            <span>{locale === 'hi' ? 'मुख्य श्रेणियां' : 'Parent Categories'} ({stats.totalParents})</span>
           </button>
           <button
             onClick={() => setViewTab('aliases')}
-            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition ${
+            className={`py-2.5 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 cursor-pointer transition shrink-0 ${
               viewTab === 'aliases'
                 ? 'border-amber-600 text-amber-700 bg-amber-50/30'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -390,12 +464,12 @@ export function MenuMasterView() {
                                 className="w-3 h-3 rounded-full shrink-0 border border-black/10 shadow-2xs"
                                 style={{ backgroundColor: parent.color || getCategoryColor(parent.name) }}
                               />
-                              <span className="font-bold text-stone-900 text-sm">{parent.name}</span>
+                              <span className="font-bold text-stone-900 text-sm">{getLocalizedMasterName(parent, locale)}</span>
                               <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                                {parent.categoryCount} Categories
+                                {parent.categoryCount} {locale === 'hi' ? 'श्रेणियां' : 'Categories'}
                               </span>
                               <span className="text-[11px] text-stone-500 font-medium">
-                                ({parent.itemCount} items)
+                                ({parent.itemCount} {locale === 'hi' ? 'आइटम' : 'items'})
                               </span>
                             </div>
 
@@ -418,7 +492,7 @@ export function MenuMasterView() {
                             <div className="p-3 space-y-2.5 bg-stone-50/20">
                               {parent.categories.length === 0 ? (
                                 <div className="text-xs text-stone-400 italic py-2 pl-6">
-                                  No subcategories in this parent category yet.
+                                  {locale === 'hi' ? 'इस मुख्य श्रेणी में कोई उप-श्रेणी नहीं है।' : 'No subcategories in this parent category yet.'}
                                 </div>
                               ) : (
                                 parent.categories.map((cat: any) => {
@@ -442,10 +516,10 @@ export function MenuMasterView() {
                                             )}
                                           </button>
                                           <span className="font-semibold text-xs text-stone-800">
-                                            {cat.name}
+                                            {getLocalizedMasterName(cat, locale)}
                                           </span>
                                           <span className="text-[10px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full font-medium">
-                                            {cat.itemCount} items
+                                            {cat.itemCount} {locale === 'hi' ? 'आइटम' : 'items'}
                                           </span>
                                         </div>
 
@@ -482,11 +556,16 @@ export function MenuMasterView() {
                                                   className="group inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:border-amber-400 hover:bg-amber-50/30 text-xs cursor-pointer transition shadow-2xs"
                                                 >
                                                   <span className="font-medium text-stone-800 group-hover:text-amber-900">
-                                                    {it.name}
+                                                    {getLocalizedMasterName(it, locale)}
                                                   </span>
                                                   <span className="font-mono text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
                                                     {formatINR(it.price)}
                                                   </span>
+                                                  {(it.needs_setup || it.category === 'Uncategorized' || !it.category) && (
+                                                    <span className="text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-semibold border border-amber-300">
+                                                      {locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'}
+                                                    </span>
+                                                  )}
                                                   {it.aliases && it.aliases.length > 0 && (
                                                     <span className="text-[10px] text-amber-700 bg-amber-50 px-1 rounded font-medium">
                                                       +{it.aliases.length} alias
@@ -507,13 +586,70 @@ export function MenuMasterView() {
                         </div>
                       );
                     })}
+
+                    {/* Unassigned / Needs Setup Items in Tree View */}
+                    {itemsList.filter((it) => it.needs_setup || it.category === 'Uncategorized' || !it.category).length > 0 && (
+                      <div className="bg-amber-50/70 border border-amber-300 rounded-xl overflow-hidden shadow-2xs">
+                        <div className="px-4 py-3 bg-amber-100/60 border-b border-amber-200 flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <AlertCircle className="h-4 w-4 text-amber-700" />
+                            <span className="font-bold text-amber-950 text-sm">
+                              {locale === 'hi' ? 'अवर्गीकृत मेनू आइटम (सेटअप आवश्यक)' : 'Uncategorized Items (Needs Setup)'}
+                            </span>
+                            <span className="text-[11px] font-semibold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full border border-amber-300">
+                              {itemsList.filter((it) => it.needs_setup || it.category === 'Uncategorized' || !it.category).length} {locale === 'hi' ? 'आइटम' : 'items'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-3 flex flex-wrap gap-2">
+                          {itemsList
+                            .filter((it) => it.needs_setup || it.category === 'Uncategorized' || !it.category)
+                            .map((it) => (
+                              <div
+                                key={it.id}
+                                onClick={() => {
+                                  setEditingItem(it);
+                                  setItemModalOpen(true);
+                                }}
+                                className="group inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white hover:border-amber-500 hover:bg-amber-100/40 text-xs cursor-pointer transition shadow-2xs"
+                              >
+                                <span className="font-medium text-stone-900 group-hover:text-amber-900">
+                                  {getLocalizedMasterName(it, locale)}
+                                </span>
+                                <span className="font-mono text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
+                                  {formatINR(it.price)}
+                                </span>
+                                <span className="text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-semibold border border-amber-300">
+                                  {locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* TAB 2: ITEMS MASTER TABLE */}
-              {viewTab === 'items' && (
+              {/* TAB 2: ITEMS MASTER TABLE (and NEEDS SETUP TAB) */}
+              {(viewTab === 'items' || viewTab === 'needs_setup') && (
                 <div className="space-y-3">
+                  {viewTab === 'needs_setup' && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">
+                          {locale === 'hi' ? 'सेटअप बाकी मेनू आइटम' : 'Items Needing Categorization Setup'}
+                        </span>
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          {locale === 'hi'
+                            ? 'ये आइटम बिक्री रिपोर्ट आयात के दौरान नए पाए गए हैं या बिना श्रेणी के बनाए गए हैं। रिपोर्टिंग और एनालिटिक्स में सही वर्गीकरण के लिए एडिट पर क्लिक करके मुख्य श्रेणी और उप-श्रेणी चुनें।'
+                            : 'These items were newly discovered during POS sales report imports or added without category assignment. Click Edit to assign their Parent Category and Subcategory so they are properly grouped in sales and financial reports.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Granular Filters */}
                   <div className="bg-stone-50/60 border border-stone-200 rounded-xl p-3 flex flex-wrap gap-2 text-xs">
                     <div className="relative flex-1 min-w-[200px]">
@@ -535,10 +671,10 @@ export function MenuMasterView() {
                       }}
                       className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white focus:outline-none"
                     >
-                      <option value="">All Parent Categories</option>
+                      <option value="">{locale === 'hi' ? 'सभी मुख्य श्रेणियां' : 'All Parent Categories'}</option>
                       {parentsList.map((p) => (
                         <option key={p.id} value={p.name}>
-                          {p.name}
+                          {getLocalizedMasterName(p, locale)}
                         </option>
                       ))}
                     </select>
@@ -548,12 +684,12 @@ export function MenuMasterView() {
                       onChange={(e) => setFilterCategory(e.target.value)}
                       className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white focus:outline-none"
                     >
-                      <option value="">All Categories</option>
+                      <option value="">{locale === 'hi' ? 'सभी श्रेणियां' : 'All Categories'}</option>
                       {categoriesList
                         .filter((c) => !filterParent || c.parent_category_name === filterParent)
                         .map((c) => (
                           <option key={c.id} value={c.name}>
-                            {c.name}
+                            {getLocalizedMasterName(c, locale)}
                           </option>
                         ))}
                     </select>
@@ -563,9 +699,9 @@ export function MenuMasterView() {
                       onChange={(e) => setFilterActive(e.target.value)}
                       className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white focus:outline-none"
                     >
-                      <option value="all">All Status</option>
-                      <option value="active">Active Only</option>
-                      <option value="inactive">Inactive Only</option>
+                      <option value="all">{locale === 'hi' ? 'सभी स्थिति' : 'All Status'}</option>
+                      <option value="active">{locale === 'hi' ? 'केवल सक्रिय' : 'Active Only'}</option>
+                      <option value="inactive">{locale === 'hi' ? 'केवल निष्क्रिय' : 'Inactive Only'}</option>
                     </select>
                   </div>
 
@@ -595,16 +731,30 @@ export function MenuMasterView() {
                           filteredItems.map((item) => (
                             <tr key={item.id} className="hover:bg-stone-50/50">
                               <td className="p-3 font-semibold text-stone-900">
-                                {item.name}
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{getLocalizedMasterName(item, locale)}</span>
+                                    {(item.needs_setup || item.category === 'Uncategorized' || !item.category) && (
+                                      <span className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                        {locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {locale === 'hi' && item.name_hi && item.name_hi !== item.name && (
+                                    <span className="text-[11px] text-stone-400 font-normal">
+                                      {item.name}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="p-3 font-medium text-stone-700">
                                 <span className="px-2 py-0.5 rounded bg-stone-100 border border-stone-200 text-[11px]">
-                                  {item.category}
+                                  {getLocalizedMasterName({ name: item.category || 'Uncategorized', name_hi: item.category_name_hi }, locale)}
                                 </span>
                               </td>
                               <td className="p-3 font-medium text-stone-600">
                                 <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getCategoryBadgeClasses(item.parent_category)}`}>
-                                  {item.parent_category}
+                                  {getLocalizedMasterName({ name: item.parent_category || 'Uncategorized', name_hi: item.parent_category_name_hi }, locale)}
                                 </span>
                               </td>
                               <td className="p-3 text-right font-mono font-bold text-stone-900">
@@ -681,15 +831,15 @@ export function MenuMasterView() {
                         {categoriesList.map((cat) => (
                           <tr key={cat.id} className="hover:bg-stone-50/50">
                             <td className="p-3 font-semibold text-stone-900">
-                              {cat.name}
+                              {getLocalizedMasterName(cat, locale)}
                             </td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getCategoryBadgeClasses(cat.parent_category_name)}`}>
-                                {cat.parent_category_name}
+                                {locale === 'hi' && cat.parent_category_name_hi ? cat.parent_category_name_hi : cat.parent_category_name}
                               </span>
                             </td>
                             <td className="p-3 text-center font-bold text-stone-800">
-                              {cat.itemCount} items
+                              {cat.itemCount} {locale === 'hi' ? 'आइटम' : 'items'}
                             </td>
                             <td className="p-3 text-center font-mono text-stone-500">
                               {cat.display_order}
@@ -697,11 +847,11 @@ export function MenuMasterView() {
                             <td className="p-3 text-center">
                               {cat.is_active ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  Active
+                                  {locale === 'hi' ? 'सक्रिय' : 'Active'}
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-500">
-                                  Inactive
+                                  {locale === 'hi' ? 'निष्क्रिय' : 'Inactive'}
                                 </span>
                               )}
                             </td>
@@ -749,7 +899,7 @@ export function MenuMasterView() {
                                   className="w-3.5 h-3.5 rounded-full shrink-0 border border-black/10 shadow-2xs"
                                   style={{ backgroundColor: p.color || getCategoryColor(p.name) }}
                                 />
-                                <span>{p.name}</span>
+                                <span>{getLocalizedMasterName(p, locale)}</span>
                                 {p.color && (
                                   <span className="text-[10px] font-mono font-normal text-stone-400 uppercase">
                                     {p.color}
@@ -758,10 +908,10 @@ export function MenuMasterView() {
                               </div>
                             </td>
                             <td className="p-3 text-center font-semibold text-amber-700">
-                              {p.categoryCount} categories
+                              {p.categoryCount} {locale === 'hi' ? 'श्रेणियां' : 'categories'}
                             </td>
                             <td className="p-3 text-center font-bold text-stone-800">
-                              {p.itemCount} items
+                              {p.itemCount} {locale === 'hi' ? 'आइटम' : 'items'}
                             </td>
                             <td className="p-3 text-center font-mono text-stone-500">
                               {p.display_order}

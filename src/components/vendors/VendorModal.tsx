@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 import { Vendor } from '@/lib/types/database';
-import { X, Check, Building2, Phone, Mail, MapPin, CreditCard, Tag, AlertCircle } from 'lucide-react';
+import { X, Check, Building2, AlertCircle } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
@@ -15,33 +15,33 @@ interface VendorModalProps {
   onSaved?: (vendor: Vendor) => void;
 }
 
-const DEFAULT_CATEGORIES = [
-  'Vegetables & Fruits',
-  'Groceries & Spices',
-  'Dairy & Milk',
-  'LPG & Fuel',
-  'Beverages',
-  'Disposables & Packaging',
-  'Maintenance & Hardware',
-  'Uniforms & Linens',
-  'Cleaning & Sanitation',
-  'Other',
+const DEFAULT_CATEGORIES: { name: string; name_hi: string }[] = [
+  { name: 'Vegetables & Fruits', name_hi: 'फल और सब्ज़ियाँ' },
+  { name: 'Groceries & Spices', name_hi: 'किराना और मसाले' },
+  { name: 'Dairy & Milk', name_hi: 'डेयरी और दूध' },
+  { name: 'LPG & Fuel', name_hi: 'एलपीजी और ईंधन' },
+  { name: 'Beverages', name_hi: 'बेवरेज' },
+  { name: 'Disposables & Packaging', name_hi: 'डिस्पोजेबल और पैकेजिंग' },
+  { name: 'Maintenance & Hardware', name_hi: 'मेंटेनेंस और हार्डवेयर' },
+  { name: 'Uniforms & Linens', name_hi: 'यूनिफॉर्म और लिनन' },
+  { name: 'Cleaning & Sanitation', name_hi: 'सफाई और स्वच्छता' },
+  { name: 'Other', name_hi: 'अन्य' },
 ];
 
-const PAYMENT_TERMS_OPTIONS = [
-  'Immediate / Cash on Delivery',
-  'Net 7 Days',
-  'Net 15 Days',
-  'Net 30 Days',
-  'Advance Payment',
+const PAYMENT_TERMS_CONFIG = [
+  { id: 'Immediate / Cash on Delivery', en: 'Immediate / Cash on Delivery', hi: 'तत्काल / डिलीवरी पर नकद' },
+  { id: 'Net 7 Days', en: 'Net 7 Days', hi: '7 दिन की अवधि' },
+  { id: 'Net 15 Days', en: 'Net 15 Days', hi: '15 दिन की अवधि' },
+  { id: 'Net 30 Days', en: 'Net 30 Days', hi: '30 दिन की अवधि' },
+  { id: 'Advance Payment', en: 'Advance Payment', hi: 'एडवांस पेमेंट' },
 ];
 
-const PAYMENT_FREQUENCY_OPTIONS = [
-  'Per Delivery',
-  'Weekly',
-  'Bi-weekly',
-  'Monthly',
-  'As Needed',
+const PAYMENT_FREQUENCY_CONFIG = [
+  { id: 'Per Delivery', en: 'Per Delivery', hi: 'प्रत्येक डिलीवरी पर' },
+  { id: 'Weekly', en: 'Weekly', hi: 'साप्ताहिक' },
+  { id: 'Bi-weekly', en: 'Bi-weekly', hi: 'हर 15 दिन' },
+  { id: 'Monthly', en: 'Monthly', hi: 'मासिक' },
+  { id: 'As Needed', en: 'As Needed', hi: 'ज़रूरत के अनुसार' },
 ];
 
 export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalProps) {
@@ -64,7 +64,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
   const [isActive, setIsActive] = useState(true);
 
   const [paymentMethods, setPaymentMethods] = useState<{ id: string; name: string; name_hi?: string | null }[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [availableCategories, setAvailableCategories] = useState<{ name: string; name_hi?: string | null }[]>(DEFAULT_CATEGORIES);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -77,13 +77,13 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
       ]);
       if (pmData) setPaymentMethods(pmData);
       if (catData && catData.length > 0) {
-        setAvailableCategories(catData.map((c) => (locale === 'hi' && c.name_hi ? c.name_hi : c.name)));
+        setAvailableCategories(catData);
       }
     }
     if (isOpen) {
       fetchMasters();
     }
-  }, [isOpen, supabase, locale]);
+  }, [isOpen, supabase]);
 
   // Initialize or generate vendor code
   useEffect(() => {
@@ -146,11 +146,11 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
     }
   };
 
-  const toggleCategory = (cat: string) => {
-    if (supplierCategories.includes(cat)) {
-      setSupplierCategories(supplierCategories.filter((c) => c !== cat));
+  const toggleCategory = (catName: string) => {
+    if (supplierCategories.includes(catName)) {
+      setSupplierCategories(supplierCategories.filter((c) => c !== catName));
     } else {
-      setSupplierCategories([...supplierCategories, cat]);
+      setSupplierCategories([...supplierCategories, catName]);
     }
   };
 
@@ -158,16 +158,21 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
     if ('key' in e && e.key !== 'Enter') return;
     e.preventDefault();
     const trimmed = customCategory.trim();
-    if (trimmed && !supplierCategories.includes(trimmed)) {
+    if (!trimmed) return;
+
+    if (!supplierCategories.includes(trimmed)) {
       setSupplierCategories([...supplierCategories, trimmed]);
-      setCustomCategory('');
     }
+    if (!availableCategories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setAvailableCategories([...availableCategories, { name: trimmed }]);
+    }
+    setCustomCategory('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setErrorMessage('Vendor Name is required.');
+      setErrorMessage(locale === 'hi' ? 'कृपया वेंडर का नाम भरें।' : 'Vendor name is required.');
       return;
     }
 
@@ -175,18 +180,18 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
     setErrorMessage(null);
 
     try {
-      const payload = {
-        vendor_code: vendorCode.trim() || null,
+      const payload: Partial<Vendor> = {
         name: name.trim(),
-        contact_person: contactPerson.trim() || null,
-        phone: phone.trim() || null,
-        alternate_phone: alternatePhone.trim() || null,
-        address: address.trim() || null,
-        payment_terms: paymentTerms.trim() || null,
-        payment_frequency: paymentFrequency.trim() || null,
-        preferred_payment_method_id: preferredPaymentMethodId || null,
+        vendor_code: vendorCode.trim() || undefined,
+        contact_person: contactPerson.trim() || undefined,
+        phone: phone.trim() || undefined,
+        alternate_phone: alternatePhone.trim() || undefined,
+        address: address.trim() || undefined,
+        payment_terms: paymentTerms,
+        payment_frequency: paymentFrequency,
+        preferred_payment_method_id: preferredPaymentMethodId || undefined,
         supplier_categories: supplierCategories,
-        notes: notes.trim() || null,
+        notes: notes.trim() || undefined,
         is_active: isActive,
         updated_at: new Date().toISOString(),
       };
@@ -279,7 +284,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Sharma Fresh Vegetables"
+                  placeholder={locale === 'hi' ? 'उदा. शर्मा फ्रेश वेजिटेबल्स' : 'e.g. Sharma Fresh Vegetables'}
                   className="w-full rounded-md border border-stone-300 p-2.5 text-stone-900 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
                 />
               </div>
@@ -306,7 +311,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                   type="text"
                   value={contactPerson}
                   onChange={(e) => setContactPerson(e.target.value)}
-                  placeholder="e.g. Ramesh Sharma"
+                  placeholder={locale === 'hi' ? 'उदा. रमेश शर्मा' : 'e.g. Ramesh Sharma'}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -328,7 +333,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                   type="tel"
                   value={alternatePhone}
                   onChange={(e) => setAlternatePhone(e.target.value)}
-                  placeholder="Optional backup phone"
+                  placeholder={locale === 'hi' ? 'वैकल्पिक फ़ोन नंबर' : 'Optional backup phone'}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -340,7 +345,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                 rows={2}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Shop/Mandi number, street, city..."
+                placeholder={locale === 'hi' ? 'दुकान/मंडी नंबर, सड़क, शहर...' : 'Shop/Mandi number, street, city...'}
                 className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 resize-none"
               />
             </div>
@@ -354,12 +359,12 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
 
             <div className="flex flex-wrap gap-1.5 pt-1">
               {availableCategories.map((cat) => {
-                const isSelected = supplierCategories.includes(cat);
+                const isSelected = supplierCategories.includes(cat.name);
                 return (
                   <button
                     type="button"
-                    key={cat}
-                    onClick={() => toggleCategory(cat)}
+                    key={cat.name}
+                    onClick={() => toggleCategory(cat.name)}
                     className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${
                       isSelected
                         ? 'bg-amber-100 text-amber-900 border-amber-300 font-semibold'
@@ -367,7 +372,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                     }`}
                   >
                     {isSelected && <Check className="h-3 w-3 text-amber-700" />}
-                    {cat}
+                    {getLocalizedMasterName(cat, locale)}
                   </button>
                 );
               })}
@@ -406,18 +411,18 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                   onChange={(e) => setPaymentTerms(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  {PAYMENT_TERMS_OPTIONS.map((term) => (
-                    <option key={term} value={term}>
-                      {term}
+                  {PAYMENT_TERMS_CONFIG.map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {locale === 'hi' ? term.hi : term.en}
                     </option>
                   ))}
-                  <option value="Custom">Custom Terms</option>
+                  <option value="Custom">{locale === 'hi' ? 'अन्य शर्तें' : 'Custom Terms'}</option>
                 </select>
                 {paymentTerms === 'Custom' && (
                   <input
                     type="text"
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    placeholder="Specify custom terms..."
+                    placeholder={locale === 'hi' ? 'शर्तें दर्ज करें...' : 'Specify custom terms...'}
                     className="mt-1.5 w-full rounded-md border border-stone-300 p-1.5 text-stone-900 focus:outline-none focus:border-amber-500 text-xs"
                   />
                 )}
@@ -430,9 +435,9 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                   onChange={(e) => setPaymentFrequency(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 >
-                  {PAYMENT_FREQUENCY_OPTIONS.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
+                  {PAYMENT_FREQUENCY_CONFIG.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {locale === 'hi' ? f.hi : f.en}
                     </option>
                   ))}
                 </select>
@@ -468,7 +473,7 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional notes..."
+                placeholder={locale === 'hi' ? 'अतिरिक्त वेंडर विवरण, बैंक विवरण, आदि...' : 'Optional notes...'}
                 className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 resize-none"
               />
             </div>

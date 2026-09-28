@@ -9,6 +9,7 @@ import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/mas
 import { X, Package, Check, AlertCircle } from 'lucide-react';
 
 import { logAuditAction } from '@/lib/audit-logger';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -47,6 +48,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
   const [itemCode, setItemCode] = useState('');
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
+  const [isCustomHindi, setIsCustomHindi] = useState(false);
   const [categoryId, setCategoryId] = useState('');
   const [inventoryClass, setInventoryClass] = useState('Food Raw Material');
   const [unitId, setUnitId] = useState('');
@@ -140,6 +143,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
     if (item) {
       setItemCode(item.item_code || '');
       setName(item.name || '');
+      setNameHi(item.name_hi || '');
+      setIsCustomHindi(Boolean(item.name_hi_is_custom));
       setCategoryId(item.category_id || '');
       setInventoryClass(item.inventory_class || 'Food Raw Material');
       setUnitId(item.unit_id || '');
@@ -154,6 +159,8 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setIsActive(item.is_active !== false);
     } else {
       setName('');
+      setNameHi('');
+      setIsCustomHindi(false);
       setCategoryId('');
       setInventoryClass('Food Raw Material');
       setUnitId('');
@@ -210,9 +217,11 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
     try {
       const isFood = inventoryClass === 'Food Raw Material';
-      const payload = {
+      const payload: any = {
         item_code: itemCode.trim() || null,
         name: name.trim(),
+        name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
+        name_hi_is_custom: isCustomHindi,
         category_id: categoryId || null,
         inventory_class: inventoryClass,
         unit_id: unitId || null,
@@ -318,21 +327,23 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
           {/* Identification */}
           <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block font-medium text-stone-700 mb-1">
-                  {t('inventory.modal.name')}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t('inventory.modal.namePlaceholder')}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+            <BilingualNameInput
+              englishName={name}
+              onChangeEnglish={setName}
+              hindiName={nameHi}
+              onChangeHindi={(val, isCustom) => {
+                setNameHi(val);
+                if (isCustom !== undefined) setIsCustomHindi(isCustom);
+              }}
+              entityType="inventory_item"
+              englishLabel={locale === 'hi' ? 'आइटम का नाम (अंग्रेज़ी)' : 'Item Name (English)'}
+              hindiLabel={locale === 'hi' ? 'आइटम का नाम (हिंदी)' : 'Item Name (Hindi)'}
+              placeholderEnglish="e.g. Sunflower Oil, Basmati Rice"
+              placeholderHindi="उदा. सनफ्लावर ऑयल, बासमती चावल"
+              required
+            />
 
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.code')}</label>
                 <input
@@ -343,9 +354,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   className="w-full rounded-md border border-stone-300 bg-stone-50 p-2 font-mono text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.class')}</label>
                 <select

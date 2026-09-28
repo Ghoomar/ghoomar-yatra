@@ -5,7 +5,10 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { Department, Team, EmployeeRole } from '@/lib/types/database';
-import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, Network, ChevronRight, Trash2 } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
+import { X, Edit2, Power, AlertCircle, Network, Trash2 } from 'lucide-react';
 
 interface OrgHierarchyModalProps {
   isOpen: boolean;
@@ -20,6 +23,7 @@ export function OrgHierarchyModal({
   onUpdated,
   defaultTab = 'departments',
 }: OrgHierarchyModalProps) {
+  const { locale } = useI18n();
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'departments' | 'teams' | 'roles'>(defaultTab);
 
@@ -33,18 +37,21 @@ export function OrgHierarchyModal({
   // Department Form
   const [deptId, setDeptId] = useState<string | null>(null);
   const [deptName, setDeptName] = useState('');
+  const [deptNameHi, setDeptNameHi] = useState('');
   const [deptCode, setDeptCode] = useState('');
 
   // Team Form
   const [teamFormId, setTeamFormId] = useState<string | null>(null);
   const [teamDeptId, setTeamDeptId] = useState('');
   const [teamName, setTeamName] = useState('');
+  const [teamNameHi, setTeamNameHi] = useState('');
   const [teamCode, setTeamCode] = useState('');
 
   // Role Form
   const [roleFormId, setRoleFormId] = useState<string | null>(null);
   const [roleTeamId, setRoleTeamId] = useState('');
   const [roleName, setRoleName] = useState('');
+  const [roleNameHi, setRoleNameHi] = useState('');
   const [roleCanReceiveIssues, setRoleCanReceiveIssues] = useState(false);
 
   const loadData = async () => {
@@ -53,10 +60,10 @@ export function OrgHierarchyModal({
     try {
       const [{ data: dData }, { data: tData }, { data: rData }] = await Promise.all([
         supabase.from('departments').select('*').order('name'),
-        supabase.from('teams').select('*, department:departments(id, name)').order('name'),
+        supabase.from('teams').select('*, department:departments(id, name, name_hi)').order('name'),
         supabase
           .from('employee_roles')
-          .select('*, team:teams(id, name, department_id, department:departments(id, name))')
+          .select('*, team:teams(id, name, name_hi, department_id, department:departments(id, name, name_hi))')
           .order('name'),
       ]);
 
@@ -81,16 +88,19 @@ export function OrgHierarchyModal({
   const resetForms = () => {
     setDeptId(null);
     setDeptName('');
+    setDeptNameHi('');
     setDeptCode('');
 
     setTeamFormId(null);
     setTeamDeptId('');
     setTeamName('');
+    setTeamNameHi('');
     setTeamCode('');
 
     setRoleFormId(null);
     setRoleTeamId('');
     setRoleName('');
+    setRoleNameHi('');
     setRoleCanReceiveIssues(false);
     setErrorMessage(null);
   };
@@ -104,12 +114,17 @@ export function OrgHierarchyModal({
       if (deptId) {
         const { error } = await supabase
           .from('departments')
-          .update({ name: deptName.trim(), code: deptCode.trim() || null })
+          .update({
+            name: deptName.trim(),
+            name_hi: deptNameHi.trim() || null,
+            code: deptCode.trim() || null,
+          })
           .eq('id', deptId);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('departments').insert({
           name: deptName.trim(),
+          name_hi: deptNameHi.trim() || null,
           code: deptCode.trim() || null,
           is_active: true,
         });
@@ -140,14 +155,22 @@ export function OrgHierarchyModal({
   };
 
   const handleDeleteDept = async (d: Department) => {
-    if (!confirm(`Are you sure you want to delete department "${d.name}"?`)) return;
+    const confirmMsg =
+      locale === 'hi'
+        ? `क्या आप वाकई "${getLocalizedMasterName(d, locale)}" विभाग को हटाना चाहते हैं?`
+        : `Are you sure you want to delete department "${d.name}"?`;
+    if (!confirm(confirmMsg)) return;
     try {
       const { error } = await supabase.from('departments').delete().eq('id', d.id);
       if (error) throw error;
       loadData();
       if (onUpdated) onUpdated();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Cannot delete department. Please deactivate it instead if it has linked teams or employees.');
+      setErrorMessage(
+        locale === 'hi'
+          ? 'विभाग हटाया नहीं जा सकता। यदि इसमें टीमें या कर्मचारी जुड़े हैं, तो इसे निष्क्रिय करें।'
+          : (err.message || 'Cannot delete department. Please deactivate it instead if it has linked teams or employees.')
+      );
     }
   };
 
@@ -163,6 +186,7 @@ export function OrgHierarchyModal({
           .update({
             department_id: teamDeptId,
             name: teamName.trim(),
+            name_hi: teamNameHi.trim() || null,
             code: teamCode.trim() || null,
           })
           .eq('id', teamFormId);
@@ -171,6 +195,7 @@ export function OrgHierarchyModal({
         const { error } = await supabase.from('teams').insert({
           department_id: teamDeptId,
           name: teamName.trim(),
+          name_hi: teamNameHi.trim() || null,
           code: teamCode.trim() || null,
           is_active: true,
         });
@@ -201,14 +226,22 @@ export function OrgHierarchyModal({
   };
 
   const handleDeleteTeam = async (t: Team) => {
-    if (!confirm(`Are you sure you want to delete kitchen section/team "${t.name}"?`)) return;
+    const confirmMsg =
+      locale === 'hi'
+        ? `क्या आप वाकई "${getLocalizedMasterName(t, locale)}" टीम को हटाना चाहते हैं?`
+        : `Are you sure you want to delete kitchen section/team "${t.name}"?`;
+    if (!confirm(confirmMsg)) return;
     try {
       const { error } = await supabase.from('teams').delete().eq('id', t.id);
       if (error) throw error;
       loadData();
       if (onUpdated) onUpdated();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Cannot delete team. Please deactivate it instead if it has linked employees or store issues.');
+      setErrorMessage(
+        locale === 'hi'
+          ? 'टीम हटाई नहीं जा सकती। यदि इसमें कर्मचारी या सामग्री निकासी जुड़ी है, तो इसे निष्क्रिय करें।'
+          : (err.message || 'Cannot delete team. Please deactivate it instead if it has linked employees or store issues.')
+      );
     }
   };
 
@@ -224,6 +257,7 @@ export function OrgHierarchyModal({
           .update({
             team_id: roleTeamId,
             name: roleName.trim(),
+            name_hi: roleNameHi.trim() || null,
             can_receive_store_issues: roleCanReceiveIssues,
           })
           .eq('id', roleFormId);
@@ -232,6 +266,7 @@ export function OrgHierarchyModal({
         const { error } = await supabase.from('employee_roles').insert({
           team_id: roleTeamId,
           name: roleName.trim(),
+          name_hi: roleNameHi.trim() || null,
           can_receive_store_issues: roleCanReceiveIssues,
           is_active: true,
         });
@@ -273,9 +308,13 @@ export function OrgHierarchyModal({
               <Network className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-stone-900">Organization Structure Master</h2>
+              <h2 className="text-base font-bold text-stone-900">
+                {locale === 'hi' ? 'संगठनात्मक ढांचा मास्टर' : 'Organization Structure Master'}
+              </h2>
               <p className="text-xs text-stone-500">
-                Manage Departments → Teams/Functions → Operational Roles &amp; Capabilities
+                {locale === 'hi'
+                  ? 'विभाग → टीमें/कार्य → परिचालन भूमिकाएँ व अनुमतियाँ प्रबंधित करें'
+                  : 'Manage Departments → Teams/Functions → Operational Roles & Capabilities'}
               </p>
             </div>
           </div>
@@ -300,7 +339,7 @@ export function OrgHierarchyModal({
                 : 'border-transparent text-stone-500 hover:text-stone-700'
             }`}
           >
-            1. Departments ({departments.length})
+            {locale === 'hi' ? `1. विभाग (${departments.length})` : `1. Departments (${departments.length})`}
           </button>
           <button
             onClick={() => {
@@ -313,7 +352,7 @@ export function OrgHierarchyModal({
                 : 'border-transparent text-stone-500 hover:text-stone-700'
             }`}
           >
-            2. Teams &amp; Functions ({teams.length})
+            {locale === 'hi' ? `2. टीमें व कार्य (${teams.length})` : `2. Teams & Functions (${teams.length})`}
           </button>
           <button
             onClick={() => {
@@ -326,7 +365,7 @@ export function OrgHierarchyModal({
                 : 'border-transparent text-stone-500 hover:text-stone-700'
             }`}
           >
-            3. Operational Roles ({roles.length})
+            {locale === 'hi' ? `3. परिचालन भूमिकाएँ (${roles.length})` : `3. Operational Roles (${roles.length})`}
           </button>
         </div>
 
@@ -347,45 +386,52 @@ export function OrgHierarchyModal({
                 className="p-4 bg-stone-50 rounded-lg border border-stone-200 space-y-3"
               >
                 <div className="font-semibold text-stone-800 flex items-center justify-between">
-                  <span>{deptId ? 'Edit Department' : 'Add Department'}</span>
+                  <span>
+                    {deptId
+                      ? locale === 'hi' ? 'विभाग संपादित करें' : 'Edit Department'
+                      : locale === 'hi' ? 'नया विभाग जोड़ें' : 'Add Department'}
+                  </span>
                   {deptId && (
                     <button
                       type="button"
                       onClick={resetForms}
                       className="text-stone-500 text-[11px] underline"
                     >
-                      Cancel
+                      {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-stone-700 mb-1">
-                      Department Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={deptName}
-                      onChange={(e) => setDeptName(e.target.value)}
-                      placeholder="e.g. Kitchen & Production"
-                      className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-stone-700 mb-1">Code</label>
-                    <input
-                      type="text"
-                      value={deptCode}
-                      onChange={(e) => setDeptCode(e.target.value)}
-                      placeholder="e.g. KITCHEN"
-                      className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white font-mono focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
+                <BilingualNameInput
+                  englishName={deptName}
+                  onChangeEnglish={setDeptName}
+                  hindiName={deptNameHi}
+                  onChangeHindi={(val) => setDeptNameHi(val)}
+                  entityType="department"
+                  englishLabel={locale === 'hi' ? 'विभाग का नाम (अंग्रेज़ी)' : 'Department Name (English)'}
+                  hindiLabel={locale === 'hi' ? 'विभाग का नाम (हिंदी)' : 'Department Name (Hindi)'}
+                  placeholderEnglish="e.g. Kitchen & Production"
+                  placeholderHindi="उदा. रसोई एवं उत्पादन"
+                  required
+                />
+                <div>
+                  <label className="block font-medium text-stone-700 mb-1">
+                    {locale === 'hi' ? 'कोड' : 'Code'}
+                  </label>
+                  <input
+                    type="text"
+                    value={deptCode}
+                    onChange={(e) => setDeptCode(e.target.value)}
+                    placeholder="e.g. KITCHEN"
+                    className="w-full sm:w-1/3 rounded-md border border-stone-300 p-2 text-stone-900 bg-white font-mono focus:outline-none focus:border-amber-500"
+                  />
                 </div>
                 <div className="flex justify-end pt-1">
                   <Button type="submit" variant="amber" size="sm" disabled={saving}>
-                    {saving ? 'Saving...' : deptId ? 'Save Changes' : '+ Add Department'}
+                    {saving
+                      ? locale === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...'
+                      : deptId
+                      ? locale === 'hi' ? 'बदलाव सहेजें' : 'Save Changes'
+                      : locale === 'hi' ? '+ विभाग जोड़ें' : '+ Add Department'}
                   </Button>
                 </div>
               </form>
@@ -399,14 +445,21 @@ export function OrgHierarchyModal({
                     }`}
                   >
                     <div>
-                      <span className="font-semibold text-stone-900 mr-2">{d.name}</span>
+                      <span className="font-semibold text-stone-900 mr-2">
+                        {getLocalizedMasterName(d, locale)}
+                      </span>
+                      {locale === 'hi' && d.name_hi && (
+                        <span className="text-stone-400 text-[11px] mr-2">({d.name})</span>
+                      )}
                       {d.code && (
                         <span className="font-mono text-stone-500 text-[11px] bg-stone-100 px-1.5 py-0.5 rounded">
                           {d.code}
                         </span>
                       )}
                       <Badge variant={d.is_active ? 'success' : 'default'} className="ml-2">
-                        {d.is_active ? 'Active' : 'Inactive'}
+                        {d.is_active
+                          ? locale === 'hi' ? 'सक्रिय' : 'Active'
+                          : locale === 'hi' ? 'निष्क्रिय' : 'Inactive'}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-1">
@@ -415,6 +468,7 @@ export function OrgHierarchyModal({
                         onClick={() => {
                           setDeptId(d.id);
                           setDeptName(d.name);
+                          setDeptNameHi(d.name_hi || '');
                           setDeptCode(d.code || '');
                         }}
                         className="p-1.5 rounded text-stone-500 hover:text-amber-600 hover:bg-stone-100"
@@ -427,7 +481,11 @@ export function OrgHierarchyModal({
                         className={`p-1.5 rounded ${
                           d.is_active ? 'text-stone-400 hover:text-rose-600' : 'text-stone-400 hover:text-emerald-600'
                         }`}
-                        title={d.is_active ? 'Deactivate department' : 'Activate department'}
+                        title={
+                          d.is_active
+                            ? locale === 'hi' ? 'विभाग निष्क्रिय करें' : 'Deactivate department'
+                            : locale === 'hi' ? 'विभाग सक्रिय करें' : 'Activate department'
+                        }
                       >
                         <Power className="h-3.5 w-3.5" />
                       </button>
@@ -435,7 +493,7 @@ export function OrgHierarchyModal({
                         type="button"
                         onClick={() => handleDeleteDept(d)}
                         className="p-1.5 rounded text-stone-400 hover:text-rose-600 hover:bg-stone-100"
-                        title="Delete department"
+                        title={locale === 'hi' ? 'विभाग हटाएं' : 'Delete department'}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -454,21 +512,26 @@ export function OrgHierarchyModal({
                 className="p-4 bg-stone-50 rounded-lg border border-stone-200 space-y-3"
               >
                 <div className="font-semibold text-stone-800 flex items-center justify-between">
-                  <span>{teamFormId ? 'Edit Team' : 'Add Team'}</span>
+                  <span>
+                    {teamFormId
+                      ? locale === 'hi' ? 'टीम संपादित करें' : 'Edit Team'
+                      : locale === 'hi' ? 'नई टीम जोड़ें' : 'Add Team'}
+                  </span>
                   {teamFormId && (
                     <button
                       type="button"
                       onClick={resetForms}
                       className="text-stone-500 text-[11px] underline"
                     >
-                      Cancel
+                      {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-3">
                   <div>
                     <label className="block font-medium text-stone-700 mb-1">
-                      Parent Department <span className="text-rose-500">*</span>
+                      {locale === 'hi' ? 'मूल विभाग' : 'Parent Department'}{' '}
+                      <span className="text-rose-500">*</span>
                     </label>
                     <select
                       required
@@ -476,41 +539,46 @@ export function OrgHierarchyModal({
                       onChange={(e) => setTeamDeptId(e.target.value)}
                       className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
                     >
-                      <option value="">Select Department...</option>
+                      <option value="">{locale === 'hi' ? 'विभाग चुनें...' : 'Select Department...'}</option>
                       {departments.map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.name}
+                          {getLocalizedMasterName(d, locale)}
                         </option>
                       ))}
                     </select>
                   </div>
+                  <BilingualNameInput
+                    englishName={teamName}
+                    onChangeEnglish={setTeamName}
+                    hindiName={teamNameHi}
+                    onChangeHindi={(val) => setTeamNameHi(val)}
+                    entityType="department"
+                    englishLabel={locale === 'hi' ? 'टीम का नाम (अंग्रेज़ी)' : 'Team Name (English)'}
+                    hindiLabel={locale === 'hi' ? 'टीम का नाम (हिंदी)' : 'Team Name (Hindi)'}
+                    placeholderEnglish="e.g. North Indian Kitchen"
+                    placeholderHindi="उदा. नॉर्थ इंडियन किचन"
+                    required
+                  />
                   <div>
                     <label className="block font-medium text-stone-700 mb-1">
-                      Team Name <span className="text-rose-500">*</span>
+                      {locale === 'hi' ? 'कोड' : 'Code'}
                     </label>
-                    <input
-                      type="text"
-                      required
-                      value={teamName}
-                      onChange={(e) => setTeamName(e.target.value)}
-                      placeholder="e.g. North Indian Kitchen"
-                      className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-stone-700 mb-1">Code</label>
                     <input
                       type="text"
                       value={teamCode}
                       onChange={(e) => setTeamCode(e.target.value)}
                       placeholder="e.g. NIK"
-                      className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white font-mono focus:outline-none focus:border-amber-500"
+                      className="w-full sm:w-1/3 rounded-md border border-stone-300 p-2 text-stone-900 bg-white font-mono focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 </div>
                 <div className="flex justify-end pt-1">
                   <Button type="submit" variant="amber" size="sm" disabled={saving}>
-                    {saving ? 'Saving...' : teamFormId ? 'Save Changes' : '+ Add Team'}
+                    {saving
+                      ? locale === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...'
+                      : teamFormId
+                      ? locale === 'hi' ? 'बदलाव सहेजें' : 'Save Changes'
+                      : locale === 'hi' ? '+ टीम जोड़ें' : '+ Add Team'}
                   </Button>
                 </div>
               </form>
@@ -525,16 +593,23 @@ export function OrgHierarchyModal({
                   >
                     <div>
                       <span className="text-stone-500 text-[11px] mr-1">
-                        {t.department?.name || 'Dept'} &rarr;
+                        {getLocalizedMasterName(t.department, locale) || (locale === 'hi' ? 'विभाग' : 'Dept')} &rarr;
                       </span>
-                      <span className="font-semibold text-stone-900 mr-2">{t.name}</span>
+                      <span className="font-semibold text-stone-900 mr-2">
+                        {getLocalizedMasterName(t, locale)}
+                      </span>
+                      {locale === 'hi' && t.name_hi && (
+                        <span className="text-stone-400 text-[11px] mr-2">({t.name})</span>
+                      )}
                       {t.code && (
                         <span className="font-mono text-stone-500 text-[11px] bg-stone-100 px-1.5 py-0.5 rounded">
                           {t.code}
                         </span>
                       )}
                       <Badge variant={t.is_active ? 'success' : 'default'} className="ml-2">
-                        {t.is_active ? 'Active' : 'Inactive'}
+                        {t.is_active
+                          ? locale === 'hi' ? 'सक्रिय' : 'Active'
+                          : locale === 'hi' ? 'निष्क्रिय' : 'Inactive'}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-1">
@@ -544,6 +619,7 @@ export function OrgHierarchyModal({
                           setTeamFormId(t.id);
                           setTeamDeptId(t.department_id);
                           setTeamName(t.name);
+                          setTeamNameHi(t.name_hi || '');
                           setTeamCode(t.code || '');
                         }}
                         className="p-1.5 rounded text-stone-500 hover:text-amber-600 hover:bg-stone-100"
@@ -556,7 +632,11 @@ export function OrgHierarchyModal({
                         className={`p-1.5 rounded ${
                           t.is_active ? 'text-stone-400 hover:text-rose-600' : 'text-stone-400 hover:text-emerald-600'
                         }`}
-                        title={t.is_active ? 'Deactivate section' : 'Activate section'}
+                        title={
+                          t.is_active
+                            ? locale === 'hi' ? 'टीम निष्क्रिय करें' : 'Deactivate section'
+                            : locale === 'hi' ? 'टीम सक्रिय करें' : 'Activate section'
+                        }
                       >
                         <Power className="h-3.5 w-3.5" />
                       </button>
@@ -564,7 +644,7 @@ export function OrgHierarchyModal({
                         type="button"
                         onClick={() => handleDeleteTeam(t)}
                         className="p-1.5 rounded text-stone-400 hover:text-rose-600 hover:bg-stone-100"
-                        title="Delete section"
+                        title={locale === 'hi' ? 'टीम हटाएं' : 'Delete section'}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -583,21 +663,26 @@ export function OrgHierarchyModal({
                 className="p-4 bg-stone-50 rounded-lg border border-stone-200 space-y-3"
               >
                 <div className="font-semibold text-stone-800 flex items-center justify-between">
-                  <span>{roleFormId ? 'Edit Operational Role' : 'Add Operational Role'}</span>
+                  <span>
+                    {roleFormId
+                      ? locale === 'hi' ? 'परिचालन भूमिका संपादित करें' : 'Edit Operational Role'
+                      : locale === 'hi' ? 'नई परिचालन भूमिका जोड़ें' : 'Add Operational Role'}
+                  </span>
                   {roleFormId && (
                     <button
                       type="button"
                       onClick={resetForms}
                       className="text-stone-500 text-[11px] underline"
                     >
-                      Cancel
+                      {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-3">
                   <div>
                     <label className="block font-medium text-stone-700 mb-1">
-                      Assigned Team <span className="text-rose-500">*</span>
+                      {locale === 'hi' ? 'निर्धारित टीम' : 'Assigned Team'}{' '}
+                      <span className="text-rose-500">*</span>
                     </label>
                     <select
                       required
@@ -605,37 +690,42 @@ export function OrgHierarchyModal({
                       onChange={(e) => setRoleTeamId(e.target.value)}
                       className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
                     >
-                      <option value="">Select Team...</option>
+                      <option value="">{locale === 'hi' ? 'टीम चुनें...' : 'Select Team...'}</option>
                       {teams.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.department?.name ? `${t.department.name} • ` : ''}
-                          {t.name}
+                          {getLocalizedMasterName(t.department, locale)
+                            ? `${getLocalizedMasterName(t.department, locale)} • `
+                            : ''}
+                          {getLocalizedMasterName(t, locale)}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block font-medium text-stone-700 mb-1">
-                      Role Title <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={roleName}
-                      onChange={(e) => setRoleName(e.target.value)}
-                      placeholder="e.g. Head Chef, Captain, Cook"
-                      className="w-full rounded-md border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
+                  <BilingualNameInput
+                    englishName={roleName}
+                    onChangeEnglish={setRoleName}
+                    hindiName={roleNameHi}
+                    onChangeHindi={(val) => setRoleNameHi(val)}
+                    entityType="role"
+                    englishLabel={locale === 'hi' ? 'भूमिका का नाम (अंग्रेज़ी)' : 'Role Title (English)'}
+                    hindiLabel={locale === 'hi' ? 'भूमिका का नाम (हिंदी)' : 'Role Title (Hindi)'}
+                    placeholderEnglish="e.g. Head Chef, Captain, Cook"
+                    placeholderHindi="उदा. हेड शेफ, कैप्टन, कुक"
+                    required
+                  />
                 </div>
 
                 <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200/80 flex items-center justify-between">
                   <div>
                     <div className="font-semibold text-stone-800">
-                      Can Receive Store Issues (Kitchen/Raw Materials)
+                      {locale === 'hi'
+                        ? 'स्टोर से सामग्री ले सकते हैं (रसोई/कच्चा माल)'
+                        : 'Can Receive Store Issues (Kitchen/Raw Materials)'}
                     </div>
                     <div className="text-[11px] text-stone-500">
-                      When enabled, active employees with this role appear in the Store Issue &quot;Responsible Chef&quot; selector.
+                      {locale === 'hi'
+                        ? 'सक्रिय होने पर, इस भूमिका के कर्मचारी स्टोर निकासी में "जिम्मेदार शेफ" चयनकर्ता में दिखेंगे।'
+                        : 'When enabled, active employees with this role appear in the Store Issue "Responsible Chef" selector.'}
                     </div>
                   </div>
                   <input
@@ -648,7 +738,11 @@ export function OrgHierarchyModal({
 
                 <div className="flex justify-end pt-1">
                   <Button type="submit" variant="amber" size="sm" disabled={saving}>
-                    {saving ? 'Saving...' : roleFormId ? 'Save Changes' : '+ Add Role'}
+                    {saving
+                      ? locale === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...'
+                      : roleFormId
+                      ? locale === 'hi' ? 'बदलाव सहेजें' : 'Save Changes'
+                      : locale === 'hi' ? '+ भूमिका जोड़ें' : '+ Add Role'}
                   </Button>
                 </div>
               </form>
@@ -663,16 +757,24 @@ export function OrgHierarchyModal({
                   >
                     <div>
                       <span className="text-stone-500 text-[11px] mr-1">
-                        {r.team?.department?.name || 'Dept'} &rarr; {r.team?.name || 'Team'} &rarr;
+                        {getLocalizedMasterName(r.team?.department, locale) || (locale === 'hi' ? 'विभाग' : 'Dept')} &rarr;{' '}
+                        {getLocalizedMasterName(r.team, locale) || (locale === 'hi' ? 'टीम' : 'Team')} &rarr;
                       </span>
-                      <span className="font-semibold text-stone-900 mr-2">{r.name}</span>
+                      <span className="font-semibold text-stone-900 mr-2">
+                        {getLocalizedMasterName(r, locale)}
+                      </span>
+                      {locale === 'hi' && r.name_hi && (
+                        <span className="text-stone-400 text-[11px] mr-2">({r.name})</span>
+                      )}
                       {r.can_receive_store_issues && (
                         <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200">
-                          Store Issue Receiver
+                          {locale === 'hi' ? 'स्टोर निकासी प्राप्तकर्ता' : 'Store Issue Receiver'}
                         </span>
                       )}
                       <Badge variant={r.is_active ? 'success' : 'default'} className="ml-2">
-                        {r.is_active ? 'Active' : 'Inactive'}
+                        {r.is_active
+                          ? locale === 'hi' ? 'सक्रिय' : 'Active'
+                          : locale === 'hi' ? 'निष्क्रिय' : 'Inactive'}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-1">
@@ -682,6 +784,7 @@ export function OrgHierarchyModal({
                           setRoleFormId(r.id);
                           setRoleTeamId(r.team_id);
                           setRoleName(r.name);
+                          setRoleNameHi(r.name_hi || '');
                           setRoleCanReceiveIssues(Boolean(r.can_receive_store_issues));
                         }}
                         className="p-1.5 rounded text-stone-500 hover:text-amber-600 hover:bg-stone-100"
@@ -694,6 +797,11 @@ export function OrgHierarchyModal({
                         className={`p-1.5 rounded ${
                           r.is_active ? 'text-stone-400 hover:text-rose-600' : 'text-stone-400 hover:text-emerald-600'
                         }`}
+                        title={
+                          r.is_active
+                            ? locale === 'hi' ? 'भूमिका निष्क्रिय करें' : 'Deactivate role'
+                            : locale === 'hi' ? 'भूमिका सक्रिय करें' : 'Activate role'
+                        }
                       >
                         <Power className="h-3.5 w-3.5" />
                       </button>
@@ -708,7 +816,7 @@ export function OrgHierarchyModal({
         {/* Footer */}
         <div className="px-6 py-3 border-t border-stone-200 flex justify-end bg-stone-50">
           <Button variant="secondary" size="sm" onClick={onClose}>
-            Done
+            {locale === 'hi' ? 'पूर्ण' : 'Done'}
           </Button>
         </div>
       </div>

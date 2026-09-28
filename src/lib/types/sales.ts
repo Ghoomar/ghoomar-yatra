@@ -7,6 +7,10 @@ export type PetpoojaReportType =
 export interface PosMenuItem {
   id: string;
   name: string;
+  name_hi?: string | null;
+  name_hi_is_custom?: boolean;
+  needs_setup?: boolean;
+  category_id?: string | null;
   online_name?: string | null;
   parent_category: string;
   category: string;
@@ -155,6 +159,8 @@ export interface SalesAnalyticsResponse {
     unmatchedItems?: { itemName: string; quantity: number; amount: number }[];
   };
   parentCategoryColors?: Record<string, string>;
+  parentCategoryTranslations?: Record<string, string>;
+  categoryTranslations?: Record<string, string>;
   reconciliation: DailySalesReconciliationRow | null;
   allBills?: SalesOrder[];
   activeFilterOptions: {

@@ -10,14 +10,16 @@ interface HourlyCategoryStackedBarChartProps {
   hourlyData: HourlyCategoryDataPoint[];
   parentCategoriesList: string[];
   categoryColors?: Record<string, string>;
+  parentCategoryTranslations?: Record<string, string>;
 }
 
 export function HourlyCategoryStackedBarChart({
   hourlyData,
   parentCategoriesList,
   categoryColors,
+  parentCategoryTranslations,
 }: HourlyCategoryStackedBarChartProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [hoveredHour, setHoveredHour] = useState<HourlyCategoryDataPoint | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -179,38 +181,42 @@ export function HourlyCategoryStackedBarChart({
             {Object.entries(hoveredHour.categories)
               .sort(([, a], [, b]) => b.amount - a.amount)
               .map(([cat, d], idx) => {
-                const percent = Math.round((d.amount / hoveredHour.total_sales) * 100);
-                return (
-                  <div key={cat} className="flex items-center justify-between text-[11px] gap-3">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <div
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: getCategoryColor(cat, categoryColors) }}
-                      />
-                      <span className="truncate">{cat}</span>
+                  const percent = Math.round((d.amount / hoveredHour.total_sales) * 100);
+                  const displayName = (locale === 'hi' && parentCategoryTranslations?.[cat]) || cat;
+                  return (
+                    <div key={cat} className="flex items-center justify-between text-[11px] gap-3">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <div
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: getCategoryColor(cat, categoryColors) }}
+                        />
+                        <span className="truncate">{displayName}</span>
+                      </div>
+                      <div className="text-right shrink-0 font-mono text-stone-300">
+                        <span>{formatINR(d.amount)}</span>
+                        <span className="text-[10px] text-stone-400 ml-1">({percent}%)</span>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0 font-mono text-stone-300">
-                      <span>{formatINR(d.amount)}</span>
-                      <span className="text-[10px] text-stone-400 ml-1">({percent}%)</span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Category Legend */}
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-3 border-t border-stone-100 text-xs">
-        {parentCategoriesList.slice(0, 10).map((cat) => (
-          <div key={cat} className="flex items-center gap-1.5">
-            <div
-              className="w-2.5 h-2.5 rounded-sm"
-              style={{ backgroundColor: getCategoryColor(cat, categoryColors) }}
-            />
-            <span className="text-stone-600 font-medium text-[11px]">{cat}</span>
-          </div>
-        ))}
+        {/* Category Legend */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 pt-3 border-t border-stone-100 text-xs">
+          {parentCategoriesList.slice(0, 10).map((cat) => {
+            const displayName = (locale === 'hi' && parentCategoryTranslations?.[cat]) || cat;
+            return (
+              <div key={cat} className="flex items-center gap-1.5">
+                <div
+                  className="w-2.5 h-2.5 rounded-sm"
+                  style={{ backgroundColor: getCategoryColor(cat, categoryColors) }}
+                />
+                <span className="text-stone-600 font-medium text-[11px]">{displayName}</span>
+              </div>
+            );
+          })}
         {parentCategoriesList.length > 10 && (
           <span className="text-stone-400 text-[11px]">
             {t('finance.sales.analytics.hourlyChart.moreCategories', {

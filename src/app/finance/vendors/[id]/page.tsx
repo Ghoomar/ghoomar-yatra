@@ -92,6 +92,7 @@ export default function VendorDetailPage({
   const [payments, setPayments] = useState<VendorPaymentRecord[]>([]);
   const [vendorItems, setVendorItems] = useState<VendorItemRecord[]>([]);
   const [allItems, setAllItems] = useState<any[]>([]);
+  const [vendorCategories, setVendorCategories] = useState<{ name: string; name_hi?: string | null }[]>([]);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'purchases' | 'payments' | 'ledger' | 'items'>('overview');
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
@@ -211,7 +212,7 @@ export default function VendorDetailPage({
         payment_date: p.payment_date,
         amount: Number(p.amount) || 0,
         reference_number: p.reference_number,
-        payment_method_name: p.payment_methods ? (getLocalizedMasterName(p.payment_methods, locale) || p.payment_methods.name) : 'Cash / Direct',
+        payment_method_name: p.payment_methods ? (getLocalizedMasterName(p.payment_methods, locale) || p.payment_methods.name) : (locale === 'hi' ? 'नकद / सीधा भुगतान' : 'Cash / Direct'),
         notes: p.notes,
       }));
       setPayments(parsedPayments);
@@ -259,12 +260,46 @@ export default function VendorDetailPage({
         .eq('is_active', true)
         .order('name');
       setAllItems(itemCatalog || []);
+
+      // 6. Fetch vendor categories
+      const { data: catData } = await supabase
+        .from('vendor_categories')
+        .select('name, name_hi');
+      setVendorCategories(catData || []);
     } catch (err: any) {
       console.error('Error loading vendor:', err);
       setMessage({ type: 'error', text: t('purchases.bills.errLoad') + ': ' + err.message });
     } finally {
       setLoading(false);
     }
+  };
+
+  const vendorCatMap = useMemo(() => {
+    const map = new Map<string, string>();
+    vendorCategories.forEach((vc) => {
+      if (vc.name && vc.name_hi) {
+        map.set(vc.name.toLowerCase(), vc.name_hi);
+      }
+    });
+    return map;
+  }, [vendorCategories]);
+
+  const getCategoryDisplay = (catName: string) => {
+    if (locale === 'hi') {
+      return vendorCatMap.get(catName.toLowerCase()) || catName;
+    }
+    return catName;
+  };
+
+  const formatFrequency = (freq?: string | null) => {
+    if (!freq) return locale === 'hi' ? 'साप्ताहिक' : 'Weekly';
+    if (locale !== 'hi') return freq;
+    if (freq === 'Per Delivery') return 'प्रत्येक डिलीवरी';
+    if (freq === 'Weekly') return 'साप्ताहिक';
+    if (freq === 'Bi-weekly') return 'हर 15 दिन';
+    if (freq === 'Monthly') return 'मासिक';
+    if (freq === 'As Needed') return 'ज़रूरत के अनुसार';
+    return freq;
   };
 
   useEffect(() => {
@@ -710,21 +745,21 @@ export default function VendorDetailPage({
               <div className="grid grid-cols-3 gap-2">
                 <span className="text-stone-500 font-medium">{t('purchases.vendors.modal.paymentTerms')}:</span>
                 <span className="col-span-2 text-stone-900 font-semibold">
-                  {vendor.payment_terms || 'Net 7 Days'}
+                  {vendor.payment_terms || (locale === 'hi' ? '7 दिन की अवधि' : 'Net 7 Days')}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <span className="text-stone-500 font-medium">{t('purchases.vendors.detail.frequency')}:</span>
                 <span className="col-span-2 text-stone-900">
-                  {vendor.payment_frequency || 'Weekly'}
+                  {formatFrequency(vendor.payment_frequency)}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <span className="text-stone-500 font-medium">{t('purchases.vendors.detail.preferredMethod')}:</span>
                 <span className="col-span-2 text-stone-900">
-                  {preferredMethodName || 'Direct Bank / Any'}
+                  {preferredMethodName || (locale === 'hi' ? 'सीधा बैंक / कोई भी' : 'Direct Bank / Any')}
                 </span>
               </div>
 
@@ -737,7 +772,7 @@ export default function VendorDetailPage({
                         key={c}
                         className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200"
                       >
-                        {c}
+                        {getCategoryDisplay(c)}
                       </span>
                     ))
                   ) : (
@@ -1093,9 +1128,9 @@ export default function VendorDetailPage({
                         </td>
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           {vi.is_preferred ? (
-                            <Badge variant="success">Preferred</Badge>
+                            <Badge variant="success">{locale === 'hi' ? 'प्राथमिक' : 'Preferred'}</Badge>
                           ) : (
-                            <Badge variant="default">Alternate</Badge>
+                            <Badge variant="default">{locale === 'hi' ? 'वैकल्पिक' : 'Alternate'}</Badge>
                           )}
                         </td>
                       </tr>
@@ -1156,7 +1191,7 @@ export default function VendorDetailPage({
                     const isAlreadyLinked = vendorItems.some((vi) => vi.inventory_item_id === i.id);
                     return (
                       <option key={i.id} value={i.id}>
-                        {i.name_hi && locale === 'hi' ? i.name_hi : i.name} ({i.item_code}){isAlreadyLinked ? ' — [Already Linked]' : ''}
+                        {i.name_hi && locale === 'hi' ? i.name_hi : i.name} ({i.item_code}){isAlreadyLinked ? (locale === 'hi' ? ' — [पहले से लिंक है]' : ' — [Already Linked]') : ''}
                       </option>
                     );
                   })}

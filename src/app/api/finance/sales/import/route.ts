@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
 import { loadMenuMasterLookupFromDb, resolveItemCategory } from '@/lib/petpooja/matcher';
+import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 
 export async function POST(request: NextRequest) {
   try {
@@ -87,8 +88,17 @@ export async function POST(request: NextRequest) {
       // Fetch authoritative Menu Master mapping & hierarchy directly from database
       const lookup = await loadMenuMasterLookupFromDb(supabase);
 
+      const unmappedItemsMap = new Map<string, number>();
+
       const hourlyPayload = data.map((item) => {
         const resolution = resolveItemCategory(item.item_name, lookup);
+
+        if (!resolution.isMatched || resolution.category === 'Uncategorized') {
+          const cleanName = item.item_name.trim();
+          if (!unmappedItemsMap.has(cleanName)) {
+            unmappedItemsMap.set(cleanName, Number(item.unit_price) || 0);
+          }
+        }
 
         return {
           batch_id: newBatch.id,
@@ -114,6 +124,38 @@ export async function POST(request: NextRequest) {
         const { error: insErr } = await supabase.from('sales_hourly_items').insert(chunk);
         if (insErr) {
           throw new Error(`Failed to insert hourly items: ${insErr.message}`);
+        }
+      }
+
+      // Discover and register any newly seen items into pos_menu_items with needs_setup: true
+      if (unmappedItemsMap.size > 0) {
+        const itemNames = Array.from(unmappedItemsMap.keys());
+        const { data: existingItems } = await supabase
+          .from('pos_menu_items')
+          .select('name')
+          .in('name', itemNames);
+
+        const existingSet = new Set((existingItems || []).map((e) => e.name));
+        const newMenuItems: any[] = [];
+
+        for (const [itemName, price] of unmappedItemsMap.entries()) {
+          if (!existingSet.has(itemName)) {
+            const hindiSuggestion = suggestHindiName(itemName, 'menu_item');
+            newMenuItems.push({
+              name: itemName,
+              name_hi: hindiSuggestion.suggestion,
+              name_hi_is_custom: false,
+              category: 'Uncategorized',
+              parent_category: 'Uncategorized',
+              price: price,
+              is_active: true,
+              needs_setup: true,
+            });
+          }
+        }
+
+        if (newMenuItems.length > 0) {
+          await supabase.from('pos_menu_items').insert(newMenuItems);
         }
       }
     } else if (reportType === 'ORDERS_MASTER') {
@@ -179,9 +221,37 @@ export async function POST(request: NextRequest) {
         throw new Error(`Failed to insert executive summary: ${execErr.message}`);
       }
     } else if (reportType === 'MENU_MASTER') {
+      // Fetch existing items to preserve human-customized Hindi names
+      const names = data.map((d: any) => d.name).filter(Boolean);
+      const { data: existingMenuItems } = await supabase
+        .from('pos_menu_items')
+        .select('name, name_hi, name_hi_is_custom')
+        .in('name', names);
+
+      const existingMap = new Map((existingMenuItems || []).map((m: any) => [m.name, m]));
+
+      const enrichedMenuItems = data.map((item: any) => {
+        const existing = existingMap.get(item.name);
+        if (existing?.name_hi && existing?.name_hi_is_custom) {
+          return {
+            ...item,
+            name_hi: existing.name_hi,
+            name_hi_is_custom: true,
+            needs_setup: false,
+          };
+        }
+        const hindi = existing?.name_hi || suggestHindiName(item.name, 'menu_item').suggestion;
+        return {
+          ...item,
+          name_hi: hindi,
+          name_hi_is_custom: false,
+          needs_setup: !item.category || item.category === 'Uncategorized',
+        };
+      });
+
       // Upsert menu items on conflict (name)
-      for (let i = 0; i < data.length; i += 100) {
-        const chunk = data.slice(i, i + 100);
+      for (let i = 0; i < enrichedMenuItems.length; i += 100) {
+        const chunk = enrichedMenuItems.slice(i, i + 100);
         const { error: menuErr } = await supabase.from('pos_menu_items').upsert(chunk, {
           onConflict: 'name',
         });

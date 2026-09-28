@@ -23,9 +23,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
    - Purchase / Bills -> खरीद / बिल
    - Vendors -> वेंडर
    - Gate Counter -> गेट काउंटर
-   - Visitors / Footfall -> आगंतुक (UI) / फुटफॉल (Analytics)
+   - Visitors / Footfall -> आने वाले लोग (UI) / फुटफॉल (Analytics)
    - Vehicles / Car / Bike -> वाहन / कार / बाइक
-   - P&L / Daily Closing -> दैनिक P&L / दैनिक क्लोजिंग
+   - P&L / Daily Closing -> दैनिक मुनाफ़ा-नुकसान / दैनिक क्लोजिंग
 6. **English Allowlist (Intentionally Untranslated)**:
    - Indian currency symbol `₹` and all numbers (Arabic numerals `1, 2, 3...`) must remain in numeric format.
    - Vehicle registration RTO state prefix codes (`DL`, `UP16`, `UP22`, `UP23`, `HR`, `UK`) must remain in English for gate staff number-plate matching.

@@ -297,7 +297,7 @@ export default function PhysicalAssetsPage() {
                         </td>
                         <td className="py-3 px-3">
                           <div className="font-semibold text-stone-900 group-hover:text-amber-800">
-                            {asset.name}
+                            {getLocalizedMasterName(asset, locale)}
                           </div>
                           <div className="text-[11px] text-stone-400">
                             {formatINR(Number(asset.current_weighted_average_cost || 0))} / {unitSym}

@@ -24,7 +24,7 @@ interface ExpenseItem {
   paid_to?: string;
   approved_by?: string;
   approved_by_id?: string | null;
-  approver?: { full_name: string; role?: { name: string } } | null;
+  approver?: { full_name: string; role?: { name: string; name_hi?: string | null } } | null;
   notes?: string;
   created_at: string;
 }
@@ -57,7 +57,7 @@ export default function ExpensesPage() {
         supabase.from('payment_methods').select('*').order('name'),
         supabase
           .from('profiles')
-          .select('id, full_name, email, role:roles(name)')
+          .select('id, full_name, email, role:roles(name, name_hi)')
           .eq('is_active', true)
           .order('full_name'),
       ]);
@@ -68,7 +68,7 @@ export default function ExpensesPage() {
           *,
           category:expense_categories(name, name_hi),
           payment_method:payment_methods(name),
-          approver:profiles!expenses_approved_by_id_fkey(full_name, role:roles(name))
+          approver:profiles!expenses_approved_by_id_fkey(full_name, role:roles(name, name_hi))
         `)
         .eq('business_date', businessDate)
         .order('created_at', { ascending: false });
@@ -324,7 +324,7 @@ export default function ExpensesPage() {
                   <option value="">{t('finance.expenses.selectApprover')}</option>
                   {approvers.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.full_name} ({a.role?.name || 'Staff'})
+                      {a.full_name} ({getLocalizedMasterName(a.role, locale) || (locale === 'hi' ? 'स्टाफ' : 'Staff')})
                     </option>
                   ))}
                 </select>
@@ -373,7 +373,9 @@ export default function ExpensesPage() {
                             {e.approver?.full_name || e.approved_by || '—'}
                           </div>
                           {e.approver?.role?.name && (
-                            <div className="text-[10px] text-stone-400">{e.approver.role.name}</div>
+                            <div className="text-[10px] text-stone-400">
+                              {getLocalizedMasterName(e.approver.role, locale) || e.approver.role.name}
+                            </div>
                           )}
                         </td>
                         <td className="py-2.5 px-2 text-right font-bold text-rose-600">

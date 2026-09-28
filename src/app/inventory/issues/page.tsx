@@ -118,15 +118,15 @@ export default function StoreIssuesPage() {
         .from('stock_movements')
         .select(`
           id, business_date, movement_type, quantity, purpose, notes, created_at,
-          item:inventory_items(name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+          item:inventory_items(name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
           department:departments(name, name_hi),
           responsible_person:employees!stock_movements_responsible_person_id_fkey(
             name,
             team:teams(name, name_hi),
             role:employee_roles(name, name_hi)
           ),
-          source_loc:inventory_locations!stock_movements_source_location_id_fkey(name),
-          dest_loc:inventory_locations!stock_movements_destination_location_id_fkey(name)
+          source_loc:inventory_locations!stock_movements_source_location_id_fkey(name, name_hi),
+          dest_loc:inventory_locations!stock_movements_destination_location_id_fkey(name, name_hi)
         `)
         .in('movement_type', ['issue', 'consumption_issue', 'staff_food', 'wastage', 'spoilage', 'transfer'])
         .order('created_at', { ascending: false })
@@ -260,9 +260,12 @@ export default function StoreIssuesPage() {
       const locStock = it.location_stocks?.find((ls: any) => ls.location_id === sourceLocationId)?.quantity || 0;
 
       if (requestedBaseQty > Number(locStock)) {
+        const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
         setMessage({
           type: 'error',
-          text: `Insufficient stock for "${it.name}". Requested: ${requestedBaseQty} ${it.unit?.symbol || 'units'}, Available in selected store: ${Number(locStock).toFixed(1)} ${it.unit?.symbol || 'units'}.`,
+          text: locale === 'hi'
+            ? `"${getLocalizedMasterName(it, locale)}" के लिए स्टोर में पर्याप्त स्टॉक नहीं है। अनुरोधित: ${requestedBaseQty} ${itUnitSym}, उपलब्ध: ${Number(locStock).toFixed(1)} ${itUnitSym}।`
+            : `Insufficient stock for "${it.name}". Requested: ${requestedBaseQty} ${it.unit?.symbol || 'units'}, Available in selected store: ${Number(locStock).toFixed(1)} ${it.unit?.symbol || 'units'}.`,
         });
         return;
       }
@@ -664,7 +667,7 @@ export default function StoreIssuesPage() {
                                   const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
                                   return (
                                     <option key={it.id} value={it.id}>
-                                      [{it.item_code}] {it.name} — ({locQty} {itUnitSym} {t('inventory.issues.inStore')})
+                                      [{it.item_code}] {getLocalizedMasterName(it, locale)} — ({locQty} {itUnitSym} {t('inventory.issues.inStore')})
                                     </option>
                                   );
                                 })}
@@ -830,7 +833,7 @@ export default function StoreIssuesPage() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="font-semibold text-stone-900 text-xs truncate">
-                                {m.item?.name}
+                                {getLocalizedMasterName(m.item, locale)}
                               </div>
                               {m.item?.item_code && (
                                 <span className="text-[10px] font-mono text-stone-400">
@@ -956,7 +959,7 @@ export default function StoreIssuesPage() {
                     <option value="">{t('inventory.issues.selectItem')}</option>
                     {items.map((it) => (
                       <option key={it.id} value={it.id}>
-                        [{it.item_code}] {it.name} ({it.inventory_class})
+                        [{it.item_code}] {getLocalizedMasterName(it, locale)} ({t(`inventory.classes.${it.inventory_class}` as any) || it.inventory_class})
                       </option>
                     ))}
                   </select>
@@ -1122,7 +1125,7 @@ export default function StoreIssuesPage() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="font-semibold text-stone-900 text-xs truncate">
-                                {m.item?.name}
+                                {getLocalizedMasterName(m.item, locale)}
                               </div>
                               {m.item?.item_code && (
                                 <span className="text-[10px] font-mono text-stone-400">

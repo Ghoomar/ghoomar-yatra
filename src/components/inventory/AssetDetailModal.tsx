@@ -258,7 +258,7 @@ export function AssetDetailModal({
               <span className="font-mono text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                 {asset.item_code || 'AST'}
               </span>
-              <h2 className="text-lg font-bold text-stone-900">{asset.name}</h2>
+              <h2 className="text-lg font-bold text-stone-900">{getLocalizedMasterName(asset, locale)}</h2>
               <Badge variant="outline">{getLocalizedMasterName(asset.category, locale) || 'Equipment'}</Badge>
             </div>
             <p className="text-stone-500 mt-1">

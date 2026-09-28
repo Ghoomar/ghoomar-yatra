@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, CreditCard } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
 interface PaymentMethod {
   id: string;
@@ -21,6 +24,7 @@ interface PaymentMethodModalProps {
 }
 
 export function PaymentMethodModal({ isOpen, onClose, onUpdated }: PaymentMethodModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,8 +156,14 @@ export function PaymentMethodModal({ isOpen, onClose, onUpdated }: PaymentMethod
               <CreditCard className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-stone-900">Payment Methods &amp; Channel Commission</h2>
-              <p className="text-xs text-stone-500">Configure MDR, delivery commission (Lancho 15–20%), and payment gateways</p>
+              <h2 className="text-base font-bold text-stone-900">
+                {locale === 'hi' ? 'पेमेंट के तरीके और चैनल कमीशन' : 'Payment Methods & Channel Commission'}
+              </h2>
+              <p className="text-xs text-stone-500">
+                {locale === 'hi'
+                  ? 'कार्ड शुल्क, डिलीवरी कमीशन (लांचो 15-20%) और पेमेंट गेटवे सेट करें'
+                  : 'Configure MDR, delivery commission (Lancho 15–20%), and payment gateways'}
+              </p>
             </div>
           </div>
           <button
@@ -177,7 +187,11 @@ export function PaymentMethodModal({ isOpen, onClose, onUpdated }: PaymentMethod
           <form onSubmit={handleSave} className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700">
-                {editingMethod ? `Edit Method: ${editingMethod.name}` : 'Add New Payment Method / Channel'}
+                {editingMethod
+                  ? `${locale === 'hi' ? 'तरीका बदलें:' : 'Edit Method:'} ${getLocalizedMasterName(editingMethod, locale)}`
+                  : locale === 'hi'
+                  ? 'नया पेमेंट तरीका / चैनल जोड़ें'
+                  : 'Add New Payment Method / Channel'}
               </h3>
               {editingMethod && (
                 <button
@@ -185,49 +199,41 @@ export function PaymentMethodModal({ isOpen, onClose, onUpdated }: PaymentMethod
                   onClick={resetForm}
                   className="text-xs text-amber-700 hover:underline font-semibold"
                 >
-                  Cancel Edit
+                  {locale === 'hi' ? 'रद्द करें' : 'Cancel Edit'}
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Method Name *</label>
+            <BilingualNameInput
+              englishName={name}
+              onChangeEnglish={setName}
+              hindiName={nameHi}
+              onChangeHindi={(val) => setNameHi(val)}
+              entityType="general"
+              englishLabel={locale === 'hi' ? 'तरीके का नाम (अंग्रेज़ी)' : 'Method Name (English)'}
+              hindiLabel={locale === 'hi' ? 'तरीके का नाम (हिंदी)' : 'Method Name (Hindi)'}
+              placeholderEnglish="e.g. Card, Cash, UPI, Lancho"
+              placeholderHindi="उदा. कार्ड, नकद, यूपीआई, लांचो"
+              required
+            />
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                {locale === 'hi' ? 'कमीशन / कार्ड शुल्क % *' : 'Commission / MDR % *'}
+              </label>
+              <div className="relative max-w-xs">
                 <input
-                  type="text"
-                  placeholder="e.g. Lancho, Card, UPI"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-amber-500 bg-white"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  placeholder={locale === 'hi' ? 'उदा. 18.00' : 'e.g. 18.00'}
+                  value={commissionPercent}
+                  onChange={(e) => setCommissionPercent(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-amber-500 bg-white font-mono"
                   required
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Hindi Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. लांचो, कार्ड"
-                  value={nameHi}
-                  onChange={(e) => setNameHi(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-amber-500 bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">Commission / MDR % *</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    placeholder="e.g. 18.00"
-                    value={commissionPercent}
-                    onChange={(e) => setCommissionPercent(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:border-amber-500 bg-white font-mono"
-                    required
-                  />
-                  <span className="absolute right-3 top-2 text-xs text-stone-400 font-bold">%</span>
-                </div>
+                <span className="absolute right-3 top-2 text-xs text-stone-400 font-bold">%</span>
               </div>
             </div>
 
@@ -257,32 +263,40 @@ export function PaymentMethodModal({ isOpen, onClose, onUpdated }: PaymentMethod
 
           {/* List */}
           <div className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700">Existing Methods</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-stone-700">
+              {locale === 'hi' ? 'मौजूदा पेमेंट तरीके' : 'Existing Methods'}
+            </h3>
             {loading ? (
-              <div className="py-8 text-center text-xs text-stone-400">Loading payment methods...</div>
+              <div className="py-8 text-center text-xs text-stone-400">
+                {locale === 'hi' ? 'पेमेंट तरीके लोड हो रहे हैं...' : 'Loading payment methods...'}
+              </div>
             ) : methods.length === 0 ? (
-              <div className="py-8 text-center text-xs text-stone-400">No payment methods configured.</div>
+              <div className="py-8 text-center text-xs text-stone-400">
+                {locale === 'hi' ? 'कोई पेमेंट तरीका सेट नहीं है।' : 'No payment methods configured.'}
+              </div>
             ) : (
               <div className="border border-stone-200 rounded-xl overflow-hidden divide-y divide-stone-100">
                 {methods.map((pm) => (
                   <div key={pm.id} className="p-3 flex items-center justify-between bg-white hover:bg-stone-50/50">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-stone-900">{pm.name}</span>
-                        {pm.name_hi && (
-                          <span className="text-[11px] text-stone-500 font-medium">({pm.name_hi})</span>
-                        )}
+                        <span className="text-xs font-bold text-stone-900">{getLocalizedMasterName(pm, locale)}</span>
                         <Badge
                           variant={pm.is_active ? 'success' : 'outline'}
                           className="text-[9px] px-1.5 py-0"
                         >
-                          {pm.is_active ? 'Active' : 'Inactive'}
+                          {pm.is_active ? (locale === 'hi' ? 'चालू' : 'Active') : (locale === 'hi' ? 'बंद' : 'Inactive')}
                         </Badge>
                       </div>
                       <div className="text-[11px] font-mono text-stone-600">
-                        Commission / MDR: <span className="font-bold text-amber-800">{pm.commission_percent}%</span>
+                        {locale === 'hi' ? 'कमीशन / कार्ड शुल्क' : 'Commission / MDR'}:{' '}
+                        <span className="font-bold text-amber-800">{pm.commission_percent}%</span>
                         {pm.name.toLowerCase() === 'lancho' && (
-                          <span className="ml-2 text-[10px] text-stone-400 font-sans">(Variable operating cost applied to Lancho sales)</span>
+                          <span className="ml-2 text-[10px] text-stone-400 font-sans">
+                            {locale === 'hi'
+                              ? '(लांचो की सेल पर लगने वाली लागत)'
+                              : '(Variable operating cost applied to Lancho sales)'}
+                          </span>
                         )}
                       </div>
                     </div>

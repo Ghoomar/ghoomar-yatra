@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 import { X, Plus, Edit2, AlertCircle, RefreshCw, Layers } from 'lucide-react';
 
 interface InventoryCategory {
@@ -45,6 +46,7 @@ export function InventoryCategoryModal({
 
   // Form State
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
   const [code, setCode] = useState('');
   const [inventoryClass, setInventoryClass] = useState('Food Raw Material');
   const [isActive, setIsActive] = useState(true);
@@ -79,6 +81,7 @@ export function InventoryCategoryModal({
   const resetForm = () => {
     setEditingId(null);
     setName('');
+    setNameHi('');
     setCode('');
     setInventoryClass('Food Raw Material');
     setIsActive(true);
@@ -88,6 +91,7 @@ export function InventoryCategoryModal({
   const handleStartEdit = (cat: InventoryCategory) => {
     setEditingId(cat.id);
     setName(cat.name);
+    setNameHi(cat.name_hi || '');
     setCode(cat.code || '');
     setInventoryClass(cat.inventory_class || 'Food Raw Material');
     setIsActive(cat.is_active !== false);
@@ -104,8 +108,9 @@ export function InventoryCategoryModal({
     setErrorMessage(null);
 
     try {
-      const payload = {
+      const payload: any = {
         name: name.trim(),
+        name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
         code: code.trim().toUpperCase() || null,
         inventory_class: inventoryClass,
         is_active: isActive,
@@ -226,19 +231,20 @@ export function InventoryCategoryModal({
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-stone-700 font-medium mb-1">{t('inventory.categories.name')}</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Spices & Masala, Dairy, Crockery"
-                  required
-                  className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
+            <BilingualNameInput
+              englishName={name}
+              onChangeEnglish={setName}
+              hindiName={nameHi}
+              onChangeHindi={(val) => setNameHi(val)}
+              entityType="category"
+              englishLabel={locale === 'hi' ? 'श्रेणी का नाम (अंग्रेज़ी)' : 'Category Name (English)'}
+              hindiLabel={locale === 'hi' ? 'श्रेणी का नाम (हिंदी)' : 'Category Name (Hindi)'}
+              placeholderEnglish="e.g. Spices & Masala, Dairy, Fresh Vegetables"
+              placeholderHindi="उदा. मसाले, डेयरी, ताज़ी सब्ज़ियाँ"
+              required
+            />
 
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
               <div>
                 <label className="block text-stone-700 font-medium mb-1">{t('inventory.categories.code')}</label>
                 <input
@@ -250,9 +256,7 @@ export function InventoryCategoryModal({
                   className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white font-mono uppercase focus:outline-none focus:border-amber-500"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <div>
                 <label className="block text-stone-700 font-medium mb-1">{t('inventory.categories.class')}</label>
                 <select

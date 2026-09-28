@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { name, parent_category_id, display_order, is_active } = body;
+    const { name, name_hi, parent_category_id, display_order, is_active } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Category name is required.' }, { status: 400 });
@@ -58,10 +58,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Selected Parent Category does not exist.' }, { status: 400 });
     }
 
+    const cleanName = name.trim();
+    const finalNameHi = name_hi && name_hi.trim() ? name_hi.trim() : null;
+
     const { data, error } = await supabase
       .from('pos_categories')
       .insert({
-        name: name.trim(),
+        name: cleanName,
+        name_hi: finalNameHi,
         parent_category_id,
         parent_category_name: parent.name,
         display_order: Number(display_order) || 0,
@@ -81,7 +85,7 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const body = await request.json();
-    const { id, name, parent_category_id, display_order, is_active } = body;
+    const { id, name, name_hi, parent_category_id, display_order, is_active } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID is required.' }, { status: 400 });
@@ -109,11 +113,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const newName = name ? name.trim() : oldCat.name;
+    const finalNameHi = name_hi !== undefined ? (name_hi ? String(name_hi).trim() : null) : oldCat.name_hi;
 
     const { data, error } = await supabase
       .from('pos_categories')
       .update({
         name: newName,
+        name_hi: finalNameHi,
         parent_category_id: newParentId,
         parent_category_name: parentName,
         display_order: display_order !== undefined ? Number(display_order) : oldCat.display_order,

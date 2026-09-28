@@ -110,7 +110,7 @@ export default function StockCountPage() {
 
       return {
         item_id: p.item_id,
-        name: p.name,
+        name: (locale === 'hi' && p.name_hi) ? p.name_hi : p.name,
         item_code: p.item_code,
         inventory_class: p.inventory_class || 'Food Raw Material',
         category_name: catName,

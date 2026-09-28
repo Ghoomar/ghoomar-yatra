@@ -338,15 +338,42 @@ export async function GET(request: NextRequest) {
       { data: dbCats },
       { data: allMenu }
     ] = await Promise.all([
-      supabase.from('pos_parent_categories').select('name, color').eq('is_active', true).order('display_order'),
-      supabase.from('pos_categories').select('name').eq('is_active', true).order('display_order'),
+      supabase.from('pos_parent_categories').select('name, name_hi, color').order('display_order'),
+      supabase.from('pos_categories').select('name, name_hi').order('display_order'),
       supabase.from('pos_menu_items').select('parent_category, category, name').order('name'),
     ]);
 
     const parentCategoryColors: Record<string, string> = {};
+    const parentCategoryTranslations: Record<string, string> = {
+      'All Day Breakfast': 'ऑल डे नाश्ता',
+      'Beverages': 'बेवरेज',
+      'Chinese': 'चाइनीज़',
+      'Indian': 'भारतीय भोजन',
+      'Indian Meals': 'भारतीय भोजन',
+      'Italian': 'इटालियन',
+      'Main Course': 'मुख्य भोजन',
+      'Rajasthani': 'राजस्थानी',
+      'Soya Specials': 'सोया स्पेशल',
+      'Soya Chaap Special': 'सोया स्पेशल',
+      'Other': 'अन्य',
+      'Uncategorized': 'अनवर्गीकृत',
+    };
+    const categoryTranslations: Record<string, string> = {};
+
     (dbParents || []).forEach((p: any) => {
-      if (p.name && p.color) {
-        parentCategoryColors[p.name.trim().toLowerCase()] = p.color;
+      if (p.name) {
+        if (p.color) {
+          parentCategoryColors[p.name.trim().toLowerCase()] = p.color;
+        }
+        if (p.name_hi) {
+          parentCategoryTranslations[p.name] = p.name_hi;
+        }
+      }
+    });
+
+    (dbCats || []).forEach((c: any) => {
+      if (c.name && c.name_hi) {
+        categoryTranslations[c.name] = c.name_hi;
       }
     });
 
@@ -385,6 +412,8 @@ export async function GET(request: NextRequest) {
         unmatchedItems,
       },
       parentCategoryColors,
+      parentCategoryTranslations,
+      categoryTranslations,
       reconciliation,
       allBills: orders,
       activeFilterOptions: {

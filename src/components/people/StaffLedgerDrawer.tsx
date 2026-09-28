@@ -4,27 +4,25 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { formatINR, getTodayBusinessDate } from '@/lib/utils';
+import { formatINR } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
 import { SalaryPaymentModal } from './SalaryPaymentModal';
 import { EmployeeSalarySummaryRow, EmployeeSalaryPayment } from '@/lib/types/database';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 import {
   X,
   Wallet,
   Shirt,
   Banknote,
-  Plus,
   RefreshCw,
   CheckCircle,
   AlertCircle,
-  Calendar,
   Phone,
-  Building,
   UserCheck,
   CreditCard,
   History,
   Lock,
-  ArrowDownRight,
 } from 'lucide-react';
 
 interface StaffLedgerDrawerProps {
@@ -40,6 +38,7 @@ export function StaffLedgerDrawer({
   employeeId,
   onUpdated,
 }: StaffLedgerDrawerProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'financial' | 'uniform'>('financial');
   const [employee, setEmployee] = useState<any | null>(null);
@@ -64,9 +63,9 @@ export function StaffLedgerDrawer({
         .from('employees')
         .select(`
           *,
-          department:departments(name),
-          team:teams(name),
-          role:employee_roles(name)
+          department:departments(name, name_hi),
+          team:teams(name, name_hi),
+          role:employee_roles(name, name_hi)
         `)
         .eq('id', employeeId)
         .single();
@@ -99,7 +98,7 @@ export function StaffLedgerDrawer({
           id, business_date, notes, created_at,
           items:employee_uniform_issue_items(
             id, quantity, status, item_id, uniform_item_id, returned_at, notes,
-            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, item_code, current_stock, current_weighted_average_cost),
+            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, name_hi, item_code, current_stock, current_weighted_average_cost),
             legacy_uniform:uniform_items(name, size)
           )
         `)
@@ -122,8 +121,8 @@ export function StaffLedgerDrawer({
       setPayments(payHistory || []);
       setUniformItems(flatUniforms);
     } catch (err: any) {
-      console.error('Error loading employee ledger:', err);
-      setMessage({ type: 'error', text: err.message || 'Error loading staff ledger.' });
+      console.error(err);
+      setMessage({ type: 'error', text: err.message || (locale === 'hi' ? 'स्टाफ लेजर लोड करने में विफल।' : 'Failed to load staff ledger.') });
     } finally {
       setLoading(false);
     }
@@ -135,12 +134,12 @@ export function StaffLedgerDrawer({
     }
   }, [isOpen, employeeId]);
 
-  const handleReturnUniformItem = async (issueItemId: string, itemId: string, qty: number) => {
-    if (!confirm(`Mark ${qty} piece(s) as returned to central inventory?`)) return;
-    setLoading(true);
+  const handleReturnUniformItem = async (issueItemId: string, itemId: string | null, qty: number) => {
     try {
-      const today = getTodayBusinessDate();
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
 
+      // Update issue item status
       const { error: updErr } = await supabase
         .from('employee_uniform_issue_items')
         .update({
@@ -148,48 +147,42 @@ export function StaffLedgerDrawer({
           returned_at: new Date().toISOString(),
         })
         .eq('id', issueItemId);
+
       if (updErr) throw updErr;
 
-      const { data: defLoc } = await supabase
-        .from('inventory_locations')
-        .select('id')
-        .ilike('name', '%Store%')
-        .limit(1)
-        .maybeSingle();
+      // If tied to inventory_items, add stock back to central store
+      if (itemId) {
+        const { data: centralLoc } = await supabase
+          .from('inventory_locations')
+          .select('id')
+          .ilike('name', '%central%')
+          .single();
 
-      const { data: itemData } = await supabase
-        .from('inventory_items')
-        .select('current_weighted_average_cost')
-        .eq('id', itemId)
-        .maybeSingle();
-
-      const unitCost = Number(itemData?.current_weighted_average_cost || 0);
-
-      const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
-        p_item_id: itemId,
-        p_movement_type: 'return',
-        p_quantity: qty,
-        p_source_location_id: null,
-        p_destination_location_id: defLoc?.id || null,
-        p_unit_cost: unitCost,
-        p_purpose: 'Uniform Return by Staff',
-        p_notes: `Returned by staff member ${employee?.name || ''} (${employee?.employee_code || ''})`.trim(),
-        p_business_date: today,
-      });
-      if (txErr) throw txErr;
+        if (centralLoc) {
+          await supabase.from('stock_movements').insert({
+            business_date: today,
+            movement_type: 'return',
+            item_id: itemId,
+            destination_location_id: centralLoc.id,
+            quantity: qty,
+            notes: `Uniform return from ${employee?.name || 'employee'}`,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
 
       await logAuditAction({
         action: 'UPDATE',
-        entity: 'Uniform Return',
+        entityType: 'Uniform Return',
         entityId: issueItemId,
-        details: { employee_id: employeeId, item_id: itemId, quantity: qty },
+        newValues: { employee_id: employeeId, item_id: itemId, quantity: qty },
       });
 
-      setMessage({ type: 'success', text: 'Uniform return logged successfully.' });
+      setMessage({ type: 'success', text: locale === 'hi' ? 'यूनिफॉर्म वापसी सफलतापूर्वक दर्ज की गई।' : 'Uniform return logged successfully.' });
       loadData();
       if (onUpdated) onUpdated();
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to record return.' });
+      setMessage({ type: 'error', text: err.message || (locale === 'hi' ? 'यूनिफॉर्म वापसी दर्ज करने में विफल।' : 'Failed to record return.') });
     } finally {
       setLoading(false);
     }
@@ -208,6 +201,23 @@ export function StaffLedgerDrawer({
     setShowPaymentModal(true);
   };
 
+  const formatPaymentType = (type: string) => {
+    if (locale !== 'hi') return type;
+    if (type === 'Salary Payment') return 'वेतन भुगतान';
+    if (type === 'Advance Salary') return 'अग्रिम वेतन';
+    if (type === 'Settlement') return 'हिसाब चुकता';
+    return type;
+  };
+
+  const formatPaymentMethod = (method: string) => {
+    if (locale !== 'hi') return method;
+    if (method === 'Bank Transfer') return 'बैंक ट्रांसफर';
+    if (method === 'UPI') return 'यूपीआई';
+    if (method === 'Cash') return 'नकद';
+    if (method === 'Cheque') return 'चेक';
+    return method;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity">
       <div className="w-full max-w-2xl bg-white h-full flex flex-col shadow-2xl overflow-hidden">
@@ -219,21 +229,21 @@ export function StaffLedgerDrawer({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-stone-900">{employee?.name || 'Staff Member'}</h2>
+                <h2 className="text-base font-bold text-stone-900">{employee?.name || (locale === 'hi' ? 'स्टाफ सदस्य' : 'Staff Member')}</h2>
                 {employee?.employee_code && (
                   <span className="font-mono text-xs font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded">
                     {employee.employee_code}
                   </span>
                 )}
                 <Badge variant={employee?.employment_status === 'Active' ? 'success' : 'default'} className="text-[10px]">
-                  {employee?.employment_status || 'Active'}
+                  {employee?.employment_status === 'Active' ? (locale === 'hi' ? 'सक्रिय' : 'Active') : (locale === 'hi' ? 'निष्क्रिय' : 'Inactive')}
                 </Badge>
               </div>
               <div className="text-[11px] text-stone-500 flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
-                <span>{employee?.department?.name || 'General Staff'}</span>
-                {employee?.team?.name && <span>• {employee.team.name}</span>}
-                {employee?.role?.name && <span>• {employee.role.name}</span>}
-                {employee?.contractor_name && <span>• Contractor: {employee.contractor_name}</span>}
+                <span>{getLocalizedMasterName(employee?.department, locale) || (locale === 'hi' ? 'सामान्य स्टाफ' : 'General Staff')}</span>
+                {employee?.team && <span>• {getLocalizedMasterName(employee.team, locale)}</span>}
+                {employee?.role && <span>• {getLocalizedMasterName(employee.role, locale)}</span>}
+                {employee?.contractor_name && <span>• {locale === 'hi' ? `ठेकेदार: ${employee.contractor_name}` : `Contractor: ${employee.contractor_name}`}</span>}
                 {employee?.phone && (
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" /> {employee.phone}
@@ -244,7 +254,7 @@ export function StaffLedgerDrawer({
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={loadData} title="Refresh">
+            <Button variant="outline" size="sm" onClick={loadData} title={locale === 'hi' ? 'रिफ्रेश करें' : 'Refresh'}>
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             </Button>
             <button
@@ -268,10 +278,10 @@ export function StaffLedgerDrawer({
             }`}
           >
             <Wallet className="h-4 w-4" />
-            Salary Payable Ledger
+            {locale === 'hi' ? 'वेतन देय लेजर' : 'Salary Payable Ledger'}
             {currentPending > 0 && (
               <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                {formatINR(currentPending)} pending
+                {formatINR(currentPending)} {locale === 'hi' ? 'बाकी' : 'pending'}
               </span>
             )}
           </button>
@@ -285,10 +295,10 @@ export function StaffLedgerDrawer({
             }`}
           >
             <Shirt className="h-4 w-4" />
-            Uniform Custody &amp; Exit Clearance
+            {locale === 'hi' ? 'यूनिफॉर्म हिसाब व एग्जिट' : 'Uniform Custody & Exit Clearance'}
             {totalIssuedUniforms > 0 && (
               <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                {totalIssuedUniforms} pcs
+                {totalIssuedUniforms} {locale === 'hi' ? 'पीस' : 'pcs'}
               </span>
             )}
           </button>
@@ -319,10 +329,12 @@ export function StaffLedgerDrawer({
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                        Current Period ({latestPeriod.salary_month})
+                        {locale === 'hi' ? `वर्तमान अवधि (${latestPeriod.salary_month})` : `Current Period (${latestPeriod.salary_month})`}
                       </span>
                       <h4 className="text-sm font-semibold text-stone-900 mt-0.5">
-                        Base: {formatINR(latestPeriod.monthly_salary)} / mo • {latestPeriod.pay_days} Pay Days
+                        {locale === 'hi'
+                          ? `मूल: ${formatINR(latestPeriod.monthly_salary)} / माह • ${latestPeriod.pay_days} देय दिन`
+                          : `Base: ${formatINR(latestPeriod.monthly_salary)} / mo • ${latestPeriod.pay_days} Pay Days`}
                       </h4>
                     </div>
                     <Button
@@ -331,31 +343,33 @@ export function StaffLedgerDrawer({
                       className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
                     >
                       <Banknote className="h-3.5 w-3.5 mr-1.5" />
-                      Record Payment
+                      {locale === 'hi' ? 'भुगतान दर्ज करें' : 'Record Payment'}
                     </Button>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-amber-200/70 text-xs">
                     <div>
-                      <span className="text-stone-500 block">Prev Pending</span>
+                      <span className="text-stone-500 block">{t('people.paymentModal.prevPending')}</span>
                       <span className="font-semibold text-stone-800">{formatINR(latestPeriod.previous_pending_salary)}</span>
                     </div>
                     <div>
-                      <span className="text-stone-500 block">Net Earned</span>
+                      <span className="text-stone-500 block">{t('people.paymentModal.earnedMonth')}</span>
                       <span className="font-semibold text-stone-800">{formatINR(latestPeriod.net_earned_salary)}</span>
                     </div>
                     <div>
-                      <span className="text-stone-500 block">Total Due</span>
+                      <span className="text-stone-500 block">{t('people.paymentModal.totalDue')}</span>
                       <span className="font-bold text-stone-900">{formatINR(latestPeriod.total_salary_due)}</span>
                     </div>
                     <div>
-                      <span className="text-stone-500 block">Total Given</span>
+                      <span className="text-stone-500 block">{t('people.paymentModal.alreadyGiven')}</span>
                       <span className="font-semibold text-emerald-700">{formatINR(latestPeriod.total_salary_given)}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-amber-200/70 bg-amber-100/60 -mx-4 -mb-4 px-4 py-2.5 rounded-b-xl">
-                    <span className="text-xs font-bold text-amber-900">Current Outstanding Payable:</span>
+                    <span className="text-xs font-bold text-amber-900">
+                      {t('people.paymentModal.outstandingBalance')}:
+                    </span>
                     <span className="text-base font-extrabold text-amber-800">
                       {formatINR(latestPeriod.pending_salary_balance)}
                     </span>
@@ -363,7 +377,7 @@ export function StaffLedgerDrawer({
                 </div>
               ) : (
                 <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-center text-xs text-stone-500">
-                  No salary period records generated for this employee yet.
+                  {locale === 'hi' ? 'इस कर्मचारी के लिए अभी कोई वेतन अवधि रिकॉर्ड नहीं बना है।' : 'No salary period records generated for this employee yet.'}
                 </div>
               )}
 
@@ -372,24 +386,24 @@ export function StaffLedgerDrawer({
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
                     <CreditCard className="h-4 w-4 text-stone-500" />
-                    Salary Disbursements ({payments.length})
+                    {locale === 'hi' ? `वेतन संवितरण (${payments.length})` : `Salary Disbursements (${payments.length})`}
                   </h3>
                 </div>
 
                 {payments.length === 0 ? (
                   <div className="text-center py-6 text-xs text-stone-400 border border-dashed border-stone-200 rounded-xl">
-                    No disbursements recorded for this employee yet.
+                    {locale === 'hi' ? 'इस कर्मचारी के लिए कोई भुगतान रिकॉर्ड नहीं है।' : 'No disbursements recorded for this employee yet.'}
                   </div>
                 ) : (
                   <div className="border border-stone-200 rounded-xl overflow-hidden shadow-xs">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
                         <tr>
-                          <th className="p-2.5">Date</th>
-                          <th className="p-2.5">Period</th>
-                          <th className="p-2.5">Type &amp; Method</th>
-                          <th className="p-2.5">Ref / UTR</th>
-                          <th className="p-2.5 text-right">Amount</th>
+                          <th className="p-2.5">{locale === 'hi' ? 'दिनांक' : 'Date'}</th>
+                          <th className="p-2.5">{locale === 'hi' ? 'अवधि' : 'Period'}</th>
+                          <th className="p-2.5">{locale === 'hi' ? 'प्रकार एवं माध्यम' : 'Type & Method'}</th>
+                          <th className="p-2.5">{locale === 'hi' ? 'संदर्भ / यूटीआर' : 'Ref / UTR'}</th>
+                          <th className="p-2.5 text-right">{locale === 'hi' ? 'राशि' : 'Amount'}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-100">
@@ -402,8 +416,8 @@ export function StaffLedgerDrawer({
                               {p.salary_month}
                             </td>
                             <td className="p-2.5">
-                              <span className="font-medium text-stone-800">{p.payment_type}</span>
-                              <span className="text-[11px] text-stone-500 block">{p.payment_method}</span>
+                              <span className="font-medium text-stone-800">{formatPaymentType(p.payment_type)}</span>
+                              <span className="text-[11px] text-stone-500 block">{formatPaymentMethod(p.payment_method)}</span>
                             </td>
                             <td className="p-2.5 font-mono text-[11px] text-stone-500">
                               {p.reference_number || '—'}
@@ -424,7 +438,7 @@ export function StaffLedgerDrawer({
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
                     <History className="h-4 w-4 text-stone-500" />
-                    Period Carry-Forward History ({salaryPeriods.length})
+                    {locale === 'hi' ? `अवधि कैरी-फॉरवर्ड इतिहास (${salaryPeriods.length})` : `Period Carry-Forward History (${salaryPeriods.length})`}
                   </h3>
                 </div>
 
@@ -440,36 +454,36 @@ export function StaffLedgerDrawer({
                           <Badge variant={p.period_status === 'closed' ? 'default' : 'outline'} className="text-[10px]">
                             {p.period_status === 'closed' ? (
                               <span className="flex items-center gap-1">
-                                <Lock className="h-2.5 w-2.5" /> Closed
+                                <Lock className="h-2.5 w-2.5" /> {locale === 'hi' ? 'बंद' : 'Closed'}
                               </span>
                             ) : (
-                              'Draft'
+                              locale === 'hi' ? 'ड्राफ्ट' : 'Draft'
                             )}
                           </Badge>
                           <span className="text-stone-400">•</span>
-                          <span className="text-stone-600">{p.pay_days} Pay Days</span>
+                          <span className="text-stone-600">{p.pay_days} {locale === 'hi' ? 'देय दिन' : 'Pay Days'}</span>
                         </div>
                         <div className="text-right">
-                          <span className="text-[11px] text-stone-500 mr-1">Pending:</span>
+                          <span className="text-[11px] text-stone-500 mr-1">{locale === 'hi' ? 'बाकी:' : 'Pending:'}</span>
                           <span className="font-bold text-amber-800">{formatINR(p.pending_salary_balance)}</span>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-4 gap-2 pt-1.5 border-t border-stone-100 text-[11px]">
                         <div>
-                          <span className="text-stone-400 block">Prev Pending</span>
+                          <span className="text-stone-400 block">{t('people.paymentModal.prevPending')}</span>
                           <span className="text-stone-700 font-medium">{formatINR(p.previous_pending_salary)}</span>
                         </div>
                         <div>
-                          <span className="text-stone-400 block">Net Earned</span>
+                          <span className="text-stone-400 block">{t('people.paymentModal.earnedMonth')}</span>
                           <span className="text-stone-700 font-medium">{formatINR(p.net_earned_salary)}</span>
                         </div>
                         <div>
-                          <span className="text-stone-400 block">Total Due</span>
+                          <span className="text-stone-400 block">{t('people.paymentModal.totalDue')}</span>
                           <span className="text-stone-900 font-semibold">{formatINR(p.total_salary_due)}</span>
                         </div>
                         <div>
-                          <span className="text-stone-400 block">Given</span>
+                          <span className="text-stone-400 block">{t('people.paymentModal.alreadyGiven')}</span>
                           <span className="text-emerald-700 font-semibold">{formatINR(p.total_salary_given)}</span>
                         </div>
                       </div>
@@ -485,17 +499,23 @@ export function StaffLedgerDrawer({
             <div className="space-y-4">
               <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between text-xs">
                 <div>
-                  <span className="text-stone-500 block text-[11px]">Total Issued Pieces in Custody</span>
-                  <span className="text-base font-bold text-stone-900 mt-0.5 block">{totalIssuedUniforms} Items</span>
+                  <span className="text-stone-500 block text-[11px]">
+                    {locale === 'hi' ? 'स्टाफ के पास जारी कुल यूनिफॉर्म' : 'Total Issued Pieces in Custody'}
+                  </span>
+                  <span className="text-base font-bold text-stone-900 mt-0.5 block">
+                    {totalIssuedUniforms} {locale === 'hi' ? 'आइटम' : 'Items'}
+                  </span>
                 </div>
                 <Badge variant={totalIssuedUniforms === 0 ? 'success' : 'default'}>
-                  {totalIssuedUniforms === 0 ? 'Clear for Exit' : 'Pending Return'}
+                  {totalIssuedUniforms === 0
+                    ? locale === 'hi' ? 'एग्जिट मंज़ूर' : 'Clear for Exit'
+                    : locale === 'hi' ? 'वापसी बाकी' : 'Pending Return'}
                 </Badge>
               </div>
 
               {uniformItems.length === 0 ? (
                 <div className="text-center py-8 text-xs text-stone-400 border border-dashed border-stone-200 rounded-xl">
-                  No uniforms issued to this staff member.
+                  {locale === 'hi' ? 'इस स्टाफ सदस्य को कोई यूनिफॉर्म जारी नहीं की गई है।' : 'No uniforms issued to this staff member.'}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -506,15 +526,15 @@ export function StaffLedgerDrawer({
                     >
                       <div>
                         <span className="font-semibold text-stone-900">
-                          {u.item?.name || u.legacy_uniform?.name || 'Uniform Item'}
+                          {getLocalizedMasterName(u.item, locale) || u.legacy_uniform?.name || (locale === 'hi' ? 'यूनिफॉर्म आइटम' : 'Uniform Item')}
                         </span>
                         <div className="text-[11px] text-stone-500 mt-0.5">
-                          Issued: {u.issue_date} • Qty: {u.quantity}
+                          {locale === 'hi' ? `जारी दिनांक: ${u.issue_date} • मात्रा: ${u.quantity}` : `Issued: ${u.issue_date} • Qty: ${u.quantity}`}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={u.status === 'Issued' ? 'warning' : 'outline'} className="text-[10px]">
-                          {u.status}
+                          {u.status === 'Issued' ? (locale === 'hi' ? 'जारी' : 'Issued') : (locale === 'hi' ? 'वापस प्राप्त' : u.status)}
                         </Badge>
                         {u.status === 'Issued' && (
                           <Button
@@ -523,7 +543,7 @@ export function StaffLedgerDrawer({
                             onClick={() => handleReturnUniformItem(u.id, u.item_id, u.quantity)}
                             className="text-xs h-7"
                           >
-                            Return
+                            {locale === 'hi' ? 'वापसी दर्ज करें' : 'Return'}
                           </Button>
                         )}
                       </div>

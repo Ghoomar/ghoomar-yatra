@@ -21,6 +21,7 @@ import { MenuMasterView } from '@/components/admin/menu/MenuMasterView';
 import { PaymentMethodModal } from '@/components/admin/PaymentMethodModal';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import {
   Settings,
   Shield,
@@ -44,7 +45,7 @@ import {
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<'menu_master' | 'masters' | 'cost_rules' | 'targets' | 'users' | 'audit'>('menu_master');
 
@@ -105,7 +106,7 @@ export default function AdminSettingsPage() {
         supabase.from('financial_targets').select('*').order('weekday'),
         supabase.from('roles').select('*').order('name'),
         supabase.from('inventory_categories').select('*').order('name'),
-        supabase.from('profiles').select('*, role:roles(id, name)').order('full_name'),
+        supabase.from('profiles').select('*, role:roles(id, name, name_hi)').order('full_name'),
       ]);
 
       setDepartments(dData || []);
@@ -174,15 +175,17 @@ export default function AdminSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Settings className="h-6 w-6 text-amber-600" />
-            System Administration &amp; Master Configuration
+            {locale === 'hi' ? 'सिस्टम एडमिनिस्ट्रेशन और सेटिंग्स' : 'System Administration & Master Configuration'}
           </h1>
           <p className="text-sm text-stone-500">
-            Configure operational master data, cost rules, targets, roles, and business structures without code changes.
+            {locale === 'hi'
+              ? 'मास्टर डेटा, खर्च के नियम, वित्तीय टारगेट, रोल और संगठन संरचना प्रबंधित करें।'
+              : 'Configure operational master data, cost rules, targets, roles, and business structures without code changes.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} title="Refresh configuration">
+          <Button variant="outline" size="sm" onClick={loadData} title={locale === 'hi' ? 'सेटिंग्स रीफ्रेश करें' : 'Refresh configuration'}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -199,7 +202,7 @@ export default function AdminSettingsPage() {
           }`}
         >
           <UtensilsCrossed className="h-4 w-4" />
-          <span>Menu Master</span>
+          <span>{locale === 'hi' ? 'मेनू मास्टर' : 'Menu Master'}</span>
         </button>
         <button
           onClick={() => setActiveTab('masters')}
@@ -209,7 +212,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          Operational Masters
+          {locale === 'hi' ? 'मास्टर डेटा' : 'Operational Masters'}
         </button>
         <button
           onClick={() => setActiveTab('cost_rules')}
@@ -219,7 +222,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          Financial Cost Rules
+          {locale === 'hi' ? 'खर्च के नियम' : 'Financial Cost Rules'}
         </button>
         <button
           onClick={() => setActiveTab('targets')}
@@ -229,7 +232,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          Daily &amp; Break-Even Targets
+          {locale === 'hi' ? 'दैनिक व ब्रेक-ईवन टारगेट' : 'Daily & Break-Even Targets'}
         </button>
         <button
           onClick={() => setActiveTab('users')}
@@ -239,7 +242,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          User Accounts &amp; RBAC ({profiles.length})
+          {locale === 'hi' ? `यूजर और परमिशन (${profiles.length})` : `User Accounts & RBAC (${profiles.length})`}
         </button>
         <button
           onClick={() => setActiveTab('audit')}
@@ -249,7 +252,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          System Audit Trail
+          {locale === 'hi' ? 'ऑडिट लॉग' : 'System Audit Trail'}
         </button>
       </div>
 
@@ -261,7 +264,9 @@ export default function AdminSettingsPage() {
         <div className="space-y-6">
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap items-center gap-2 bg-stone-50 p-3 rounded-xl border border-stone-200">
-            <span className="text-xs font-bold text-stone-700 mr-2">Configure Masters:</span>
+            <span className="text-xs font-bold text-stone-700 mr-2">
+              {locale === 'hi' ? 'मास्टर सेटिंग्स:' : 'Configure Masters:'}
+            </span>
             <Button
               variant="primary"
               size="sm"
@@ -271,7 +276,8 @@ export default function AdminSettingsPage() {
               }}
               className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
             >
-              <UtensilsCrossed className="h-4 w-4" /> Kitchen Sections &amp; Teams ({teams.length})
+              <UtensilsCrossed className="h-4 w-4" />{' '}
+              {locale === 'hi' ? `किचन सेक्शन और टीमें (${teams.length})` : `Kitchen Sections & Teams (${teams.length})`}
             </Button>
             <Button
               variant="outline"
@@ -282,7 +288,8 @@ export default function AdminSettingsPage() {
               }}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Network className="h-4 w-4 text-stone-500" /> Depts &amp; Roles
+              <Network className="h-4 w-4 text-stone-500" />{' '}
+              {locale === 'hi' ? 'डिपार्टमेंट और रोल' : 'Depts & Roles'}
             </Button>
             <Button
               variant="outline"
@@ -290,7 +297,8 @@ export default function AdminSettingsPage() {
               onClick={() => setInventoryCategoryModalOpen(true)}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Layers className="h-4 w-4 text-stone-500" /> Inventory Categories ({inventoryCategories.length})
+              <Layers className="h-4 w-4 text-stone-500" />{' '}
+              {locale === 'hi' ? `इन्वेंटरी श्रेणियां (${inventoryCategories.length})` : `Inventory Categories (${inventoryCategories.length})`}
             </Button>
             <Button
               variant="outline"
@@ -298,7 +306,8 @@ export default function AdminSettingsPage() {
               onClick={() => setActivityModalOpen(true)}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Sparkles className="h-4 w-4 text-stone-500" /> Activity Master
+              <Sparkles className="h-4 w-4 text-stone-500" />{' '}
+              {locale === 'hi' ? 'एक्टिविटी मास्टर' : 'Activity Master'}
             </Button>
             <Button
               variant="outline"
@@ -306,7 +315,8 @@ export default function AdminSettingsPage() {
               onClick={() => setUnitModalOpen(true)}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Scale className="h-4 w-4 text-stone-500" /> Units ({units.length})
+              <Scale className="h-4 w-4 text-stone-500" />{' '}
+              {locale === 'hi' ? `माप इकाइयाँ (${units.length})` : `Units (${units.length})`}
             </Button>
             <Button
               variant="outline"
@@ -314,7 +324,8 @@ export default function AdminSettingsPage() {
               onClick={() => setVendorCategoryModalOpen(true)}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Tag className="h-4 w-4 text-stone-500" /> Vendor Categories ({vendorCategories.length})
+              <Tag className="h-4 w-4 text-stone-500" />{' '}
+              {locale === 'hi' ? `वेंडर श्रेणियां (${vendorCategories.length})` : `Vendor Categories (${vendorCategories.length})`}
             </Button>
             <Button
               variant="outline"
@@ -322,7 +333,8 @@ export default function AdminSettingsPage() {
               onClick={() => setDeptCategoryModalOpen(true)}
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
-              <Layers className="h-4 w-4 text-amber-600" /> Dept ↔ Category Mapping
+              <Layers className="h-4 w-4 text-amber-600" />{' '}
+              {locale === 'hi' ? 'डिपार्टमेंट ↔ श्रेणी मैपिंग' : 'Dept ↔ Category Mapping'}
             </Button>
           </div>
 
@@ -333,9 +345,11 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-amber-600" />
-                    Organizational Structure
+                    {locale === 'hi' ? 'संगठन स्ट्रक्चर' : 'Organizational Structure'}
                   </CardTitle>
-                  <CardDescription>Departments, operational teams, and roles</CardDescription>
+                  <CardDescription>
+                    {locale === 'hi' ? 'डिपार्टमेंट, ऑपरेशनल टीमें और रोल' : 'Departments, operational teams, and roles'}
+                  </CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -346,22 +360,22 @@ export default function AdminSettingsPage() {
                   }}
                   className="h-7 text-xs"
                 >
-                  Manage
+                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 space-y-3 text-xs">
                 <div className="grid grid-cols-3 gap-2 bg-stone-50 p-2.5 rounded-lg border border-stone-100 text-center">
                   <div>
                     <div className="font-bold text-base text-stone-900">{departments.length}</div>
-                    <div className="text-[10px] text-stone-500">Departments</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'डिपार्टमेंट' : 'Departments'}</div>
                   </div>
                   <div>
                     <div className="font-bold text-base text-stone-900">{teams.length}</div>
-                    <div className="text-[10px] text-stone-500">Teams</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'टीमें' : 'Teams'}</div>
                   </div>
                   <div>
                     <div className="font-bold text-base text-stone-900">{employeeRoles.length}</div>
-                    <div className="text-[10px] text-stone-500">Roles</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'रोल' : 'Roles'}</div>
                   </div>
                 </div>
 
@@ -371,13 +385,13 @@ export default function AdminSettingsPage() {
                     return (
                       <div key={d.id} className="py-2 flex items-center justify-between">
                         <div>
-                          <span className="font-semibold text-stone-900">{d.name}</span>
+                          <span className="font-semibold text-stone-900">{getLocalizedMasterName(d, locale)}</span>
                           <span className="text-[10px] text-stone-400 ml-1.5">
-                            ({dTeams.length} {dTeams.length === 1 ? 'team' : 'teams'})
+                            ({dTeams.length} {locale === 'hi' ? 'टीमें' : dTeams.length === 1 ? 'team' : 'teams'})
                           </span>
                         </div>
                         <Badge variant={d.is_active !== false ? 'success' : 'outline'}>
-                          {d.is_active !== false ? 'Active' : 'Inactive'}
+                          {d.is_active !== false ? (locale === 'hi' ? 'चालू' : 'Active') : (locale === 'hi' ? 'बंद' : 'Inactive')}
                         </Badge>
                       </div>
                     );
@@ -392,9 +406,11 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Scale className="h-4 w-4 text-amber-600" />
-                    Units of Measurement
+                    {locale === 'hi' ? 'माप की इकाइयाँ' : 'Units of Measurement'}
                   </CardTitle>
-                  <CardDescription>Authoritative metrics for store SKU inventory</CardDescription>
+                  <CardDescription>
+                    {locale === 'hi' ? 'स्टोर सामग्री के लिए आधिकारिक माप' : 'Authoritative metrics for store SKU inventory'}
+                  </CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -402,12 +418,14 @@ export default function AdminSettingsPage() {
                   onClick={() => setUnitModalOpen(true)}
                   className="h-7 text-xs"
                 >
-                  Manage
+                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 text-xs">
                 {units.length === 0 ? (
-                  <div className="py-6 text-center text-stone-400">No units defined.</div>
+                  <div className="py-6 text-center text-stone-400">
+                    {locale === 'hi' ? 'कोई इकाई दर्ज नहीं है।' : 'No units defined.'}
+                  </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
                     {units.map((u) => (
@@ -419,8 +437,8 @@ export default function AdminSettingsPage() {
                             : 'bg-stone-100/50 border-stone-200/50 text-stone-400 line-through'
                         }`}
                       >
-                        <span className="font-semibold">{u.symbol}</span>
-                        <span className="text-[10px] text-stone-500">({u.name})</span>
+                        <span className="font-semibold">{getLocalizedMasterSymbol(u, locale)}</span>
+                        <span className="text-[10px] text-stone-500">({getLocalizedMasterName(u, locale)})</span>
                       </div>
                     ))}
                   </div>
@@ -434,9 +452,11 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Tag className="h-4 w-4 text-amber-600" />
-                    Vendor Supplier Categories
+                    {locale === 'hi' ? 'वेंडर सप्लायर श्रेणियां' : 'Vendor Supplier Categories'}
                   </CardTitle>
-                  <CardDescription>Procurement classifications for vendor onboarding</CardDescription>
+                  <CardDescription>
+                    {locale === 'hi' ? 'खरीद के लिए वेंडर वर्गीकरण' : 'Procurement classifications for vendor onboarding'}
+                  </CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -444,12 +464,14 @@ export default function AdminSettingsPage() {
                   onClick={() => setVendorCategoryModalOpen(true)}
                   className="h-7 text-xs"
                 >
-                  Manage
+                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 text-xs">
                 {vendorCategories.length === 0 ? (
-                  <div className="py-6 text-center text-stone-400">No categories defined.</div>
+                  <div className="py-6 text-center text-stone-400">
+                    {locale === 'hi' ? 'कोई श्रेणी दर्ज नहीं है।' : 'No categories defined.'}
+                  </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
                     {vendorCategories.map((vc) => (
@@ -461,7 +483,7 @@ export default function AdminSettingsPage() {
                             : 'bg-stone-100/50 border-stone-200/50 text-stone-400 line-through'
                         }`}
                       >
-                        <span className="font-medium">{vc.name}</span>
+                        <span className="font-medium">{getLocalizedMasterName(vc, locale)}</span>
                         {vc.code && <span className="text-[10px] text-stone-400 font-mono">[{vc.code}]</span>}
                       </div>
                     ))}
@@ -476,9 +498,13 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-amber-600" />
-                    Payment Methods &amp; Commissions
+                    {locale === 'hi' ? 'पेमेंट के तरीके और कमीशन' : 'Payment Methods & Commissions'}
                   </CardTitle>
-                  <CardDescription>Gateway MDR and delivery channel commissions (Lancho 15–20%)</CardDescription>
+                  <CardDescription>
+                    {locale === 'hi'
+                      ? 'कार्ड शुल्क और डिलीवरी कमीशन (लांचो)'
+                      : 'Gateway MDR and delivery channel commissions (Lancho 15–20%)'}
+                  </CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -486,24 +512,30 @@ export default function AdminSettingsPage() {
                   onClick={() => setPaymentMethodModalOpen(true)}
                   className="h-7 text-xs font-semibold"
                 >
-                  Manage
+                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">
                 {loading ? (
-                  <div className="py-8 text-center text-stone-400 text-xs">Loading payment methods...</div>
+                  <div className="py-8 text-center text-stone-400 text-xs">
+                    {locale === 'hi' ? 'पेमेंट के तरीके लोड हो रहे हैं...' : 'Loading payment methods...'}
+                  </div>
                 ) : (
                   <div className="divide-y divide-stone-100 text-xs max-h-56 overflow-y-auto">
                     {paymentMethods.map((pm) => (
                       <div key={pm.id} className="py-2 flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-stone-900">{pm.name}</span>
-                          {pm.name_hi && (
-                            <span className="text-[11px] text-stone-400">({pm.name_hi})</span>
-                          )}
+                          <span className="font-semibold text-stone-900">{getLocalizedMasterName(pm, locale)}</span>
                         </div>
                         <span className="text-stone-600 font-mono font-medium">
-                          {pm.commission_percent}% {pm.name.toLowerCase() === 'lancho' ? 'Commission' : 'MDR'}
+                          {pm.commission_percent}%{' '}
+                          {locale === 'hi'
+                            ? pm.name.toLowerCase() === 'lancho'
+                              ? 'कमीशन'
+                              : 'कार्ड शुल्क'
+                            : pm.name.toLowerCase() === 'lancho'
+                            ? 'Commission'
+                            : 'MDR'}
                         </span>
                       </div>
                     ))}
@@ -576,7 +608,9 @@ export default function AdminSettingsPage() {
                     {costRules.map((cr) => (
                       <tr key={cr.id} className="hover:bg-stone-50/80">
                         <td className="py-3 px-3">
-                          <div className="font-semibold text-stone-900">{cr.cost_name}</div>
+                          <div className="font-semibold text-stone-900">
+                            {locale === 'hi' && cr.cost_name_hi ? cr.cost_name_hi : cr.cost_name}
+                          </div>
                           {cr.notes && (
                             <div className="text-[10px] text-stone-400 max-w-xs truncate" title={cr.notes}>
                               {cr.notes}
@@ -589,7 +623,11 @@ export default function AdminSettingsPage() {
                           </span>
                         </td>
                         <td className="py-3 px-3 text-stone-700 font-mono text-[11px]">
-                          {cr.calculation_method === 'percentage_of_revenue' ? '% of Revenue' : cr.calculation_method === 'fixed_monthly' ? 'Fixed Monthly' : cr.calculation_method}
+                          {cr.calculation_method === 'percentage_of_revenue'
+                            ? (locale === 'hi' ? 'सेल का %' : '% of Revenue')
+                            : cr.calculation_method === 'fixed_monthly'
+                            ? (locale === 'hi' ? 'मासिक फिक्स' : 'Fixed Monthly')
+                            : (locale === 'hi' ? 'मीटर आधारित' : cr.calculation_method)}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-stone-900">
                           {cr.calculation_method === 'percentage_of_revenue'
@@ -598,17 +636,17 @@ export default function AdminSettingsPage() {
                         </td>
                         <td className="py-3 px-3 text-center">
                           <Badge variant={cr.cost_classification === 'Fixed' ? 'info' : 'warning'}>
-                            {cr.cost_classification}
+                            {locale === 'hi' ? (cr.cost_classification === 'Fixed' ? 'फिक्स्ड' : 'वेरिएबल') : cr.cost_classification}
                           </Badge>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <Badge variant={cr.is_active !== false ? 'success' : 'outline'}>
-                            {cr.is_active !== false ? 'Active' : 'Inactive'}
+                            {cr.is_active !== false ? (locale === 'hi' ? 'चालू' : 'Active') : (locale === 'hi' ? 'बंद' : 'Inactive')}
                           </Badge>
                         </td>
                         <td className="py-3 px-3 text-center text-[11px] text-stone-500 font-mono">
                           {cr.start_date ? cr.start_date : '2026-01-01'}
-                          {cr.end_date ? ` → ${cr.end_date}` : ' → Ongoing'}
+                          {cr.end_date ? ` → ${cr.end_date}` : (locale === 'hi' ? ' → निरंतर' : ' → Ongoing')}
                         </td>
                         <td className="py-3 px-3 text-right">
                           <Button
@@ -817,7 +855,7 @@ export default function AdminSettingsPage() {
                             </td>
                             <td className="py-3 px-3">
                               <Badge variant="outline" className="font-semibold text-stone-800">
-                                {p.role?.name || 'Unassigned'}
+                                {getLocalizedMasterName(p.role, locale) || (locale === 'hi' ? 'असाइन नहीं' : 'Unassigned')}
                               </Badge>
                             </td>
                             <td className="py-3 px-3 text-center">

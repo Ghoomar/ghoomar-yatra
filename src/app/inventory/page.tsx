@@ -154,7 +154,7 @@ function InventoryContent() {
       const [posRes, locRes, stockRes] = await Promise.all([
         supabase.from('inventory_current_position').select('*').order('name'),
         supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
-        supabase.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, code)'),
+        supabase.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, name_hi, code)'),
       ]);
 
       if (posRes.error) throw posRes.error;
@@ -173,7 +173,7 @@ function InventoryContent() {
     try {
       const { data, error } = await supabase
         .from('stock_movements')
-        .select(`*, item:inventory_items(id, name, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)), source_location:inventory_locations!stock_movements_source_location_id_fkey(id, name, code), destination_location:inventory_locations!stock_movements_destination_location_id_fkey(id, name, code)`)
+        .select(`*, item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)), source_location:inventory_locations!stock_movements_source_location_id_fkey(id, name, name_hi, code), destination_location:inventory_locations!stock_movements_destination_location_id_fkey(id, name, name_hi, code)`)
         .order('business_date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -198,13 +198,13 @@ function InventoryContent() {
       if (!map[s.item_id]) map[s.item_id] = [];
       map[s.item_id].push({
         location_id: s.location_id,
-        location_name: s.location?.name || 'Location',
+        location_name: getLocalizedMasterName(s.location, locale) || (locale === 'hi' ? 'स्थान' : 'Location'),
         location_code: s.location?.code || '',
         quantity: Number(s.quantity) || 0,
       });
     });
     return map;
-  }, [locationStocks]);
+  }, [locationStocks, locale]);
 
   // Lookup map: item_id -> { [location_id]: quantity }
   const itemLocQtyLookup = useMemo(() => {
@@ -508,7 +508,7 @@ function InventoryContent() {
                   <option value="ALL">🏢 {t('inventory.stock.allLocations')}</option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
-                      📍 {loc.name} ({loc.code})
+                      📍 {getLocalizedMasterName(loc, locale)} ({loc.code})
                     </option>
                   ))}
                 </select>
@@ -593,7 +593,7 @@ function InventoryContent() {
                     {t('inventory.stock.itemsCount', { count: filteredItems.length })}
                     {selectedLocationObj && (
                       <span className="ml-2 text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                        {t('inventory.stock.locationBadge', { name: selectedLocationObj.name })}
+                        {t('inventory.stock.locationBadge', { name: getLocalizedMasterName(selectedLocationObj, locale) })}
                       </span>
                     )}
                   </CardTitle>
@@ -638,7 +638,7 @@ function InventoryContent() {
                         const isActive = i.is_active !== false;
                         const locList = (itemLocationStockMap[i.item_id] || []).filter((l) => l.quantity > 0);
                         const expInfo = itemExpiryMap[i.item_id];
-                        const unitDisplay = i.unit_symbol_hi && locale === 'hi' ? i.unit_symbol_hi : (i.unit_symbol || 'units');
+                        const unitDisplay = i.unit_symbol_hi && locale === 'hi' ? i.unit_symbol_hi : (i.unit_symbol || (locale === 'hi' ? 'इकाई' : 'units'));
 
                         return (
                           <tr
@@ -664,7 +664,7 @@ function InventoryContent() {
                                 className="font-semibold text-stone-900 hover:text-amber-700 hover:underline cursor-pointer text-left block"
                                 title={t('inventory.stock.actions.viewLedger')}
                               >
-                                {i.name}
+                                {getLocalizedMasterName(i, locale) || i.name}
                               </button>
                               {expInfo && (
                                 <div className={`text-[10px] mt-0.5 flex items-center gap-1 ${expInfo.daysLeft <= 0 ? 'text-rose-600 font-bold' : expInfo.daysLeft <= 30 ? 'text-amber-600 font-medium' : 'text-stone-400'}`}>
@@ -674,7 +674,7 @@ function InventoryContent() {
                               )}
                             </td>
                             <td className="py-3 px-3 text-stone-600">
-                              {i.category_name || 'General'} <span className="text-stone-400">({t(`inventory.stock.classes.${i.inventory_class}`, { defaultValue: i.inventory_class })})</span>
+                              {(locale === 'hi' && i.category_name_hi) ? i.category_name_hi : (i.category_name || (locale === 'hi' ? 'सामान्य' : 'General'))} <span className="text-stone-400">({t(`inventory.stock.classes.${i.inventory_class}`, { defaultValue: i.inventory_class })})</span>
                             </td>
                             <td className="py-3 px-3 text-right font-bold text-sm text-stone-900 whitespace-nowrap">
                               {locQty.toFixed(2)}{' '}
@@ -922,7 +922,7 @@ function InventoryContent() {
                     <tbody className="divide-y divide-stone-100">
                       {filteredMovements.map((m) => {
                         const qty = Number(m.quantity) || 0;
-                        const unitSymbol = getLocalizedMasterSymbol(m.item?.unit, locale) || 'units';
+                        const unitSymbol = getLocalizedMasterSymbol(m.item?.unit, locale) || (locale === 'hi' ? 'इकाई' : 'units');
 
                         return (
                           <tr key={m.id} className="hover:bg-stone-50/80 transition-colors">
@@ -930,7 +930,7 @@ function InventoryContent() {
                               {m.business_date}
                             </td>
                             <td className="py-3 px-3">
-                              <div className="font-semibold text-stone-900">{m.item?.name || 'Unknown Item'}</div>
+                              <div className="font-semibold text-stone-900">{getLocalizedMasterName(m.item, locale) || 'Unknown Item'}</div>
                               <div className="font-mono text-[10px] text-stone-400">{m.item?.item_code}</div>
                             </td>
                             <td className="py-3 px-3 text-center whitespace-nowrap">
@@ -945,7 +945,7 @@ function InventoryContent() {
                                 </div>
                               ) : m.destination_location ? (
                                 <div className="font-mono text-[11px] text-emerald-700">
-                                  ➔ <span className="font-bold">{m.destination_location.code}</span> ({m.destination_location.name})
+                                  ➔ <span className="font-bold">{m.destination_location.code}</span> ({getLocalizedMasterName(m.destination_location, locale)})
                                 </div>
                               ) : m.source_location ? (
                                 <div className="font-mono text-[11px] text-amber-800">

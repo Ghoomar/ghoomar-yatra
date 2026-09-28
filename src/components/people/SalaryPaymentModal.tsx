@@ -20,7 +20,7 @@ export function SalaryPaymentModal({
   record,
   onSuccess,
 }: SalaryPaymentModalProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [paymentDate, setPaymentDate] = useState(getTodayBusinessDate());
   const [amount, setAmount] = useState<number | string>('');
   const [paymentMethod, setPaymentMethod] = useState<SalaryPaymentMethod>('Bank Transfer');
@@ -136,7 +136,7 @@ export function SalaryPaymentModal({
               <div>
                 <h3 className="font-semibold text-stone-900 text-base">{record.employee_name}</h3>
                 <p className="text-xs text-stone-500">
-                  {record.department_name || 'General'} • {record.role_name || 'Staff'} {record.employee_code && `(${record.employee_code})`}
+                  {locale === 'hi' ? (record.department_name_hi || record.department_name || 'सामान्य') : (record.department_name || 'General')} • {locale === 'hi' ? (record.role_name_hi || record.role_name || 'स्टाफ') : (record.role_name || 'Staff')} {record.employee_code && `(${record.employee_code})`}
                 </p>
               </div>
               <div className="text-right">
@@ -144,7 +144,7 @@ export function SalaryPaymentModal({
                   {record.salary_month}
                 </span>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  Salary: {formatINR(record.monthly_salary)}/mo
+                  {locale === 'hi' ? `मासिक पगार: ${formatINR(record.monthly_salary)}` : `Salary: ${formatINR(record.monthly_salary)}/mo`}
                 </p>
               </div>
             </div>
@@ -257,7 +257,7 @@ export function SalaryPaymentModal({
               </label>
               <input
                 type="text"
-                placeholder="e.g. UTR-98213892 or Chq #00129"
+                placeholder={locale === 'hi' ? 'उदा. यूपीआई/यूटीआर नंबर या चेक #00129' : 'e.g. UTR-98213892 or Chq #00129'}
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
                 className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -270,7 +270,7 @@ export function SalaryPaymentModal({
               </label>
               <textarea
                 rows={2}
-                placeholder="Optional notes or remarks regarding this payout..."
+                placeholder={locale === 'hi' ? 'भुगतान से संबंधित वैकल्पिक विवरण...' : 'Optional notes or remarks regarding this payout...'}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"

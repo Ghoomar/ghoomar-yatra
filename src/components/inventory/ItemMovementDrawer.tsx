@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import {
   X,
   History,
@@ -44,9 +45,9 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
         .from('stock_movements')
         .select(`
           *,
-          src:inventory_locations!stock_movements_source_location_id_fkey(name),
-          dest:inventory_locations!stock_movements_destination_location_id_fkey(name),
-          department:departments(name),
+          src:inventory_locations!stock_movements_source_location_id_fkey(name, name_hi),
+          dest:inventory_locations!stock_movements_destination_location_id_fkey(name, name_hi),
+          department:departments(name, name_hi),
           staff:employees(name)
         `)
         .eq('item_id', targetId)
@@ -73,6 +74,9 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
   const currentQty = Number(item.current_quantity ?? item.current_stock ?? 0);
   const wacCost = Number(item.wac_cost ?? item.current_weighted_average_cost ?? 0);
   const totalValue = Number(item.current_stock_value ?? (currentQty * wacCost));
+  const unitDisplay = (locale === 'hi' && item.unit_symbol_hi)
+    ? item.unit_symbol_hi
+    : (item.unit_symbol || item.unit?.symbol || (locale === 'hi' ? 'इकाई' : 'units'));
 
   const getMovementBadge = (type: string, purpose?: string) => {
     switch (type) {
@@ -116,13 +120,13 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-stone-900">{item.name}</h2>
+                <h2 className="text-base font-bold text-stone-900">{getLocalizedMasterName(item, locale) || item.name}</h2>
                 <Badge variant="outline" className="font-mono text-[11px] font-bold">
                   {item.item_code}
                 </Badge>
               </div>
               <p className="text-stone-500 mt-0.5">
-                {item.category_name || item.category?.name || 'General Inventory'} • {item.inventory_class}
+                {(locale === 'hi' ? (item.category_name_hi || item.category?.name_hi || item.category_name || item.category?.name || 'सामान्य इन्वेंटरी') : (item.category_name || item.category?.name || 'General Inventory'))} • {t(`inventory.stock.classes.${item.inventory_class}`, { defaultValue: item.inventory_class })}
               </p>
             </div>
           </div>
@@ -136,7 +140,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
           <div className="p-3 bg-white rounded-lg border border-stone-200">
             <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.drawer.stockOnHand')}</div>
             <div className="text-lg font-bold text-stone-900 mt-0.5">
-              {currentQty.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">{item.unit_symbol_hi && locale === 'hi' ? item.unit_symbol_hi : (item.unit_symbol || item.unit?.symbol || 'units')}</span>
+              {currentQty.toFixed(2)} <span className="text-[10px] font-normal text-stone-500">{unitDisplay}</span>
             </div>
           </div>
           <div className="p-3 bg-white rounded-lg border border-stone-200">
@@ -179,7 +183,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
                     </div>
                     <span className="font-mono font-bold text-sm text-stone-900">
                       {m.movement_type === 'count_adjustment' && Number(m.quantity) > 0 ? '+' : ''}
-                      {m.quantity} {item.unit_symbol_hi && locale === 'hi' ? item.unit_symbol_hi : (item.unit_symbol || item.unit?.symbol || 'units')}
+                      {m.quantity} {unitDisplay}
                     </span>
                   </div>
 
@@ -189,18 +193,18 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
                       <MapPin className="h-3 w-3 text-stone-400" />
                       {m.movement_type === 'transfer' ? (
                         <span>
-                          {m.src?.name || 'Store'} → {m.dest?.name || 'Destination'}
+                          {getLocalizedMasterName(m.src, locale) || (locale === 'hi' ? 'स्टोर' : 'Store')} → {getLocalizedMasterName(m.dest, locale) || (locale === 'hi' ? 'गंतव्य' : 'Destination')}
                         </span>
                       ) : m.dest?.name ? (
-                        <span>Inward to {m.dest.name}</span>
+                        <span>{locale === 'hi' ? `${getLocalizedMasterName(m.dest, locale)} में आवक` : `Inward to ${m.dest.name}`}</span>
                       ) : m.src?.name ? (
-                        <span>Dispatched from {m.src.name}</span>
+                        <span>{locale === 'hi' ? `${getLocalizedMasterName(m.src, locale)} से प्रेषित` : `Dispatched from ${m.src.name}`}</span>
                       ) : (
-                        <span>Central Inventory</span>
+                        <span>{locale === 'hi' ? 'केंद्रीय इन्वेंटरी' : 'Central Inventory'}</span>
                       )}
                     </div>
                     <span className="font-mono text-stone-500">
-                      Value: {formatINR(Number(m.total_value || 0))}
+                      {locale === 'hi' ? `मूल्य: ${formatINR(Number(m.total_value || 0))}` : `Value: ${formatINR(Number(m.total_value || 0))}`}
                     </span>
                   </div>
 
@@ -208,7 +212,7 @@ export function ItemMovementDrawer({ isOpen, onClose, item }: ItemMovementDrawer
                   {(m.notes || m.department?.name || m.staff?.name) && (
                     <div className="text-[10px] text-stone-400 border-t border-stone-200/60 pt-1 flex items-center justify-between">
                       <span className="truncate max-w-xs">{m.notes || m.purpose || '—'}</span>
-                      {m.staff?.name && <span>By: {m.staff.name}</span>}
+                      {m.staff?.name && <span>{locale === 'hi' ? `द्वारा: ${m.staff.name}` : `By: ${m.staff.name}`}</span>}
                     </div>
                   )}
                 </div>

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
+
 interface ParentCategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -10,6 +12,7 @@ interface ParentCategoryModalProps {
   parentCategory?: {
     id: string;
     name: string;
+    name_hi?: string | null;
     color?: string | null;
     display_order: number;
     is_active: boolean;
@@ -36,6 +39,7 @@ export function ParentCategoryModal({
   parentCategory,
 }: ParentCategoryModalProps) {
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
   const [color, setColor] = useState('#d97706');
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [isActive, setIsActive] = useState(true);
@@ -45,11 +49,13 @@ export function ParentCategoryModal({
   useEffect(() => {
     if (parentCategory) {
       setName(parentCategory.name);
+      setNameHi(parentCategory.name_hi || '');
       setColor(parentCategory.color || '#d97706');
       setDisplayOrder(parentCategory.display_order || 0);
       setIsActive(parentCategory.is_active !== false);
     } else {
       setName('');
+      setNameHi('');
       setColor('#d97706');
       setDisplayOrder(0);
       setIsActive(true);
@@ -74,6 +80,7 @@ export function ParentCategoryModal({
       const method = parentCategory ? 'PUT' : 'POST';
       const payload: any = {
         name: name.trim(),
+        name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
         color: color.trim(),
         display_order: Number(displayOrder) || 0,
         is_active: isActive,
@@ -129,19 +136,18 @@ export function ParentCategoryModal({
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Parent Category Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Rajasthani, Beverages, Indian"
-              className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30"
-              required
-            />
-          </div>
+          <BilingualNameInput
+            englishName={name}
+            onChangeEnglish={setName}
+            hindiName={nameHi}
+            onChangeHindi={(val) => setNameHi(val)}
+            entityType="category"
+            englishLabel="Parent Category Name (English)"
+            hindiLabel="Parent Category Name (Hindi)"
+            placeholderEnglish="e.g. Rajasthani, Beverages, Indian"
+            placeholderHindi="उदा. राजस्थानी, बेवरेज, भारतीय भोजन"
+            required
+          />
 
           <div>
             <label className="block text-xs font-semibold text-stone-700 mb-1">

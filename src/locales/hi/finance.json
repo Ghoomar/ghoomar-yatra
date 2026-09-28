@@ -132,7 +132,11 @@
       "varianceDesc": "समरी और बिलों की सेल में अंतर है।",
       "execNet": "समरी की नेट सेल",
       "granularNet": "बिलों की नेट सेल",
-      "diff": "अंतर"
+      "diff": "अंतर",
+      "statusReconciled": "मिलान हुआ",
+      "statusDifference": "अंतर पाया गया",
+      "statusMissingSummary": "एग्जीक्यूटिव समरी नहीं मिली",
+      "statusOnlySummary": "केवल एग्जीक्यूटिव समरी अपलोड हुई"
     }
   },
   "expenses": {
@@ -337,7 +341,7 @@
     "netSales": "नेट सेल",
     "taxesCollected": "जीएसटी टैक्स",
     "grossBillValue": "कुल बिल रकम",
-    "foodMaterialCost": "खाने का कुल खर्च (COGS)",
+    "foodMaterialCost": "खाने का कुल खर्च",
     "customerFood": "कस्टमर खाने का राशन",
     "staffFood": "स्टाफ खाना / मेस खर्च",
     "wastageSpoilage": "किचन वेस्टेज व नुकसान",
@@ -356,11 +360,12 @@
     "payrollFixed": "पगार और तय खर्चे",
     "staffSalaries": "दैनिक स्टाफ पगार",
     "otherFixed": "रखरखाव और तय खर्चे",
-    "contributionMargin": "योगदान मार्जिन (CM)",
+    "contributionMargin": "योगदान मार्जिन",
     "rentAndInvestor": "किराया व इन्वेस्टर शेयर",
     "rentShare": "प्रॉपर्टी किराया ({percent}%)",
     "investorShare": "इन्वेस्टर शेयर ({percent}%)",
-    "ebitda": "दैनिक कमाई (EBITDA)",
+    "channelCommissions": "गेटवे एवं चैनल कमीशन (कार्ड / लांचो)",
+    "ebitda": "दैनिक कमाई",
     "pacing": "महीने का ब्रेक-ईवन",
     "pacingTarget": "महीने का टारगेट: {target}",
     "mtdActual": "इस महीने की कुल सेल: {actual}",

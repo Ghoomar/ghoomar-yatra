@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { FinancialCostRule } from '@/lib/types/database';
 import { logAuditAction } from '@/lib/audit-logger';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 import {
   X,
   Check,
@@ -34,6 +35,7 @@ export function EditCostRuleModal({
   const supabase = createClient();
 
   const [costName, setCostName] = useState('');
+  const [costNameHi, setCostNameHi] = useState('');
   const [category, setCategory] = useState('Rent');
   const [calculationMethod, setCalculationMethod] = useState<'fixed_monthly' | 'percentage_of_revenue' | 'actual_variable' | 'meter_based' | 'monthly_estimated'>('fixed_monthly');
   const [rateInput, setRateInput] = useState('');
@@ -51,6 +53,7 @@ export function EditCostRuleModal({
   useEffect(() => {
     if (rule && isOpen) {
       setCostName(rule.cost_name || '');
+      setCostNameHi((rule as any).cost_name_hi || '');
       setCategory(rule.category || 'General');
       const method = (rule.calculation_method || 'fixed_monthly') as any;
       setCalculationMethod(method);
@@ -119,8 +122,9 @@ export function EditCostRuleModal({
     setSaving(true);
 
     try {
-      const updatePayload = {
+      const updatePayload: any = {
         cost_name: costName.trim(),
+        cost_name_hi: costNameHi && costNameHi.trim() ? costNameHi.trim() : null,
         category: category.trim(),
         calculation_method: calculationMethod,
         amount_or_rate: finalAmountOrRate,
@@ -217,34 +221,31 @@ export function EditCostRuleModal({
           )}
 
           {/* Rule Name & Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-stone-700 mb-1">
-                Cost Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={costName}
-                onChange={(e) => setCostName(e.target.value)}
-                placeholder="e.g. Internet & Telecom"
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs font-medium"
-                required
-              />
-            </div>
+          <BilingualNameInput
+            englishName={costName}
+            onChangeEnglish={setCostName}
+            hindiName={costNameHi}
+            onChangeHindi={(val) => setCostNameHi(val)}
+            entityType="expense_category"
+            englishLabel="Cost Name (English)"
+            hindiLabel="Cost Name (Hindi)"
+            placeholderEnglish="e.g. Internet & Telecom, Property Rent"
+            placeholderHindi="उदा. इंटरनेट और टेलीकॉम, संपत्ति किराया"
+            required
+          />
 
-            <div>
-              <label className="block font-semibold text-stone-700 mb-1">
-                Category <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Utilities, Rent, Finance"
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs"
-                required
-              />
-            </div>
+          <div>
+            <label className="block font-semibold text-stone-700 mb-1">
+              Category <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. Utilities, Rent, Finance"
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs"
+              required
+            />
           </div>
 
           {/* Method & Classification */}

@@ -27,7 +27,7 @@ import {
 import { useI18n } from '@/lib/i18n/context';
 
 export default function StaffFinancialsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   // Current month default: e.g. "2026-05"
   const defaultMonth = () => {
     return '2026-05'; // Default to reference month with rich authentic data
@@ -479,8 +479,12 @@ export default function StaffFinancialsPage() {
 
                         {/* Dept & Role */}
                         <td className="p-3 text-stone-600 whitespace-nowrap">
-                          <span className="block">{r.department_name || 'General'}</span>
-                          <span className="text-[11px] text-stone-400 block">{r.role_name || 'Staff'}</span>
+                          <span className="block">
+                            {locale === 'hi' ? (r.department_name_hi || r.department_name || 'सामान्य') : (r.department_name || 'General')}
+                          </span>
+                          <span className="text-[11px] text-stone-400 block">
+                            {locale === 'hi' ? (r.role_name_hi || r.role_name || 'स्टाफ') : (r.role_name || 'Staff')}
+                          </span>
                         </td>
 
                         {/* Monthly Base Salary */}

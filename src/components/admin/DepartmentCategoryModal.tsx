@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { logAuditAction } from '@/lib/audit-logger';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 import {
   X,
   Layers,
@@ -27,6 +29,7 @@ export function DepartmentCategoryModal({
   onClose,
   onUpdated,
 }: DepartmentCategoryModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
 
   const [departments, setDepartments] = useState<any[]>([]);
@@ -237,7 +240,7 @@ export function DepartmentCategoryModal({
                 >
                   <div className="flex items-center gap-2 truncate">
                     <Building2 className={`h-4 w-4 shrink-0 ${isSelected ? 'text-white' : 'text-stone-400'}`} />
-                    <span className="truncate">{dept.name}</span>
+                    <span className="truncate">{getLocalizedMasterName(dept, locale)}</span>
                   </div>
                   <Badge
                     variant={isSelected ? 'default' : 'outline'}
@@ -273,7 +276,7 @@ export function DepartmentCategoryModal({
               <div className="flex items-center justify-between pb-2 border-b border-stone-200">
                 <div>
                   <h3 className="text-sm font-bold text-stone-900">
-                    Categories for {currentDept.name}
+                    Categories for {getLocalizedMasterName(currentDept, locale)}
                   </h3>
                   <p className="text-stone-500 text-[11px]">
                     {selectedCatIds.size} of {categories.length} categories enabled for store issues
@@ -335,7 +338,7 @@ export function DepartmentCategoryModal({
                               </div>
                               <div className="truncate">
                                 <span className={`font-medium ${isChecked ? 'text-amber-950 font-bold' : 'text-stone-800'}`}>
-                                  {cat.name}
+                                  {getLocalizedMasterName(cat, locale)}
                                 </span>
                                 {cat.code && (
                                   <span className="ml-1 text-[10px] text-stone-400 font-mono">

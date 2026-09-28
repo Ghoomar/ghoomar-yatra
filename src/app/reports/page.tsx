@@ -191,7 +191,7 @@ export default function ReportsPage() {
 
   const exportCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) {
-      alert(locale === 'hi' ? 'निर्यात के लिए कोई डेटा उपलब्ध नहीं है।' : 'No data available to export.');
+      alert(locale === 'hi' ? 'एक्सपोर्ट के लिए कोई डेटा उपलब्ध नहीं है।' : 'No data available to export.');
       return;
     }
     const keys = Object.keys(data[0]);
@@ -428,9 +428,9 @@ export default function ReportsPage() {
           vehicleStr += `, जिसमें मुख्य रूप से प्रीफ़िक्स ${topVehiclePrefix.name} (${topVehiclePrefix.count} वाहन) शामिल थे`;
         }
         lines.push(
-          `${formattedDate} को, रिज़ॉर्ट गेट पर कुल ${formatNumber(gateFootfall)} आगंतुक दर्ज किए गए। सबसे अधिक भीड़ ${
+          `${formattedDate} को, रिज़ॉर्ट गेट पर कुल ${formatNumber(gateFootfall)} आने वाले लोग दर्ज किए गए। सबसे अधिक भीड़ ${
             peakVisitorHour?.label || 'शाम के समय'
-          } (${peakVisitorHour?.count || 0} प्रविष्टियाँ) रही। वाहन यातायात में ${vehicleStr}।`
+          } (${peakVisitorHour?.count || 0} लोग) रही। वाहन यातायात में ${vehicleStr}।`
         );
       } else {
         let vehicleStr = `${totalVehicles} total vehicles (${totalBikes} two-wheelers and ${totalCars} cars)`;
@@ -455,12 +455,12 @@ export default function ReportsPage() {
             ? `गेट फ़ुटफ़ॉल से डाइनर कन्वर्शन दर ${dinerConversionRate.toFixed(1)}% रही`
             : `गेट फ़ुटफ़ॉल दर्ज न होने के कारण कन्वर्शन दर उपलब्ध नहीं है`;
         const apcText = spendPerDiner !== null ? formatINR(spendPerDiner) : '—';
-        const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} PAX/बिल` : '—';
+        const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} व्यक्ति/बिल` : '—';
 
         lines.push(
-          `मुख्य रेस्टोरेंट ने ${dineInBillsCount} डाइन-इन बिलों के माध्यम से ${formatNumber(dineInPax)} डाइन-इन कवर्स को सेवा दी। ${convText}, जिसमें प्रति डाइनर औसत खर्च (APC) ${apcText} और औसत पार्टी आकार ${partyText} रहा। कुल डाइन-इन बिक्री ${formatINR(
+          `मुख्य रेस्टोरेंट ने ${dineInBillsCount} डाइन-इन बिलों के माध्यम से ${formatNumber(dineInPax)} डाइन-इन कवर्स को सेवा दी। ${convText}, जिसमें प्रति डाइनर औसत खर्च ${apcText} और औसत पार्टी आकार ${partyText} रहा। कुल डाइन-इन बिक्री ${formatINR(
             dineInNet
-          )} शुद्ध (Net), ${formatINR(dineInTax)} GST, और ${formatINR(dineInGross)} सकल (Gross) रही।`
+          )} शुद्ध बिक्री, ${formatINR(dineInTax)} जीएसटी, और ${formatINR(dineInGross)} सकल बिक्री रही।`
         );
       } else {
         const convText =
@@ -495,13 +495,13 @@ export default function ReportsPage() {
       if (isHindi) {
         const topItemsStr =
           snacksTopItems.length > 0
-            ? `, जिसमें प्रमुख व्यंजन ${snacksTopItems.map((i) => `${i.name} (${i.qty} यूनिट)`).join(', ')} शामिल रहे`
+            ? `, जिसमें प्रमुख आइटम ${snacksTopItems.map((i) => `${i.name} (${i.qty} यूनिट)`).join(', ')} शामिल रहे`
             : '';
         const abvText = snacksAbv !== null ? formatINR(snacksAbv) : '—';
         lines.push(
-          `स्नैक्स स्टॉल ने ${snacksBillCount} ऑर्डर पूरे किए, जिससे ${formatINR(snacksNet)} शुद्ध (Net) और ${formatINR(
+          `स्नैक्स स्टॉल ने ${snacksBillCount} ऑर्डर पूरे किए, जिससे ${formatINR(snacksNet)} शुद्ध बिक्री और ${formatINR(
             snacksGross
-          )} सकल (Gross) बिक्री उत्पन्न हुई, जिसका औसत ऑर्डर मूल्य ${abvText} रहा${topItemsStr}।`
+          )} सकल बिक्री उत्पन्न हुई, जिसका औसत ऑर्डर मूल्य ${abvText} रहा${topItemsStr}।`
         );
       } else {
         const topItemsStr =
@@ -559,7 +559,7 @@ export default function ReportsPage() {
     // Consolidated Total & Pacing sentence
     lines.push(
       isHindi
-        ? `कुल समेकित सकल बिक्री (Gross Sales) ${totalBillsCount} सफल बिलों के साथ ${formatINR(consolidatedGross)} रही।`
+        ? `कुल सकल बिक्री ${totalBillsCount} सफल बिलों के साथ ${formatINR(consolidatedGross)} रही।`
         : `Consolidated estate Gross Sales totaled ${formatINR(consolidatedGross)} across ${totalBillsCount} successful bills.`
     );
 
@@ -577,7 +577,7 @@ export default function ReportsPage() {
         const dodFootPct = (((gateFootfall - pdFootfall) / pdFootfall) * 100).toFixed(1);
         const dodFootDir = Number(dodFootPct) >= 0 ? `+${dodFootPct}%` : `${dodFootPct}%`;
         compStr += isHindi
-          ? ` गेट फ़ुटफ़ॉल में ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} आगंतुक) की तुलना में ${dodFootDir} का बदलाव देखा गया।`
+          ? ` गेट फ़ुटफ़ॉल में ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} लोग) की तुलना में ${dodFootDir} का बदलाव देखा गया।`
           : ` Gate footfall moved ${dodFootDir} compared to ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} visitors).`;
       }
       lines.push(compStr);

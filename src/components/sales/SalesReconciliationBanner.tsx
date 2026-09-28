@@ -34,8 +34,22 @@ export function SalesReconciliationBanner({
   const ordersNet = reconciliation.orders_net_sales !== null ? Number(reconciliation.orders_net_sales) : null;
   const hourlyNet = reconciliation.hourly_net_sales !== null ? Number(reconciliation.hourly_net_sales) : null;
   const granularNet = ordersNet !== null ? ordersNet : hourlyNet;
-
   const diff = granularNet !== null && execNet !== null ? Math.round((granularNet - execNet) * 100) / 100 : null;
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'Reconciled':
+        return t('finance.sales.reconciliation.statusReconciled');
+      case 'Difference Found':
+        return t('finance.sales.reconciliation.statusDifference');
+      case 'Missing Executive Summary':
+        return t('finance.sales.reconciliation.statusMissingSummary');
+      case 'Only Executive Summary Imported':
+        return t('finance.sales.reconciliation.statusOnlySummary');
+      default:
+        return status;
+    }
+  };
 
   return (
     <div
@@ -65,7 +79,7 @@ export function SalesReconciliationBanner({
                 {t('finance.sales.reconciliation.title', { date: businessDate })}
               </h3>
               <Badge variant={isReconciled ? 'success' : 'warning'} className="text-[10px]">
-                {reconciliation.reconciliation_status}
+                {getStatusLabel(reconciliation.reconciliation_status)}
               </Badge>
             </div>
             <p className="text-xs text-stone-500 mt-0.5">

@@ -132,7 +132,11 @@
       "varianceDesc": "Variance detected between Executive Sales Summary and imported transactions.",
       "execNet": "Executive Net",
       "granularNet": "Granular Net",
-      "diff": "Difference"
+      "diff": "Difference",
+      "statusReconciled": "Reconciled",
+      "statusDifference": "Difference Found",
+      "statusMissingSummary": "Missing Executive Summary",
+      "statusOnlySummary": "Only Executive Summary Imported"
     }
   },
   "expenses": {
@@ -360,6 +364,7 @@
     "rentAndInvestor": "Rent & Investor Allocation",
     "rentShare": "Property Rent ({percent}%)",
     "investorShare": "Investor Share ({percent}%)",
+    "channelCommissions": "Gateway & Channel Commissions (Card / Lancho)",
     "ebitda": "Daily EBITDA",
     "pacing": "Monthly Break-Even Pacing",
     "pacingTarget": "Monthly Target: {target}",

@@ -1,9 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { normalizeItemName } from '@/lib/petpooja/matcher';
+import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
+
+    // 0. Auto-discover uncatalogued items from sales_hourly_items if any
+    try {
+      const { data: salesDistinct } = await supabase
+        .from('distinct_sales_items')
+        .select('item_name, unit_price');
+
+      if (salesDistinct && salesDistinct.length > 0) {
+        const { data: existingRows } = await supabase.from('pos_menu_items').select('name');
+        const existingNames = new Set((existingRows || []).map((i) => i.name.toLowerCase().trim()));
+
+        const toInsert: any[] = [];
+        for (const row of salesDistinct) {
+          const rawName = (row.item_name || '').trim();
+          if (!rawName) continue;
+          if (!existingNames.has(rawName.toLowerCase())) {
+            const norm = normalizeItemName(rawName);
+            const suggestion = suggestHindiName(rawName, 'menu_item');
+            toInsert.push({
+              name: rawName,
+              normalized_name: norm,
+              price: Number(row.unit_price) || 0,
+              category: 'Uncategorized',
+              parent_category: 'Uncategorized',
+              is_active: true,
+              needs_setup: true,
+              name_hi: suggestion.suggestion || null,
+              name_hi_is_custom: false,
+              online_name: rawName,
+              category_online_display: 'Uncategorized',
+              gst_percent: 5.0,
+              tax_type: 'Forward Tax',
+            });
+            existingNames.add(rawName.toLowerCase());
+          }
+        }
+
+        if (toInsert.length > 0) {
+          await supabase.from('pos_menu_items').upsert(toInsert, { onConflict: 'name', ignoreDuplicates: true });
+        }
+      }
+    } catch (discErr) {
+      console.warn('Auto-discovery pass non-critical warning:', discErr);
+    }
 
     const [
       { data: parents, error: pErr },
@@ -73,14 +119,37 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Parent & Category maps for enriching allItems
+    const parentMap = new Map((parents || []).map((p) => [p.id, p]));
+    const catMap = new Map((categories || []).map((c) => [c.id, c]));
+
+    const allItemsEnriched = (items || []).map((it) => {
+      const cat = it.category_id ? catMap.get(it.category_id) : (categories || []).find((c) => c.name === it.category);
+      const parent = cat?.parent_category_id ? parentMap.get(cat.parent_category_id) : (parents || []).find((p) => p.name === it.parent_category);
+
+      return {
+        ...it,
+        category_name: it.category || cat?.name || 'Uncategorized',
+        category_name_hi: cat?.name_hi || null,
+        parent_category: it.parent_category || parent?.name || 'Uncategorized',
+        parent_category_name: it.parent_category || parent?.name || 'Uncategorized',
+        parent_category_name_hi: parent?.name_hi || null,
+        aliases: aliasByItemId.get(it.id) || [],
+      };
+    });
+
+    const needsSetupCount = (items || []).filter((i) => i.needs_setup || i.category === 'Uncategorized' || !i.category).length;
+
     return NextResponse.json({
       hierarchy,
+      allItems: allItemsEnriched,
       stats: {
         totalParents: (parents || []).length,
         totalCategories: (categories || []).length,
         totalItems: (items || []).length,
         activeItems: (items || []).filter((i) => i.is_active).length,
         totalAliases: (aliases || []).length,
+        needsSetupCount,
       },
     });
   } catch (err: any) {

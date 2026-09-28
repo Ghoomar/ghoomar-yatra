@@ -2,16 +2,30 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName } from '@/lib/i18n/master-data';
+
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
 interface MenuItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  categories: Array<{ id: string; name: string; parent_category_id?: string; parent_category_name: string }>;
-  parents?: Array<{ id: string; name: string; color?: string | null }>;
+  categories: Array<{
+    id: string;
+    name: string;
+    name_hi?: string | null;
+    parent_category_id?: string;
+    parent_category_name: string;
+    parent_category_name_hi?: string | null;
+  }>;
+  parents?: Array<{ id: string; name: string; name_hi?: string | null; color?: string | null }>;
   item?: {
     id: string;
     name: string;
+    name_hi?: string | null;
+    name_hi_is_custom?: boolean;
+    needs_setup?: boolean;
     category_id: string;
     category: string;
     parent_category: string;
@@ -31,7 +45,10 @@ export function MenuItemModal({
   parents = [],
   item,
 }: MenuItemModalProps) {
+  const { locale } = useI18n();
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
+  const [isCustomHindi, setIsCustomHindi] = useState(false);
   const [selectedParent, setSelectedParent] = useState<string>('');
   const [categoryId, setCategoryId] = useState('');
   const [price, setPrice] = useState<number | string>(0);
@@ -41,25 +58,41 @@ export function MenuItemModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Compute unique parent names if parents array not explicitly passed
-  const parentNames = React.useMemo(() => {
-    if (parents.length > 0) return parents.map((p) => p.name);
-    return Array.from(new Set(categories.map((c) => c.parent_category_name).filter(Boolean)));
+  // Compute parent items with localization
+  const parentList = React.useMemo(() => {
+    if (parents.length > 0) {
+      return parents.map((p) => ({ name: p.name, name_hi: p.name_hi }));
+    }
+    const map = new Map<string, { name: string; name_hi?: string | null }>();
+    categories.forEach((c) => {
+      if (c.parent_category_name && !map.has(c.parent_category_name)) {
+        map.set(c.parent_category_name, {
+          name: c.parent_category_name,
+          name_hi: c.parent_category_name_hi,
+        });
+      }
+    });
+    return Array.from(map.values());
   }, [parents, categories]);
 
   useEffect(() => {
     if (item) {
       setName(item.name);
+      setNameHi(item.name_hi || '');
+      setIsCustomHindi(Boolean(item.name_hi_is_custom));
       const matchedCat = categories.find((c) => c.id === item.category_id || c.name === item.category);
-      const initialCatId = matchedCat?.id || item.category_id || categories[0]?.id || '';
+      const parentCandidate = matchedCat?.parent_category_name || (item.parent_category && item.parent_category !== 'Uncategorized' ? item.parent_category : '') || parentList[0]?.name || '';
+      setSelectedParent(parentCandidate);
+      const initialCatId = matchedCat?.id || item.category_id || categories.find((c) => c.parent_category_name === parentCandidate)?.id || categories[0]?.id || '';
       setCategoryId(initialCatId);
-      setSelectedParent(matchedCat?.parent_category_name || item.parent_category || parentNames[0] || '');
       setPrice(item.price !== undefined ? item.price : 0);
       setIsActive(item.is_active !== false);
       setAliases(item.aliases || []);
     } else {
       setName('');
-      const defaultParent = parentNames[0] || '';
+      setNameHi('');
+      setIsCustomHindi(false);
+      const defaultParent = parentList[0]?.name || '';
       setSelectedParent(defaultParent);
       const firstCatInParent = categories.find((c) => c.parent_category_name === defaultParent) || categories[0];
       setCategoryId(firstCatInParent?.id || '');
@@ -69,7 +102,7 @@ export function MenuItemModal({
     }
     setAliasInput('');
     setError(null);
-  }, [item, categories, parentNames, isOpen]);
+  }, [item, categories, parentList, isOpen]);
 
   const availableCategories = React.useMemo(() => {
     if (!selectedParent) return categories;
@@ -94,8 +127,6 @@ export function MenuItemModal({
 
   if (!isOpen) return null;
 
-  const selectedCategory = categories.find((c) => c.id === categoryId);
-
   const handleAddAlias = () => {
     if (aliasInput.trim() && !aliases.includes(aliasInput.trim())) {
       setAliases([...aliases, aliasInput.trim()]);
@@ -110,11 +141,11 @@ export function MenuItemModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Please provide an Item Name.');
+      setError(locale === 'hi' ? 'कृपया आइटम का नाम भरें।' : 'Please provide an Item Name.');
       return;
     }
     if (!categoryId) {
-      setError('Please select a Category.');
+      setError(locale === 'hi' ? 'कृपया श्रेणी चुनें।' : 'Please select a Category.');
       return;
     }
 
@@ -126,6 +157,8 @@ export function MenuItemModal({
       const method = item ? 'PUT' : 'POST';
       const payload: any = {
         name: name.trim(),
+        name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
+        name_hi_is_custom: isCustomHindi,
         category_id: categoryId,
         price: Number(price) || 0,
         is_active: isActive,
@@ -143,7 +176,7 @@ export function MenuItemModal({
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error || 'Failed to save menu item.');
+        throw new Error(json.error || (locale === 'hi' ? 'आइटम सहेजने में विफल।' : 'Failed to save menu item.'));
       }
 
       onSuccess();
@@ -161,10 +194,12 @@ export function MenuItemModal({
         <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
           <div>
             <h3 className="font-bold text-stone-900 text-sm">
-              {item ? 'Edit Menu Item' : 'New Menu Item'}
+              {item
+                ? locale === 'hi' ? 'मेन्यू आइटम संपादित करें' : 'Edit Menu Item'
+                : locale === 'hi' ? 'नया मेन्यू आइटम' : 'New Menu Item'}
             </h3>
             <p className="text-[11px] text-stone-500 mt-0.5">
-              Authoritative catalogue & Petpooja mapping
+              {locale === 'hi' ? 'अधिकृत मेन्यू सूची एवं पेटपूजा मैपिंग' : 'Authoritative catalogue & Petpooja mapping'}
             </p>
           </div>
           <button
@@ -182,24 +217,28 @@ export function MenuItemModal({
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Item Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Dal Makhani, Ghoomar Special Thali"
-              className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30"
-              required
-            />
-          </div>
+          <BilingualNameInput
+            englishName={name}
+            onChangeEnglish={setName}
+            hindiName={nameHi}
+            onChangeHindi={(val, custom) => {
+              setNameHi(val);
+              if (custom !== undefined) setIsCustomHindi(custom);
+            }}
+            isCustomHindi={isCustomHindi}
+            onCustomHindiChange={setIsCustomHindi}
+            entityType="menu_item"
+            englishLabel={locale === 'hi' ? 'आइटम का नाम (अंग्रेज़ी)' : 'Item Name (English)'}
+            hindiLabel={locale === 'hi' ? 'आइटम का नाम (हिंदी / देवनागरी)' : 'Item Name (Hindi)'}
+            placeholderEnglish="e.g. Punjabi Special Thali, Dal Makhani"
+            placeholderHindi="उदा. पंजाबी स्पेशल थाली, दाल मखनी"
+            required
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Parent Category *
+                {locale === 'hi' ? 'मूल श्रेणी' : 'Parent Category'} <span className="text-rose-500">*</span>
               </label>
               <select
                 value={selectedParent}
@@ -207,10 +246,10 @@ export function MenuItemModal({
                 className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30 font-medium"
                 required
               >
-                <option value="">Select Parent</option>
-                {parentNames.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
+                <option value="">{locale === 'hi' ? 'मूल श्रेणी चुनें' : 'Select Parent'}</option>
+                {parentList.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {getLocalizedMasterName(p, locale)}
                   </option>
                 ))}
               </select>
@@ -218,7 +257,7 @@ export function MenuItemModal({
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Category *
+                {locale === 'hi' ? 'उप-श्रेणी' : 'Category'} <span className="text-rose-500">*</span>
               </label>
               <select
                 value={categoryId}
@@ -226,10 +265,10 @@ export function MenuItemModal({
                 className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30 font-medium"
                 required
               >
-                <option value="">Select Category</option>
+                <option value="">{locale === 'hi' ? 'श्रेणी चुनें' : 'Select Category'}</option>
                 {availableCategories.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {getLocalizedMasterName(c, locale)}
                   </option>
                 ))}
               </select>
@@ -239,7 +278,7 @@ export function MenuItemModal({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Menu Price (₹) *
+                {locale === 'hi' ? 'मेन्यू मूल्य (₹)' : 'Menu Price (₹)'} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="number"
@@ -254,29 +293,31 @@ export function MenuItemModal({
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                GST Rate
+                {locale === 'hi' ? 'जीएसटी दर' : 'GST Rate'}
               </label>
               <div className="rounded-xl border border-stone-200 px-3 py-2 text-xs bg-stone-100 text-stone-700 font-semibold">
-                5.0% (Standard)
+                {locale === 'hi' ? '5.0% (मानक)' : '5.0% (Standard)'}
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Tax Type
+                {locale === 'hi' ? 'टैक्स प्रकार' : 'Tax Type'}
               </label>
               <div className="rounded-xl border border-stone-200 px-3 py-2 text-xs bg-stone-100 text-stone-700 font-semibold truncate">
-                Forward Tax
+                {locale === 'hi' ? 'फॉरवर्ड टैक्स' : 'Forward Tax'}
               </div>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-stone-700 mb-1">
-              Petpooja POS Aliases
+              {locale === 'hi' ? 'पेटपूजा पीओएस अन्य नाम' : 'Petpooja POS Aliases'}
             </label>
             <p className="text-[11px] text-stone-400 mb-1.5">
-              Alternate names that Petpooja POS exports for this item (e.g. &quot;Extra Bati (1)&quot;, &quot;coldrink&quot;)
+              {locale === 'hi'
+                ? 'पेटपूजा पीओएस में इस आइटम के वैकल्पिक नाम (उदा. "Extra Bati (1)", "coldrink")'
+                : 'Alternate names that Petpooja POS exports for this item (e.g. "Extra Bati (1)", "coldrink")'}
             </p>
             <div className="flex gap-2">
               <input
@@ -289,11 +330,11 @@ export function MenuItemModal({
                     handleAddAlias();
                   }
                 }}
-                placeholder="Enter alias & press Add..."
+                placeholder={locale === 'hi' ? 'उपनाम दर्ज करें और जोड़ें दबाएं...' : 'Enter alias & press Add...'}
                 className="flex-1 rounded-xl border border-stone-200 px-3 py-1.5 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30"
               />
               <Button type="button" variant="outline" size="sm" onClick={handleAddAlias}>
-                Add Alias
+                {locale === 'hi' ? 'उपनाम जोड़ें' : 'Add Alias'}
               </Button>
             </div>
 
@@ -326,16 +367,20 @@ export function MenuItemModal({
                 onChange={(e) => setIsActive(e.target.checked)}
                 className="rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
               />
-              <span>Active in Menu Master</span>
+              <span>{locale === 'hi' ? 'मेन्यू मास्टर में सक्रिय' : 'Active in Menu Master'}</span>
             </label>
           </div>
 
           <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={loading}>
-              Cancel
+              {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
             </Button>
             <Button type="submit" variant="primary" size="sm" disabled={loading}>
-              {loading ? 'Saving...' : item ? 'Update Item' : 'Create Item'}
+              {loading
+                ? locale === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...'
+                : item
+                ? locale === 'hi' ? 'आइटम अपडेट करें' : 'Update Item'
+                : locale === 'hi' ? 'आइटम बनाएं' : 'Create Item'}
             </Button>
           </div>
         </form>

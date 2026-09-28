@@ -435,7 +435,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
                 </span>
                 <p className="font-semibold text-stone-900">{duplicateModal.existingBatch?.file_name}</p>
                 <p className="text-stone-500">
-                  Net Sales: {formatINR(duplicateModal.existingBatch?.total_net_sales)} • Imported: {new Date(duplicateModal.existingBatch?.created_at).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
+                  {locale === 'hi' ? 'नेट सेल:' : 'Net Sales:'} {formatINR(duplicateModal.existingBatch?.total_net_sales)} • {locale === 'hi' ? 'अपलोड तारीख:' : 'Imported:'} {new Date(duplicateModal.existingBatch?.created_at).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
                 </p>
               </div>
 

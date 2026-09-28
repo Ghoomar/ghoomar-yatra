@@ -201,7 +201,7 @@
     "paymentType": "पेमेंट का प्रकार *",
     "paymentMethod": "पेमेंट का तरीका *",
     "amount": "दी गई रकम (₹) *",
-    "referenceNumber": "UPI / चेक / रिफ्रेंस नंबर",
+    "referenceNumber": "यूपीआई / चेक / संदर्भ नंबर",
     "notes": "नोट्स",
     "submit": "पेमेंट दर्ज करें",
     "submitting": "सेव हो रहा है...",
@@ -218,7 +218,7 @@
     "methods": {
       "Bank Transfer": "बैंक ट्रांसफर",
       "Cash": "कैश",
-      "UPI": "UPI",
+      "UPI": "यूपीआई",
       "Cheque": "चेक"
     },
     "errorAmount": "कृपया सही रकम लिखें।",

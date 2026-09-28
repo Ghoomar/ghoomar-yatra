@@ -6,6 +6,9 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { Unit } from '@/lib/types/database';
 import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, Scale } from 'lucide-react';
+import { useI18n } from '@/lib/i18n/context';
+import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
 interface UnitModalProps {
   isOpen: boolean;
@@ -14,6 +17,7 @@ interface UnitModalProps {
 }
 
 export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
+  const { t, locale } = useI18n();
   const supabase = createClient();
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +25,9 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
 
   // Form
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
   const [symbol, setSymbol] = useState('');
+  const [symbolHi, setSymbolHi] = useState('');
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -49,14 +55,18 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
   const resetForm = () => {
     setEditingUnit(null);
     setName('');
+    setNameHi('');
     setSymbol('');
+    setSymbolHi('');
     setErrorMessage(null);
   };
 
   const handleStartEdit = (u: Unit) => {
     setEditingUnit(u);
     setName(u.name);
+    setNameHi(u.name_hi || '');
     setSymbol(u.symbol);
+    setSymbolHi(u.symbol_hi || '');
     setErrorMessage(null);
   };
 
@@ -85,19 +95,22 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
     setErrorMessage(null);
 
     try {
+      const payload: any = {
+        name: name.trim(),
+        name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
+        symbol: symbol.trim(),
+        symbol_hi: symbolHi && symbolHi.trim() ? symbolHi.trim() : null,
+      };
+
       if (editingUnit) {
         const { error } = await supabase
           .from('units')
-          .update({
-            name: name.trim(),
-            symbol: symbol.trim(),
-          })
+          .update(payload)
           .eq('id', editingUnit.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('units').insert({
-          name: name.trim(),
-          symbol: symbol.trim(),
+          ...payload,
           is_active: true,
         });
         if (error) throw error;
@@ -151,36 +164,58 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
           {/* Form */}
           <form onSubmit={handleSubmit} className="p-4 bg-stone-50 rounded-lg border border-stone-200 space-y-3">
             <div className="font-semibold text-stone-800 flex items-center justify-between">
-              <span>{editingUnit ? `Edit Unit: ${editingUnit.name}` : 'Add New Unit'}</span>
+              <span>
+                {editingUnit
+                  ? `${locale === 'hi' ? 'इकाई बदलें:' : 'Edit Unit:'} ${getLocalizedMasterName(editingUnit, locale)}`
+                  : locale === 'hi'
+                  ? 'नई माप इकाई जोड़ें'
+                  : 'Add New Unit'}
+              </span>
               {editingUnit && (
                 <button
                   type="button"
                   onClick={resetForm}
                   className="text-stone-500 hover:text-stone-800 text-[11px] underline"
                 >
-                  Cancel Edit
+                  {locale === 'hi' ? 'रद्द करें' : 'Cancel Edit'}
                 </button>
               )}
             </div>
 
+            <BilingualNameInput
+              englishName={name}
+              onChangeEnglish={(val) => {
+                setName(val);
+                if (!symbol && val) {
+                  const lower = val.toLowerCase().trim();
+                  if (lower.includes('kilo')) setSymbol('kg');
+                  else if (lower.includes('gram')) setSymbol('g');
+                  else if (lower.includes('liter') || lower.includes('litre')) setSymbol('L');
+                  else if (lower.includes('piece')) setSymbol('pcs');
+                }
+              }}
+              hindiName={nameHi}
+              onChangeHindi={(val) => {
+                setNameHi(val);
+                if (!symbolHi && val) {
+                  if (val.includes('किलो')) setSymbolHi('किग्रा');
+                  else if (val.includes('ग्राम')) setSymbolHi('ग्रा');
+                  else if (val.includes('लीटर')) setSymbolHi('ली');
+                  else if (val.includes('पीस')) setSymbolHi('पीस');
+                }
+              }}
+              entityType="unit"
+              englishLabel={locale === 'hi' ? 'इकाई का नाम (अंग्रेज़ी)' : 'Unit Name (English)'}
+              hindiLabel={locale === 'hi' ? 'इकाई का नाम (हिंदी)' : 'Unit Name (Hindi)'}
+              placeholderEnglish="e.g. Kilogram, Piece, Liter"
+              placeholderHindi="उदा. किलोग्राम, पीस, लीटर"
+              required
+            />
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block font-medium text-stone-700 mb-1">
-                  Unit Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Kilogram, Piece, Liter"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">
-                  Symbol / Code <span className="text-rose-500">*</span>
+                  {locale === 'hi' ? 'प्रतीक / कोड (अंग्रेज़ी)' : 'Symbol / Code (English)'} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -191,11 +226,34 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 font-mono focus:outline-none focus:border-amber-500 bg-white"
                 />
               </div>
+
+              <div>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {locale === 'hi' ? 'प्रतीक (हिंदी)' : 'Symbol (Hindi)'}
+                </label>
+                <input
+                  type="text"
+                  value={symbolHi}
+                  onChange={(e) => setSymbolHi(e.target.value)}
+                  placeholder="उदा. किग्रा, पीस, ली, ग्रा"
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 font-mono focus:outline-none focus:border-amber-500 bg-white"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
               <Button type="submit" variant="amber" size="sm" disabled={saving}>
-                {saving ? 'Saving...' : editingUnit ? 'Save Changes' : '+ Add Unit'}
+                {saving
+                  ? locale === 'hi'
+                    ? 'सेव हो रहा है...'
+                    : 'Saving...'
+                  : editingUnit
+                  ? locale === 'hi'
+                    ? 'बदलाव सेव करें'
+                    : 'Save Changes'
+                  : locale === 'hi'
+                  ? '+ इकाई जोड़ें'
+                  : '+ Add Unit'}
               </Button>
             </div>
           </form>
@@ -203,7 +261,9 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
           {/* List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-stone-700 font-semibold border-b pb-1">
-              <span>Defined Units ({units.length})</span>
+              <span>
+                {locale === 'hi' ? `माप इकाइयाँ (${units.length})` : `Defined Units (${units.length})`}
+              </span>
               <button onClick={loadUnits} className="text-stone-400 hover:text-stone-600 p-1">
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
@@ -211,7 +271,8 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
 
             {loading ? (
               <div className="py-8 text-center text-stone-400 flex items-center justify-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" /> Loading units...
+                <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />{' '}
+                {locale === 'hi' ? 'इकाइयाँ लोड हो रही हैं...' : 'Loading units...'}
               </div>
             ) : (
               <div className="divide-y divide-stone-100 border rounded-lg overflow-hidden bg-white">
@@ -224,11 +285,11 @@ export function UnitModal({ isOpen, onClose, onUpdated }: UnitModalProps) {
                   >
                     <div className="flex items-center gap-3">
                       <span className="font-mono font-bold text-stone-800 bg-stone-100 px-2 py-0.5 rounded text-xs">
-                        {u.symbol}
+                        {getLocalizedMasterSymbol(u, locale)}
                       </span>
-                      <span className="font-medium text-stone-900">{u.name}</span>
+                      <span className="font-medium text-stone-900">{getLocalizedMasterName(u, locale)}</span>
                       <Badge variant={u.is_active ? 'success' : 'default'}>
-                        {u.is_active ? 'Active' : 'Inactive'}
+                        {u.is_active ? (locale === 'hi' ? 'चालू' : 'Active') : (locale === 'hi' ? 'बंद' : 'Inactive')}
                       </Badge>
                     </div>
 

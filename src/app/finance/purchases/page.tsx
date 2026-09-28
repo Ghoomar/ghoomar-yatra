@@ -554,8 +554,8 @@ export default function PurchasesPage() {
                     ? Math.round(((lineBaseRate - line.previous_rate) / line.previous_rate) * 100)
                     : 0;
 
-                  const secUnitSymbol = getLocalizedMasterSymbol(currentItem?.sec_unit, locale) || currentItem?.sec_unit?.symbol || 'Packs';
-                  const baseUnitSymbol = getLocalizedMasterSymbol(currentItem?.unit, locale) || currentItem?.unit?.symbol || 'Units';
+                  const secUnitSymbol = getLocalizedMasterSymbol(currentItem?.sec_unit, locale) || currentItem?.sec_unit?.symbol || (locale === 'hi' ? 'पैक' : 'Packs');
+                  const baseUnitSymbol = getLocalizedMasterSymbol(currentItem?.unit, locale) || currentItem?.unit?.symbol || (locale === 'hi' ? 'इकाई' : 'Units');
 
                   return (
                     <div key={idx} className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2">
