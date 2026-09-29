@@ -345,6 +345,7 @@
     "customerFood": "Customer Food Consumed",
     "staffFood": "Staff Meals & Mess",
     "wastageSpoilage": "Wastage & Spoilage",
+    "operationalConsumption": "Operational Consumption",
     "complimentary": "Complimentary & Sampling",
     "totalFoodCost": "Total Cost of Goods Sold",
     "foodCostPercent": "{percent}% of Net Sales",

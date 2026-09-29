@@ -28,9 +28,7 @@ export default function ProfitabilityPage() {
     customerFood: 0,
     staffFood: 0,
     wastage: 0,
-    complimentaryFood: 0,
-    sampling: 0,
-    other: 0,
+    operationalConsumption: 0,
   });
   const [operationalUtilities, setOperationalUtilities] = useState({
     electricityCost: 0,
@@ -98,9 +96,7 @@ export default function ProfitabilityPage() {
       let cust = 0;
       let staff = 0;
       let waste = 0;
-      let comp = 0;
-      let sample = 0;
-      let other = 0;
+      let operational = 0;
       let dieselCost = 0;
       let dieselLiters = 0;
       let lpgCost = 0;
@@ -125,12 +121,9 @@ export default function ProfitabilityPage() {
           staff += val;
         } else if (m.purpose === 'Wastage' || m.purpose === 'Spoilage' || m.movement_type === 'wastage' || m.movement_type === 'spoilage') {
           waste += val;
-        } else if (m.purpose === 'Complimentary Food') {
-          comp += val;
-        } else if (m.purpose === 'Sampling') {
-          sample += val;
         } else {
-          other += val;
+          // Operational Consumption, Activity Use, Other, and non-food consumable issues
+          operational += val;
         }
       });
 
@@ -138,9 +131,7 @@ export default function ProfitabilityPage() {
         customerFood: cust,
         staffFood: staff,
         wastage: waste,
-        complimentaryFood: comp,
-        sampling: sample,
-        other: other,
+        operationalConsumption: operational,
       });
 
       // 3. Fetch direct expenses
@@ -277,9 +268,7 @@ export default function ProfitabilityPage() {
     customerFoodConsumption: materialConsumption.customerFood,
     staffFoodConsumption: materialConsumption.staffFood,
     wastageCost: materialConsumption.wastage,
-    complimentaryFoodConsumption: materialConsumption.complimentaryFood,
-    samplingConsumption: materialConsumption.sampling,
-    otherConsumption: materialConsumption.other,
+    operationalConsumption: materialConsumption.operationalConsumption,
     operationalUtilities: operationalUtilities,
     variableExpenses: variableExpenses,
     revenueLinkedRates: {
@@ -451,10 +440,6 @@ export default function ProfitabilityPage() {
                 <span className="font-mono text-stone-700">{formatINR(pnl.customerFoodConsumption)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>• {t('finance.profitability.complimentary')}</span>
-                <span className="font-mono text-stone-700">{formatINR(pnl.complimentaryFoodConsumption)}</span>
-              </div>
-              <div className="flex items-center justify-between">
                 <span>• {t('finance.profitability.staffFood')}</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.staffFoodConsumption)}</span>
               </div>
@@ -462,12 +447,10 @@ export default function ProfitabilityPage() {
                 <span>• {t('finance.profitability.wastageSpoilage')}</span>
                 <span className="font-mono text-stone-700">{formatINR(pnl.wastageCost)}</span>
               </div>
-              {pnl.otherConsumption > 0 && (
-                <div className="flex items-center justify-between">
-                  <span>• Operational Consumption</span>
-                  <span className="font-mono text-stone-700">{formatINR(pnl.otherConsumption)}</span>
-                </div>
-              )}
+              <div className="flex items-center justify-between">
+                <span>• {t('finance.profitability.operationalConsumption')}</span>
+                <span className="font-mono text-stone-700">{formatINR(pnl.operationalConsumption)}</span>
+              </div>
             </div>
           </div>
 

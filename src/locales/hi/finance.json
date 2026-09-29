@@ -345,6 +345,7 @@
     "customerFood": "कस्टमर खाने का राशन",
     "staffFood": "स्टाफ खाना / मेस खर्च",
     "wastageSpoilage": "किचन वेस्टेज व नुकसान",
+    "operationalConsumption": "सामान्य काम-काज (कन्ज्यूमेबल्स)",
     "complimentary": "फ्री खाना व टेस्टिंग",
     "totalFoodCost": "खाने का पूरा खर्च",
     "foodCostPercent": "नेट सेल का {percent}%",

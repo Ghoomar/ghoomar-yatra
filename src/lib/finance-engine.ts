@@ -8,9 +8,8 @@ export interface DailyFinanceInput {
   customerFoodConsumption: number;
   staffFoodConsumption: number;
   wastageCost: number;
-  complimentaryFoodConsumption?: number;
-  samplingConsumption?: number;
-  otherConsumption?: number;
+  operationalConsumption?: number;
+  otherConsumption?: number; // backwards-compatibility alias
   variableExpenses: number;
   operationalUtilities?: {
     electricityCost: number;
@@ -35,9 +34,8 @@ export interface DailyFinanceOutput {
   customerFoodConsumption: number;
   staffFoodConsumption: number;
   wastageCost: number;
-  complimentaryFoodConsumption: number;
-  samplingConsumption: number;
-  otherConsumption: number;
+  operationalConsumption: number;
+  otherConsumption: number; // backwards-compatibility alias
   operationalUtilities: {
     electricityCost: number;
     generatorDieselCost: number;
@@ -55,15 +53,13 @@ export interface DailyFinanceOutput {
 export function calculateDailyProfitability(input: DailyFinanceInput): DailyFinanceOutput {
   const isReported = Boolean(input.isReported);
   const revenue = isReported ? (input.netSales || 0) : 0;
-  const comp = input.complimentaryFoodConsumption || 0;
-  const sample = input.samplingConsumption || 0;
-  const other = input.otherConsumption || 0;
+  const opCons = input.operationalConsumption ?? input.otherConsumption ?? 0;
 
   const totalDirectConsumption = 
-    input.customerFoodConsumption + input.staffFoodConsumption + input.wastageCost + comp + sample + other;
+    input.customerFoodConsumption + input.staffFoodConsumption + input.wastageCost + opCons;
 
-  // Food cost percent based on total food produced (customer + complimentary + sampling)
-  const totalFoodProduction = input.customerFoodConsumption + comp + sample;
+  // Food cost percent based strictly on Customer Food Consumed (Complimentary/Sampling removed from raw-material COGS)
+  const totalFoodProduction = input.customerFoodConsumption;
   const foodCostPercent = revenue > 0 
     ? Number(((totalFoodProduction / revenue) * 100).toFixed(1))
     : 0;
@@ -101,9 +97,8 @@ export function calculateDailyProfitability(input: DailyFinanceInput): DailyFina
     customerFoodConsumption: input.customerFoodConsumption,
     staffFoodConsumption: input.staffFoodConsumption,
     wastageCost: input.wastageCost,
-    complimentaryFoodConsumption: comp,
-    samplingConsumption: sample,
-    otherConsumption: other,
+    operationalConsumption: opCons,
+    otherConsumption: opCons,
     operationalUtilities: {
       electricityCost: elec,
       generatorDieselCost: diesel,

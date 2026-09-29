@@ -224,6 +224,7 @@ export interface DailyFinancialSummary {
   customer_food_consumption: number;
   staff_food_consumption: number;
   wastage_cost: number;
+  operational_consumption?: number;
   total_material_consumption: number;
   variable_expenses: number;
   payment_commissions: number;
