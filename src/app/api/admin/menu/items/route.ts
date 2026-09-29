@@ -86,6 +86,41 @@ export async function POST(request: NextRequest) {
     const normalized = normalizeItemName(cleanName);
     const finalNameHi = name_hi && name_hi.trim() ? name_hi.trim() : null;
 
+    // Duplicate creation protection: check exact name and normalized name against existing canonical items
+    const { data: existingExact } = await supabase
+      .from('pos_menu_items')
+      .select('id, name, parent_category, category, needs_setup')
+      .ilike('name', cleanName)
+      .maybeSingle();
+
+    if (existingExact && !existingExact.needs_setup && existingExact.category !== 'Uncategorized') {
+      return NextResponse.json(
+        {
+          error: `An item with this name already exists ("${existingExact.name}").`,
+          conflict: true,
+          existingItem: existingExact,
+        },
+        { status: 409 }
+      );
+    }
+
+    const { data: existingNorm } = await supabase
+      .from('pos_menu_items')
+      .select('id, name, parent_category, category, needs_setup')
+      .eq('normalized_name', normalized)
+      .maybeSingle();
+
+    if (existingNorm && !existingNorm.needs_setup && existingNorm.category !== 'Uncategorized') {
+      return NextResponse.json(
+        {
+          error: `An item with this name already exists ("${existingNorm.name}").`,
+          conflict: true,
+          existingItem: existingNorm,
+        },
+        { status: 409 }
+      );
+    }
+
     // Business rule: GST = 5%, Tax Type = Forward Tax
     const { data: item, error } = await supabase
       .from('pos_menu_items')
@@ -168,6 +203,48 @@ export async function PUT(request: NextRequest) {
 
     const finalName = name ? name.trim() : oldItem.name;
     const normalized = normalizeItemName(finalName);
+
+    // If name is being changed, verify it does not collide with an existing canonical item
+    if (finalName.toLowerCase() !== oldItem.name.toLowerCase()) {
+      const { data: duplicateExact } = await supabase
+        .from('pos_menu_items')
+        .select('id, name, parent_category, category, needs_setup')
+        .ilike('name', finalName)
+        .neq('id', id)
+        .maybeSingle();
+
+      if (duplicateExact && !duplicateExact.needs_setup && duplicateExact.category !== 'Uncategorized') {
+        return NextResponse.json(
+          {
+            error: `An item named "${duplicateExact.name}" already exists in the Menu Master.`,
+            conflict: true,
+            canMapToExisting: true,
+            existingItem: duplicateExact,
+          },
+          { status: 409 }
+        );
+      }
+
+      const { data: duplicateNorm } = await supabase
+        .from('pos_menu_items')
+        .select('id, name, parent_category, category, needs_setup')
+        .eq('normalized_name', normalized)
+        .neq('id', id)
+        .maybeSingle();
+
+      if (duplicateNorm && !duplicateNorm.needs_setup && duplicateNorm.category !== 'Uncategorized') {
+        return NextResponse.json(
+          {
+            error: `An item named "${duplicateNorm.name}" already exists in the Menu Master.`,
+            conflict: true,
+            canMapToExisting: true,
+            existingItem: duplicateNorm,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const finalNameHi = name_hi !== undefined ? (name_hi && name_hi.trim() ? name_hi.trim() : null) : oldItem.name_hi;
 
     const updatePayload: Record<string, any> = {

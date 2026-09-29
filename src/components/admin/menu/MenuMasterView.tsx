@@ -23,10 +23,12 @@ import {
   ShieldCheck,
   Building,
   Sparkles,
+  Link2,
 } from 'lucide-react';
 import { ParentCategoryModal } from './ParentCategoryModal';
 import { CategoryModal } from './CategoryModal';
 import { MenuItemModal } from './MenuItemModal';
+import { MapToExistingModal } from './MapToExistingModal';
 import { ReclassifySalesModal } from './ReclassifySalesModal';
 import { getCategoryColor, getCategoryBadgeClasses } from '@/lib/constants/category-colors';
 import { useI18n } from '@/lib/i18n/context';
@@ -74,6 +76,9 @@ export function MenuMasterView() {
 
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
+
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [mappingItem, setMappingItem] = useState<{ id?: string; name: string; price?: number } | null>(null);
 
   const [reclassifyModalOpen, setReclassifyModalOpen] = useState(false);
 
@@ -607,21 +612,38 @@ export function MenuMasterView() {
                             .map((it) => (
                               <div
                                 key={it.id}
-                                onClick={() => {
-                                  setEditingItem(it);
-                                  setItemModalOpen(true);
-                                }}
-                                className="group inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white hover:border-amber-500 hover:bg-amber-100/40 text-xs cursor-pointer transition shadow-2xs"
+                                className="group inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white hover:border-amber-400 text-xs transition shadow-2xs"
                               >
-                                <span className="font-medium text-stone-900 group-hover:text-amber-900">
+                                <span className="font-medium text-stone-900">
                                   {getLocalizedMasterName(it, locale)}
                                 </span>
                                 <span className="font-mono text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded">
                                   {formatINR(it.price)}
                                 </span>
-                                <span className="text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-semibold border border-amber-300">
-                                  {locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'}
-                                </span>
+                                <div className="flex items-center gap-1 border-l border-amber-200 pl-1.5 ml-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingItem(it);
+                                      setItemModalOpen(true);
+                                    }}
+                                    className="p-1 rounded hover:bg-amber-100 text-stone-600 hover:text-stone-900 transition"
+                                    title={locale === 'hi' ? 'नया आइटम कॉन्फ़िगर करें' : 'Configure New Item'}
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setMappingItem(it);
+                                      setMapModalOpen(true);
+                                    }}
+                                    className="p-1 rounded hover:bg-amber-100 text-amber-700 hover:text-amber-900 transition"
+                                    title={locale === 'hi' ? 'मौजूदा आइटम से मैप करें' : 'Map to Existing Item'}
+                                  >
+                                    <Link2 className="h-3 w-3" />
+                                  </button>
+                                </div>
                               </div>
                             ))}
                         </div>
@@ -791,17 +813,48 @@ export function MenuMasterView() {
                                 )}
                               </td>
                               <td className="p-3 text-center">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingItem(item);
-                                    setItemModalOpen(true);
-                                  }}
-                                  className="text-stone-500 hover:text-stone-900"
-                                >
-                                  <Edit2 className="h-3.5 w-3.5" />
-                                </Button>
+                                {item.needs_setup || item.category === 'Uncategorized' || !item.category ? (
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingItem(item);
+                                        setItemModalOpen(true);
+                                      }}
+                                      className="text-stone-700 h-7 px-2 text-xs flex items-center gap-1 hover:bg-stone-100"
+                                      title={locale === 'hi' ? 'नया आइटम कॉन्फ़िगर करें' : 'Configure New Item'}
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                      <span>{locale === 'hi' ? 'कॉन्फ़िगर' : 'Configure'}</span>
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setMappingItem(item);
+                                        setMapModalOpen(true);
+                                      }}
+                                      className="text-amber-700 border-amber-300 hover:bg-amber-50 h-7 px-2 text-xs flex items-center gap-1"
+                                      title={locale === 'hi' ? 'मौजूदा आइटम से मैप करें' : 'Map to Existing Item'}
+                                    >
+                                      <Link2 className="h-3 w-3" />
+                                      <span>{locale === 'hi' ? 'मैप करें' : 'Map'}</span>
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingItem(item);
+                                      setItemModalOpen(true);
+                                    }}
+                                    className="text-stone-500 hover:text-stone-900"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
                               </td>
                             </tr>
                           ))
@@ -1036,9 +1089,21 @@ export function MenuMasterView() {
         isOpen={itemModalOpen}
         onClose={() => setItemModalOpen(false)}
         onSuccess={loadData}
+        onMapToExisting={(src) => {
+          setMappingItem(src);
+          setMapModalOpen(true);
+        }}
         categories={categoriesList}
         parents={parentsList}
         item={editingItem}
+      />
+
+      <MapToExistingModal
+        isOpen={mapModalOpen}
+        onClose={() => setMapModalOpen(false)}
+        onSuccess={loadData}
+        sourceItem={mappingItem}
+        allItems={itemsList}
       />
 
       <ReclassifySalesModal

@@ -99,10 +99,12 @@ export function normalizeItemName(name: string): string {
 }
 
 export interface MenuItemMapping {
+  id?: string;
   name: string;
   category: string;
   parentCategory: string;
   price?: number;
+  needsSetup?: boolean;
 }
 
 export interface CategoryResolutionResult {
@@ -110,6 +112,7 @@ export interface CategoryResolutionResult {
   parentCategory: string;
   isMatched: boolean;
   matchedItemName?: string;
+  matchedItemId?: string;
   matchType?: 'exact' | 'normalized' | 'alias' | 'none';
 }
 
@@ -125,24 +128,29 @@ export interface MenuMasterLookup {
 
 /**
  * Builds fast lookup maps from pos_menu_items, pos_menu_item_aliases, and pos_categories.
+ * Prioritizes configured canonical items so unconfigured Needs Setup records never shadow canonical items.
  */
 export function buildMenuMasterLookup(
   menuItems: Array<{
+    id?: string;
     name: string;
     category: string;
     parent_category: string;
     price?: number;
     normalized_name?: string | null;
+    needs_setup?: boolean | null;
   }>,
   aliases?: Array<{
     alias: string;
-    normalized_alias: string;
+    normalized_alias?: string | null;
     menu_item_id: string;
     pos_menu_items?: {
+      id?: string;
       name: string;
       category: string;
       parent_category: string;
       price?: number;
+      needs_setup?: boolean | null;
     } | null;
   }>,
   dbCategories?: Array<{
@@ -160,22 +168,55 @@ export function buildMenuMasterLookup(
     categoryToParentMap.set(c.name.toLowerCase().trim(), c.parent_category_name);
   });
 
-  // 2. Populate menu items
+  // 2. Partition into configured canonical items vs unconfigured Needs Setup records
+  const canonicalItems: typeof menuItems = [];
+  const uncategorizedItems: typeof menuItems = [];
+
   (menuItems || []).forEach((m) => {
+    const isUnconfigured = Boolean(m.needs_setup) || !m.category || m.category === 'Uncategorized';
+    if (isUnconfigured) {
+      uncategorizedItems.push(m);
+    } else {
+      canonicalItems.push(m);
+    }
+  });
+
+  // Index canonical items FIRST (authoritative)
+  canonicalItems.forEach((m) => {
     const parentCat = resolveParentCategory(m.category, m.parent_category, categoryToParentMap);
     const itemData: MenuItemMapping = {
+      id: m.id,
       name: m.name,
       category: m.category,
       parentCategory: parentCat,
       price: m.price ? Number(m.price) : undefined,
+      needsSetup: false,
     };
 
-    // Raw exact lookup
     exactMap.set(m.name, itemData);
+    exactMap.set(m.name.toLowerCase().trim(), itemData);
 
-    // Normalized lookup
     const norm = m.normalized_name || normalizeItemName(m.name);
     normalizedMap.set(norm, itemData);
+  });
+
+  // Index unconfigured items only where slot is free
+  uncategorizedItems.forEach((m) => {
+    const parentCat = resolveParentCategory(m.category, m.parent_category, categoryToParentMap);
+    const itemData: MenuItemMapping = {
+      id: m.id,
+      name: m.name,
+      category: m.category || 'Uncategorized',
+      parentCategory: parentCat,
+      price: m.price ? Number(m.price) : undefined,
+      needsSetup: true,
+    };
+
+    if (!exactMap.has(m.name)) exactMap.set(m.name, itemData);
+    if (!exactMap.has(m.name.toLowerCase().trim())) exactMap.set(m.name.toLowerCase().trim(), itemData);
+
+    const norm = m.normalized_name || normalizeItemName(m.name);
+    if (!normalizedMap.has(norm)) normalizedMap.set(norm, itemData);
   });
 
   // 3. Populate aliases
@@ -187,13 +228,18 @@ export function buildMenuMasterLookup(
         categoryToParentMap
       );
       const itemData: MenuItemMapping = {
+        id: a.pos_menu_items.id || a.menu_item_id,
         name: a.pos_menu_items.name,
         category: a.pos_menu_items.category,
         parentCategory: parentCat,
         price: a.pos_menu_items.price ? Number(a.pos_menu_items.price) : undefined,
+        needsSetup: Boolean(a.pos_menu_items.needs_setup),
       };
       aliasMap.set(a.alias, itemData);
-      aliasMap.set(a.normalized_alias || normalizeItemName(a.alias), itemData);
+      aliasMap.set(a.alias.toLowerCase().trim(), itemData);
+
+      const normAlias = a.normalized_alias || normalizeItemName(a.alias);
+      aliasMap.set(normAlias, itemData);
     }
   });
 
@@ -210,8 +256,8 @@ export async function loadMenuMasterLookupFromDb(supabase: any): Promise<MenuMas
     { data: aliases },
   ] = await Promise.all([
     supabase.from('pos_categories').select('name, parent_category_name').eq('is_active', true),
-    supabase.from('pos_menu_items').select('name, parent_category, category, price, normalized_name').eq('is_active', true),
-    supabase.from('pos_menu_item_aliases').select('alias, normalized_alias, menu_item_id, pos_menu_items(name, category, parent_category, price)'),
+    supabase.from('pos_menu_items').select('id, name, parent_category, category, price, normalized_name, needs_setup').eq('is_active', true),
+    supabase.from('pos_menu_item_aliases').select('alias, normalized_alias, menu_item_id, pos_menu_items(id, name, category, parent_category, price, needs_setup)'),
   ]);
 
   return buildMenuMasterLookup(menuItems || [], (aliases as any) || [], categories || []);
@@ -238,50 +284,44 @@ export function resolveItemCategory(
   }
 
   const cleanRaw = rawItemName.trim();
+  const lowerRaw = cleanRaw.toLowerCase();
+  const norm = normalizeItemName(cleanRaw);
 
-  // Priority 1: Exact item-name match
-  if (lookup.exactMap.has(cleanRaw)) {
-    const m = lookup.exactMap.get(cleanRaw)!;
+  // Priority 1: Exact item-name match on configured canonical item
+  const exactMatch = lookup.exactMap.get(cleanRaw) || lookup.exactMap.get(lowerRaw);
+  if (exactMatch && !exactMatch.needsSetup && exactMatch.category !== 'Uncategorized') {
     return {
-      category: m.category,
-      parentCategory: m.parentCategory,
+      category: exactMatch.category,
+      parentCategory: exactMatch.parentCategory,
       isMatched: true,
-      matchedItemName: m.name,
+      matchedItemName: exactMatch.name,
+      matchedItemId: exactMatch.id,
       matchType: 'exact',
     };
   }
 
-  // Priority 2: Normalized item-name match
-  const norm = normalizeItemName(cleanRaw);
-  if (lookup.normalizedMap.has(norm)) {
-    const m = lookup.normalizedMap.get(norm)!;
+  // Priority 2: Normalized item-name match on configured canonical item
+  const normMatch = lookup.normalizedMap.get(norm);
+  if (normMatch && !normMatch.needsSetup && normMatch.category !== 'Uncategorized') {
     return {
-      category: m.category,
-      parentCategory: m.parentCategory,
+      category: normMatch.category,
+      parentCategory: normMatch.parentCategory,
       isMatched: true,
-      matchedItemName: m.name,
+      matchedItemName: normMatch.name,
+      matchedItemId: normMatch.id,
       matchType: 'normalized',
     };
   }
 
   // Priority 3: Authoritative alias mapping
-  if (lookup.aliasMap.has(cleanRaw)) {
-    const m = lookup.aliasMap.get(cleanRaw)!;
+  const aliasMatch = lookup.aliasMap.get(cleanRaw) || lookup.aliasMap.get(lowerRaw) || lookup.aliasMap.get(norm);
+  if (aliasMatch && !aliasMatch.needsSetup && aliasMatch.category !== 'Uncategorized') {
     return {
-      category: m.category,
-      parentCategory: m.parentCategory,
+      category: aliasMatch.category,
+      parentCategory: aliasMatch.parentCategory,
       isMatched: true,
-      matchedItemName: m.name,
-      matchType: 'alias',
-    };
-  }
-  if (lookup.aliasMap.has(norm)) {
-    const m = lookup.aliasMap.get(norm)!;
-    return {
-      category: m.category,
-      parentCategory: m.parentCategory,
-      isMatched: true,
-      matchedItemName: m.name,
+      matchedItemName: aliasMatch.name,
+      matchedItemId: aliasMatch.id,
       matchType: 'alias',
     };
   }
@@ -292,5 +332,80 @@ export function resolveItemCategory(
     parentCategory: 'Uncategorized',
     isMatched: false,
     matchType: 'none',
+  };
+}
+
+/**
+ * Automatically reconciles existing Needs Setup records in pos_menu_items.
+ * If an item in Needs Setup resolves to a configured canonical item (via exact, normalized, or alias match),
+ * it re-points any aliases, syncs historical sales rows, and deletes the redundant Needs Setup record.
+ */
+export async function reconcileNeedsSetupItems(supabase: any): Promise<{
+  reconciledCount: number;
+  reconciledItems: Array<{ sourceName: string; canonicalName: string; matchType: string }>;
+}> {
+  const lookup = await loadMenuMasterLookupFromDb(supabase);
+
+  // Fetch all items currently in Needs Setup
+  const { data: needsSetupItems, error: nsErr } = await supabase
+    .from('pos_menu_items')
+    .select('id, name, parent_category, category')
+    .eq('needs_setup', true);
+
+  if (nsErr || !needsSetupItems || needsSetupItems.length === 0) {
+    return { reconciledCount: 0, reconciledItems: [] };
+  }
+
+  const reconciledItems: Array<{ sourceName: string; canonicalName: string; matchType: string }> = [];
+
+  for (const item of needsSetupItems) {
+    const res = resolveItemCategory(item.name, lookup);
+
+    // If it resolves to a configured canonical item (and isn't resolving to itself)
+    if (res.isMatched && res.category !== 'Uncategorized' && res.matchedItemId && res.matchedItemId !== item.id) {
+      // 1. If the source name is different from the canonical name, register it as an alias
+      if (item.name.trim().toLowerCase() !== (res.matchedItemName || '').toLowerCase()) {
+        await supabase
+          .from('pos_menu_item_aliases')
+          .upsert(
+            {
+              alias: item.name.trim(),
+              normalized_alias: normalizeItemName(item.name.trim()),
+              menu_item_id: res.matchedItemId,
+              notes: `Auto-reconciled from ${res.matchType} match`,
+            },
+            { onConflict: 'alias' }
+          );
+      }
+
+      // 2. Re-point any aliases that point to this redundant item
+      await supabase
+        .from('pos_menu_item_aliases')
+        .update({ menu_item_id: res.matchedItemId })
+        .eq('menu_item_id', item.id);
+
+      // 2. Reclassify sales in sales_hourly_items without altering raw item_name
+      await supabase
+        .from('sales_hourly_items')
+        .update({
+          parent_category: res.parentCategory,
+          category: res.category,
+        })
+        .ilike('item_name', item.name.trim());
+
+      // 3. Delete redundant item from pos_menu_items
+      await supabase.from('pos_menu_items').delete().eq('id', item.id);
+
+      reconciledItems.push({
+        sourceName: item.name,
+        canonicalName: res.matchedItemName || '',
+        matchType: res.matchType || 'normalized',
+      });
+    }
+  }
+
+  return {
+    reconciledCount: reconciledItems.length,
+    reconciledItems,
   };
 }

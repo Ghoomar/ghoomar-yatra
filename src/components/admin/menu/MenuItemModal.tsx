@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
+import { AlertCircle, Link2 } from 'lucide-react';
 
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
@@ -11,6 +12,7 @@ interface MenuItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  onMapToExisting?: (item: { id?: string; name: string; price?: number }) => void;
   categories: Array<{
     id: string;
     name: string;
@@ -41,6 +43,7 @@ export function MenuItemModal({
   isOpen,
   onClose,
   onSuccess,
+  onMapToExisting,
   categories,
   parents = [],
   item,
@@ -57,6 +60,7 @@ export function MenuItemModal({
   const [aliases, setAliases] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflictItem, setConflictItem] = useState<{ id: string; name: string } | null>(null);
 
   // Compute parent items with localization
   const parentList = React.useMemo(() => {
@@ -102,6 +106,7 @@ export function MenuItemModal({
     }
     setAliasInput('');
     setError(null);
+    setConflictItem(null);
   }, [item, categories, parentList, isOpen]);
 
   const availableCategories = React.useMemo(() => {
@@ -151,6 +156,7 @@ export function MenuItemModal({
 
     setLoading(true);
     setError(null);
+    setConflictItem(null);
 
     try {
       const url = '/api/admin/menu/items';
@@ -176,6 +182,11 @@ export function MenuItemModal({
 
       const json = await res.json();
       if (!res.ok) {
+        if (res.status === 409 && json.existingItem) {
+          setConflictItem(json.existingItem);
+          setError(json.error);
+          return;
+        }
         throw new Error(json.error || (locale === 'hi' ? 'आइटम सहेजने में विफल।' : 'Failed to save menu item.'));
       }
 
@@ -212,8 +223,42 @@ export function MenuItemModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium">
-              {error}
+            <div className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold">{error}</p>
+                  {conflictItem && onMapToExisting && (
+                    <p className="text-[11px] text-amber-800">
+                      {locale === 'hi'
+                        ? 'क्या आप इसे अलग आइटम बनाने के बजाय मौजूदा अधिकृत आइटम से जोड़ना चाहते हैं?'
+                        : 'Would you like to map this item as an alias to the existing canonical item instead of creating a duplicate?'}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {conflictItem && onMapToExisting && (
+                <div className="pt-1 flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const src = item || { name: name.trim(), price: Number(price) || 0 };
+                      onClose();
+                      onMapToExisting(src);
+                    }}
+                    className="text-amber-800 border-amber-300 hover:bg-amber-100/80 text-xs flex items-center gap-1.5"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    <span>
+                      {locale === 'hi'
+                        ? `"${conflictItem.name}" से मैप करें`
+                        : `Map to "${conflictItem.name}"`}
+                    </span>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

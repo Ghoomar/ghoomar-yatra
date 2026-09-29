@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
-import { loadMenuMasterLookupFromDb, resolveItemCategory } from '@/lib/petpooja/matcher';
+import { loadMenuMasterLookupFromDb, resolveItemCategory, normalizeItemName } from '@/lib/petpooja/matcher';
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 
 export async function POST(request: NextRequest) {
@@ -127,22 +127,25 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Discover and register any newly seen items into pos_menu_items with needs_setup: true
+      // Discover and register genuinely newly seen items into pos_menu_items with needs_setup: true
       if (unmappedItemsMap.size > 0) {
-        const itemNames = Array.from(unmappedItemsMap.keys());
-        const { data: existingItems } = await supabase
+        const { data: allMenuItems } = await supabase
           .from('pos_menu_items')
-          .select('name')
-          .in('name', itemNames);
+          .select('name, normalized_name, needs_setup, category');
 
-        const existingSet = new Set((existingItems || []).map((e) => e.name));
+        const existingNames = new Set((allMenuItems || []).map((e) => e.name.toLowerCase().trim()));
+        const existingNorms = new Set(
+          (allMenuItems || []).map((e) => e.normalized_name || normalizeItemName(e.name))
+        );
+
         const newMenuItems: any[] = [];
-
         for (const [itemName, price] of unmappedItemsMap.entries()) {
-          if (!existingSet.has(itemName)) {
+          const norm = normalizeItemName(itemName);
+          if (!existingNames.has(itemName.toLowerCase().trim()) && !existingNorms.has(norm)) {
             const hindiSuggestion = suggestHindiName(itemName, 'menu_item');
             newMenuItems.push({
               name: itemName,
+              normalized_name: norm,
               name_hi: hindiSuggestion.suggestion,
               name_hi_is_custom: false,
               category: 'Uncategorized',
@@ -151,6 +154,8 @@ export async function POST(request: NextRequest) {
               is_active: true,
               needs_setup: true,
             });
+            existingNames.add(itemName.toLowerCase().trim());
+            existingNorms.add(norm);
           }
         }
 

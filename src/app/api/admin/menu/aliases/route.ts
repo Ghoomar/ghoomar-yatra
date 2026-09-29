@@ -32,6 +32,26 @@ export async function POST(request: NextRequest) {
 
     const cleanAlias = alias.trim();
     const normalized = normalizeItemName(cleanAlias);
+    const force = Boolean(body.force);
+
+    // Conflict check: if alias already exists and points to a different item, require explicit force
+    const { data: existingAlias } = await supabase
+      .from('pos_menu_item_aliases')
+      .select('id, alias, menu_item_id, pos_menu_items(id, name)')
+      .ilike('alias', cleanAlias)
+      .maybeSingle();
+
+    if (existingAlias && existingAlias.menu_item_id !== menu_item_id && !force) {
+      const currentTargetName = (existingAlias.pos_menu_items as any)?.name || 'another item';
+      return NextResponse.json(
+        {
+          error: `Alias "${cleanAlias}" is already mapped to "${currentTargetName}".`,
+          conflict: true,
+          existingTarget: existingAlias.pos_menu_items,
+        },
+        { status: 409 }
+      );
+    }
 
     const { data, error } = await supabase
       .from('pos_menu_item_aliases')

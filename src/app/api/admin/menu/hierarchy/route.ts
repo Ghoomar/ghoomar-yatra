@@ -1,28 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { normalizeItemName } from '@/lib/petpooja/matcher';
+import {
+  normalizeItemName,
+  loadMenuMasterLookupFromDb,
+  resolveItemCategory,
+  reconcileNeedsSetupItems,
+} from '@/lib/petpooja/matcher';
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
 
-    // 0. Auto-discover uncatalogued items from sales_hourly_items if any
+    // 0. Auto-reconcile and discover uncatalogued items using authoritative matcher
     try {
+      await reconcileNeedsSetupItems(supabase);
+      const lookup = await loadMenuMasterLookupFromDb(supabase);
+
       const { data: salesDistinct } = await supabase
         .from('distinct_sales_items')
         .select('item_name, unit_price');
 
       if (salesDistinct && salesDistinct.length > 0) {
-        const { data: existingRows } = await supabase.from('pos_menu_items').select('name');
+        const { data: existingRows } = await supabase.from('pos_menu_items').select('name, normalized_name');
         const existingNames = new Set((existingRows || []).map((i) => i.name.toLowerCase().trim()));
+        const existingNorms = new Set(
+          (existingRows || []).map((i) => i.normalized_name || normalizeItemName(i.name))
+        );
 
         const toInsert: any[] = [];
         for (const row of salesDistinct) {
           const rawName = (row.item_name || '').trim();
           if (!rawName) continue;
-          if (!existingNames.has(rawName.toLowerCase())) {
-            const norm = normalizeItemName(rawName);
+
+          // Check if resolved by authoritative matcher (Exact -> Normalized -> Alias)
+          const res = resolveItemCategory(rawName, lookup);
+          if (res.isMatched && res.category !== 'Uncategorized') {
+            // Already resolved to canonical item: DO NOT put into Needs Setup
+            continue;
+          }
+
+          // Unmatched: only insert if not already present
+          const norm = normalizeItemName(rawName);
+          if (!existingNames.has(rawName.toLowerCase()) && !existingNorms.has(norm)) {
             const suggestion = suggestHindiName(rawName, 'menu_item');
             toInsert.push({
               name: rawName,
@@ -40,6 +60,7 @@ export async function GET(request: NextRequest) {
               tax_type: 'Forward Tax',
             });
             existingNames.add(rawName.toLowerCase());
+            existingNorms.add(norm);
           }
         }
 
