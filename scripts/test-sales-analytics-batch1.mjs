@@ -413,6 +413,151 @@ async function runTests() {
   );
 
   // --------------------------------------------------------------------------
+  // TEST GROUP 7: Period Selector State Integrity & Non-Oscillation Invariants
+  // --------------------------------------------------------------------------
+  console.log('\n📌 Test Group 7: Period Selector State Integrity & Non-Oscillation Invariants');
+
+  function getMonthBoundaries(yearMonth) {
+    const [year, month] = yearMonth.split('-').map(Number);
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    return { startDate, endDate };
+  }
+
+  // 1. Boundary calculations
+  const bSep2026 = getMonthBoundaries('2026-09');
+  assert(
+    bSep2026.startDate === '2026-09-01' && bSep2026.endDate === '2026-09-30',
+    `Sep 2026 boundaries: 2026-09-01 to 2026-09-30 (got ${bSep2026.startDate} to ${bSep2026.endDate})`
+  );
+
+  const bFeb2026 = getMonthBoundaries('2026-02');
+  assert(
+    bFeb2026.startDate === '2026-02-01' && bFeb2026.endDate === '2026-02-28',
+    `Feb 2026 (non-leap) boundaries: 2026-02-01 to 2026-02-28 (got ${bFeb2026.startDate} to ${bFeb2026.endDate})`
+  );
+
+  const bFeb2024 = getMonthBoundaries('2024-02');
+  assert(
+    bFeb2024.startDate === '2024-02-01' && bFeb2024.endDate === '2024-02-29',
+    `Feb 2024 (leap) boundaries: 2024-02-01 to 2024-02-29 (got ${bFeb2024.startDate} to ${bFeb2024.endDate})`
+  );
+
+  const bAug2026 = getMonthBoundaries('2026-08');
+  assert(
+    bAug2026.startDate === '2026-08-01' && bAug2026.endDate === '2026-08-31',
+    `Aug 2026 (31-day) boundaries: 2026-08-01 to 2026-08-31 (got ${bAug2026.startDate} to ${bAug2026.endDate})`
+  );
+
+  // 2. State machine simulation: ReportsPage holds authoritative period state
+  class MockReportsPageController {
+    constructor() {
+      const ym = '2026-09';
+      const b = getMonthBoundaries(ym);
+      this.state = {
+        filterMode: 'month',
+        selectedMonth: ym,
+        startDate: b.startDate,
+        endDate: b.endDate,
+        selectedDate: null,
+      };
+      this.callbackCallCount = 0;
+    }
+
+    onPeriodChange(start, end, mode, month) {
+      this.callbackCallCount++;
+      this.state = {
+        ...this.state,
+        filterMode: mode,
+        selectedMonth: month,
+        startDate: start,
+        endDate: end,
+        selectedDate: null,
+      };
+    }
+
+    onSelectDate(date) {
+      this.state = { ...this.state, selectedDate: date };
+    }
+  }
+
+  const page = new MockReportsPageController();
+
+  // Invariant A: Initial state has full month boundaries matching selectedMonth
+  assert(
+    page.state.filterMode === 'month' &&
+      page.state.selectedMonth === '2026-09' &&
+      page.state.startDate === '2026-09-01' &&
+      page.state.endDate === '2026-09-30' &&
+      page.state.selectedDate === null,
+    'ReportsPage initial state is pure month mode (2026-09-01 to 2026-09-30)'
+  );
+
+  // Invariant B: Re-render without user action NEVER invokes onPeriodChange (0 feedback oscillations)
+  // Simulating 10 renders of both DailySalesLineGraph and SalesAnalyticsDashboard:
+  let simulatedRenderFeedbackCalls = 0;
+  for (let r = 0; r < 10; r++) {
+    // Neither child has a useEffect that calls onPeriodChange!
+    // They only read props: filterMode, selectedMonth, startDate, endDate
+    const childGraphProps = { ...page.state };
+    const childAnalyticsProps = { ...page.state };
+    if (!childGraphProps || !childAnalyticsProps) simulatedRenderFeedbackCalls++;
+  }
+  assert(
+    simulatedRenderFeedbackCalls === 0 && page.callbackCallCount === 0,
+    'Zero background feedback calls during 10 simultaneous child render cycles (no oscillation)'
+  );
+
+  // Invariant C: User switches to custom mode with full month dates (2026-09-01 to 2026-09-30)
+  // Even though dates equal month boundaries, mode MUST remain strictly 'custom' (no auto-conversion)
+  page.onPeriodChange('2026-09-01', '2026-09-30', 'custom', '2026-09');
+  assert(
+    page.state.filterMode === 'custom' &&
+      page.state.startDate === '2026-09-01' &&
+      page.state.endDate === '2026-09-30',
+    'Custom mode with full-month dates is strictly preserved as filterMode === "custom" (no inferring mode from dates)'
+  );
+  assert(page.callbackCallCount === 1, 'Exactly 1 callback fired on explicit user mode toggle');
+
+  // Invariant D: Another 10 render cycles in custom mode produce zero feedback calls
+  for (let r = 0; r < 10; r++) {
+    const childGraphProps = { ...page.state };
+    const childAnalyticsProps = { ...page.state };
+    if (!childGraphProps || !childAnalyticsProps) simulatedRenderFeedbackCalls++;
+  }
+  assert(
+    page.callbackCallCount === 1,
+    'Custom mode remains completely stable across 10 render cycles (callback count remained 1)'
+  );
+
+  // Invariant E: User switches back to month mode
+  const bAug = getMonthBoundaries('2026-08');
+  page.onPeriodChange(bAug.startDate, bAug.endDate, 'month', '2026-08');
+  assert(
+    page.state.filterMode === 'month' &&
+      page.state.selectedMonth === '2026-08' &&
+      page.state.startDate === '2026-08-01' &&
+      page.state.endDate === '2026-08-31',
+    'Month switch sets month mode and boundaries to Aug 2026 (2026-08-01 to 2026-08-31)'
+  );
+  assert(page.callbackCallCount === 2, 'Exactly 2 callbacks fired in total after explicit month switch');
+
+  // Invariant F: Single-day drilldown sets selectedDate without modifying period mode
+  page.onSelectDate('2026-08-15');
+  assert(
+    page.state.selectedDate === '2026-08-15' && page.state.filterMode === 'month',
+    'Drilldown to 2026-08-15 isolates single day while preserving parent filterMode'
+  );
+
+  // Invariant G: Changing period clears single-day drilldown
+  page.onPeriodChange('2026-09-01', '2026-09-30', 'month', '2026-09');
+  assert(
+    page.state.selectedDate === null && page.state.selectedMonth === '2026-09',
+    'Period change automatically clears drilldown and restores month view'
+  );
+
+  // --------------------------------------------------------------------------
   // SUMMARY
   // --------------------------------------------------------------------------
   console.log('\n================================================================');

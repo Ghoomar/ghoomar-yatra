@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -56,17 +56,39 @@ export default function ReportsPage() {
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [activeTab, setActiveTab] = useState<'sales' | 'inventory' | 'vendors'>('sales');
 
-  // Synchronized period state for Sales Line Graph & Sales Analytics
+  // Synchronized period state for Sales Line Graph & Sales Analytics (Single Source of Truth)
   const todayIST = getTodayBusinessDate();
   const currentYearMonth = todayIST.substring(0, 7);
+  const [salesFilterMode, setSalesFilterMode] = useState<'month' | 'custom'>('month');
+  const [salesSelectedMonth, setSalesSelectedMonth] = useState<string>(currentYearMonth);
   const [salesPeriodStart, setSalesPeriodStart] = useState<string>(() => {
     const [year, month] = currentYearMonth.split('-').map(Number);
     return `${year}-${String(month).padStart(2, '0')}-01`;
   });
-  const [salesPeriodEnd, setSalesPeriodEnd] = useState<string>(todayIST);
-  const [salesFilterMode, setSalesFilterMode] = useState<'month' | 'custom'>('month');
-  const [salesSelectedMonth, setSalesSelectedMonth] = useState<string>(currentYearMonth);
+  const [salesPeriodEnd, setSalesPeriodEnd] = useState<string>(() => {
+    const [year, month] = currentYearMonth.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  });
   const [salesSelectedDate, setSalesSelectedDate] = useState<string | null>(null);
+
+  const handleSalesPeriodChange = useCallback(
+    (start: string, end: string, mode: 'month' | 'custom', month: string) => {
+      setSalesPeriodStart(start);
+      setSalesPeriodEnd(end);
+      setSalesFilterMode(mode);
+      setSalesSelectedMonth(month);
+      setSalesSelectedDate(null);
+    },
+    []
+  );
+
+  const handleSalesSelectDate = useCallback((date: string | null) => {
+    setSalesSelectedDate(date);
+    if (date) {
+      setBusinessDate(date);
+    }
+  }, []);
 
   // Active drilldown card
   const [activeDrilldown, setActiveDrilldown] = useState<DrilldownType>(null);
@@ -804,19 +826,8 @@ export default function ReportsPage() {
             endDate={salesPeriodEnd}
             filterMode={salesFilterMode}
             selectedMonth={salesSelectedMonth}
-            onPeriodChange={(start, end, mode, month) => {
-              setSalesPeriodStart(start);
-              setSalesPeriodEnd(end);
-              setSalesFilterMode(mode);
-              setSalesSelectedMonth(month);
-              setSalesSelectedDate(null);
-            }}
-            onSelectDate={(date) => {
-              setSalesSelectedDate(date);
-              if (date) {
-                setBusinessDate(date);
-              }
-            }}
+            onPeriodChange={handleSalesPeriodChange}
+            onSelectDate={handleSalesSelectDate}
           />
 
           {/* Section 2: Internal Reconciliation Notice Banner */}
@@ -1370,19 +1381,8 @@ export default function ReportsPage() {
                     selectedDate={salesSelectedDate}
                     filterMode={salesFilterMode}
                     selectedMonth={salesSelectedMonth}
-                    onPeriodChange={(start, end, mode, month) => {
-                      setSalesPeriodStart(start);
-                      setSalesPeriodEnd(end);
-                      setSalesFilterMode(mode);
-                      setSalesSelectedMonth(month);
-                      setSalesSelectedDate(null);
-                    }}
-                    onSelectDate={(date) => {
-                      setSalesSelectedDate(date);
-                      if (date) {
-                        setBusinessDate(date);
-                      }
-                    }}
+                    onPeriodChange={handleSalesPeriodChange}
+                    onSelectDate={handleSalesSelectDate}
                   />
                 </div>
               )}

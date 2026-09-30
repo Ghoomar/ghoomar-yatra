@@ -88,31 +88,16 @@ export function DailySalesLineGraph({
   selectedMonth: parentSelectedMonth,
 }: DailySalesLineGraphProps) {
   const { t, locale } = useI18n();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const todayIST = getTodayBusinessDate();
   const currentYearMonth = todayIST.substring(0, 7); // e.g. "2026-09"
 
-  // Filter Mode: 'month' or 'custom'
-  const [filterMode, setFilterMode] = useState<'month' | 'custom'>(parentFilterMode || 'month');
-  const [selectedMonth, setSelectedMonth] = useState(parentSelectedMonth || currentYearMonth);
-  const [customStartDate, setCustomStartDate] = useState(parentStartDate || getMonthBoundaries(currentYearMonth).startDate);
-  const [customEndDate, setCustomEndDate] = useState(parentEndDate || todayIST);
-
-  useEffect(() => {
-    if (parentFilterMode && parentFilterMode !== filterMode) setFilterMode(parentFilterMode);
-  }, [parentFilterMode]);
-
-  useEffect(() => {
-    if (parentSelectedMonth && parentSelectedMonth !== selectedMonth) setSelectedMonth(parentSelectedMonth);
-  }, [parentSelectedMonth]);
-
-  useEffect(() => {
-    if (parentStartDate && parentStartDate !== customStartDate) setCustomStartDate(parentStartDate);
-  }, [parentStartDate]);
-
-  useEffect(() => {
-    if (parentEndDate && parentEndDate !== customEndDate) setCustomEndDate(parentEndDate);
-  }, [parentEndDate]);
+  // Authoritative Period from Props (Single source of truth)
+  const filterMode = parentFilterMode || 'month';
+  const selectedMonth = parentSelectedMonth || currentYearMonth;
+  const monthBoundaries = useMemo(() => getMonthBoundaries(selectedMonth), [selectedMonth]);
+  const activeStartDate = parentStartDate || monthBoundaries.startDate;
+  const activeEndDate = parentEndDate || monthBoundaries.endDate;
 
   const [loading, setLoading] = useState(true);
   const [dailyPoints, setDailyPoints] = useState<DailySalesDataPoint[]>([]);
@@ -130,24 +115,6 @@ export function DailySalesLineGraph({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Determine current active date range
-  const { activeStartDate, activeEndDate } = useMemo(() => {
-    if (filterMode === 'month') {
-      const b = getMonthBoundaries(selectedMonth);
-      return { activeStartDate: b.startDate, activeEndDate: b.endDate };
-    }
-    return {
-      activeStartDate: customStartDate <= customEndDate ? customStartDate : customEndDate,
-      activeEndDate: customStartDate <= customEndDate ? customEndDate : customStartDate,
-    };
-  }, [filterMode, selectedMonth, customStartDate, customEndDate]);
-
-  useEffect(() => {
-    if (onPeriodChange) {
-      onPeriodChange(activeStartDate, activeEndDate, filterMode, selectedMonth);
-    }
-  }, [activeStartDate, activeEndDate, filterMode, selectedMonth, onPeriodChange]);
 
   // Available Month options
   const monthOptions = useMemo(() => {
@@ -365,8 +332,9 @@ export function DailySalesLineGraph({
               <button
                 type="button"
                 onClick={() => {
-                  setFilterMode('month');
+                  const b = getMonthBoundaries(selectedMonth);
                   onSelectDate?.(null);
+                  onPeriodChange?.(b.startDate, b.endDate, 'month', selectedMonth);
                 }}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                   filterMode === 'month'
@@ -379,8 +347,8 @@ export function DailySalesLineGraph({
               <button
                 type="button"
                 onClick={() => {
-                  setFilterMode('custom');
                   onSelectDate?.(null);
+                  onPeriodChange?.(activeStartDate, activeEndDate, 'custom', selectedMonth);
                 }}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                   filterMode === 'custom'
@@ -399,8 +367,10 @@ export function DailySalesLineGraph({
                 <select
                   value={selectedMonth}
                   onChange={(e) => {
-                    setSelectedMonth(e.target.value);
+                    const newMonth = e.target.value;
+                    const b = getMonthBoundaries(newMonth);
                     onSelectDate?.(null);
+                    onPeriodChange?.(b.startDate, b.endDate, 'month', newMonth);
                   }}
                   className="bg-transparent font-medium text-stone-900 focus:outline-none cursor-pointer text-xs"
                 >
@@ -419,20 +389,22 @@ export function DailySalesLineGraph({
                 <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.from')}</span>
                 <input
                   type="date"
-                  value={customStartDate}
+                  value={activeStartDate}
                   onChange={(e) => {
-                    setCustomStartDate(e.target.value);
+                    const newStart = e.target.value;
                     onSelectDate?.(null);
+                    onPeriodChange?.(newStart, activeEndDate, 'custom', selectedMonth);
                   }}
                   className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
                 />
                 <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.to')}</span>
                 <input
                   type="date"
-                  value={customEndDate}
+                  value={activeEndDate}
                   onChange={(e) => {
-                    setCustomEndDate(e.target.value);
+                    const newEnd = e.target.value;
                     onSelectDate?.(null);
+                    onPeriodChange?.(activeStartDate, newEnd, 'custom', selectedMonth);
                   }}
                   className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
                 />

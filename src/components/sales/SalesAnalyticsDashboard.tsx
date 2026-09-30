@@ -67,52 +67,13 @@ export function SalesAnalyticsDashboard({
   const todayIST = getTodayBusinessDate();
   const currentYearMonth = todayIST.substring(0, 7);
 
-  // Period / Filter mode
-  const [filterMode, setFilterMode] = useState<'month' | 'custom'>(parentFilterMode || 'month');
-  const [selectedMonth, setSelectedMonth] = useState<string>(parentSelectedMonth || currentYearMonth);
-  const [customStartDate, setCustomStartDate] = useState<string>(
-    parentStartDate || getMonthBoundaries(currentYearMonth).startDate
-  );
-  const [customEndDate, setCustomEndDate] = useState<string>(parentEndDate || todayIST);
-  const [drilldownDate, setDrilldownDate] = useState<string | null>(
-    parentSelectedDate !== undefined ? parentSelectedDate : (initialDate || null)
-  );
-
-  // Sync with parent props
-  useEffect(() => {
-    if (parentFilterMode && parentFilterMode !== filterMode) setFilterMode(parentFilterMode);
-  }, [parentFilterMode]);
-
-  useEffect(() => {
-    if (parentSelectedMonth && parentSelectedMonth !== selectedMonth) setSelectedMonth(parentSelectedMonth);
-  }, [parentSelectedMonth]);
-
-  useEffect(() => {
-    if (parentStartDate && parentStartDate !== customStartDate) setCustomStartDate(parentStartDate);
-  }, [parentStartDate]);
-
-  useEffect(() => {
-    if (parentEndDate && parentEndDate !== customEndDate) setCustomEndDate(parentEndDate);
-  }, [parentEndDate]);
-
-  useEffect(() => {
-    if (parentSelectedDate !== undefined && parentSelectedDate !== drilldownDate) {
-      setDrilldownDate(parentSelectedDate);
-    }
-  }, [parentSelectedDate]);
-
-  // Determine current active date range
-  const { activeStartDate, activeEndDate } = useMemo(() => {
-    if (filterMode === 'month') {
-      const b = getMonthBoundaries(selectedMonth);
-      return { activeStartDate: b.startDate, activeEndDate: b.endDate };
-    }
-    return {
-      activeStartDate: customStartDate <= customEndDate ? customStartDate : customEndDate,
-      activeEndDate: customStartDate <= customEndDate ? customEndDate : customStartDate,
-    };
-  }, [filterMode, selectedMonth, customStartDate, customEndDate]);
-
+  // Authoritative Period from Props (Single source of truth)
+  const filterMode = parentFilterMode || 'month';
+  const selectedMonth = parentSelectedMonth || currentYearMonth;
+  const monthBoundaries = useMemo(() => getMonthBoundaries(selectedMonth), [selectedMonth]);
+  const activeStartDate = parentStartDate || monthBoundaries.startDate;
+  const activeEndDate = parentEndDate || monthBoundaries.endDate;
+  const drilldownDate = parentSelectedDate !== undefined ? parentSelectedDate : (initialDate || null);
   const isDrilldown = Boolean(drilldownDate);
 
   // Month options for dropdown
@@ -165,47 +126,38 @@ export function SalesAnalyticsDashboard({
   const [data, setData] = useState<SalesAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Period / Date Handlers
+  // Period / Date Handlers (Propagate directly to parent)
   const handleMonthChange = (newMonth: string) => {
-    setSelectedMonth(newMonth);
     const b = getMonthBoundaries(newMonth);
-    setDrilldownDate(null);
     onSelectDate?.(null);
     onPeriodChange?.(b.startDate, b.endDate, 'month', newMonth);
     setBillsPage(1);
   };
 
   const handleCustomStartChange = (newStart: string) => {
-    setCustomStartDate(newStart);
-    setDrilldownDate(null);
     onSelectDate?.(null);
-    onPeriodChange?.(newStart, customEndDate, 'custom', selectedMonth);
+    onPeriodChange?.(newStart, activeEndDate, 'custom', selectedMonth);
     setBillsPage(1);
   };
 
   const handleCustomEndChange = (newEnd: string) => {
-    setCustomEndDate(newEnd);
-    setDrilldownDate(null);
     onSelectDate?.(null);
-    onPeriodChange?.(customStartDate, newEnd, 'custom', selectedMonth);
+    onPeriodChange?.(activeStartDate, newEnd, 'custom', selectedMonth);
     setBillsPage(1);
   };
 
   const handleModeChange = (newMode: 'month' | 'custom') => {
-    setFilterMode(newMode);
-    setDrilldownDate(null);
     onSelectDate?.(null);
     if (newMode === 'month') {
       const b = getMonthBoundaries(selectedMonth);
       onPeriodChange?.(b.startDate, b.endDate, 'month', selectedMonth);
     } else {
-      onPeriodChange?.(customStartDate, customEndDate, 'custom', selectedMonth);
+      onPeriodChange?.(activeStartDate, activeEndDate, 'custom', selectedMonth);
     }
     setBillsPage(1);
   };
 
   const handleClearDrilldown = () => {
-    setDrilldownDate(null);
     onSelectDate?.(null);
     setBillsPage(1);
   };
@@ -472,7 +424,7 @@ export function SalesAnalyticsDashboard({
                   </span>
                   <input
                     type="date"
-                    value={customStartDate}
+                    value={activeStartDate}
                     onChange={(e) => handleCustomStartChange(e.target.value)}
                     className="text-xs font-semibold text-stone-800 bg-transparent border-0 focus:outline-none cursor-pointer"
                   />
@@ -483,7 +435,7 @@ export function SalesAnalyticsDashboard({
                   </span>
                   <input
                     type="date"
-                    value={customEndDate}
+                    value={activeEndDate}
                     onChange={(e) => handleCustomEndChange(e.target.value)}
                     className="text-xs font-semibold text-stone-800 bg-transparent border-0 focus:outline-none cursor-pointer"
                   />
@@ -495,7 +447,6 @@ export function SalesAnalyticsDashboard({
               variant="outline"
               size="sm"
               onClick={() => {
-                setDrilldownDate(null);
                 onSelectDate?.(null);
                 loadAnalytics();
                 if (activeTab === 'bills') loadBills();
