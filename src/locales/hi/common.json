@@ -52,7 +52,10 @@
     "loading": "लोड हो रहा है...",
     "noData": "कोई रिकॉर्ड नहीं मिला",
     "required": "जरूरी",
-    "optional": "छोड़ सकते हैं"
+    "optional": "छोड़ सकते हैं",
+    "searchPlaceholder": "खोजने के लिए टाइप करें...",
+    "noResultsFound": "कोई सामान नहीं मिला",
+    "showingResults": "{total} में से {count} दिखा रहे हैं"
   },
   "app": {
     "brandName": "घूमर यात्रा",

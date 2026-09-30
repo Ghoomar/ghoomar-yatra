@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
@@ -841,23 +842,33 @@ export default function StoreIssuesPage() {
 
                     {/* Primary Staff Selector */}
                     <div>
-                      <select
+                      <SearchableSelect
+                        options={filteredEmployees}
                         value={employeeId}
-                        onChange={(e) => handleStaffSelect(e.target.value)}
+                        onChange={(val) => handleStaffSelect(val)}
+                        labelKey={(emp) => emp.name}
+                        secondaryLabelKey={(emp) => {
+                          const roleStr = getLocalizedMasterName(emp.role, locale) || emp.role?.name || '';
+                          const deptStr = getLocalizedMasterName(emp.department, locale) || emp.department?.name || '';
+                          return roleStr ? `${roleStr} • ${deptStr}` : deptStr;
+                        }}
+                        placeholder={t('inventory.issues.selectEligibleStaff')}
                         required
-                        className="w-full rounded-lg border border-stone-300 p-2.5 text-stone-900 bg-white font-semibold text-xs shadow-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                      >
-                        <option value="">{t('inventory.issues.selectEligibleStaff')}</option>
-                        {filteredEmployees.map((emp) => {
+                        className="w-full"
+                        triggerClassName="p-2.5 font-semibold text-xs shadow-xs"
+                        renderOption={(emp) => {
                           const roleStr = getLocalizedMasterName(emp.role, locale) || emp.role?.name || '';
                           const deptStr = getLocalizedMasterName(emp.department, locale) || emp.department?.name || '';
                           return (
-                            <option key={emp.id} value={emp.id}>
-                              {emp.name} {roleStr ? `(${roleStr})` : ''} — {deptStr}
-                            </option>
+                            <div className="w-full">
+                              <div className="font-semibold text-stone-900">{emp.name}</div>
+                              <div className="text-[11px] text-stone-500">
+                                {roleStr} {deptStr ? `• ${deptStr}` : ''}
+                              </div>
+                            </div>
                           );
-                        })}
-                      </select>
+                        }}
+                      />
                     </div>
 
                     {/* Auto-inferred Contextual Banner */}
@@ -916,28 +927,45 @@ export default function StoreIssuesPage() {
                           >
                             {/* Item Selector */}
                             <div className="flex-1 w-full">
-                              <select
+                              <SearchableSelect
+                                options={eligibleIssueItems}
                                 value={line.item_id}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   const updated = [...issueLines];
-                                  updated[idx].item_id = e.target.value;
+                                  updated[idx].item_id = val;
                                   setIssueLines(updated);
                                 }}
+                                isOptionDisabled={(it) => getItemStockAtLocation(it, sourceLocationId) <= 0}
+                                labelKey={(it) => getLocalizedMasterName(it, locale) || it.name}
+                                secondaryLabelKey={(it) => {
+                                  const locQty = getItemStockAtLocation(it, sourceLocationId);
+                                  const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
+                                  return locQty <= 0 ? t('inventory.issues.outOfStock') : `${locQty} ${itUnitSym}`;
+                                }}
+                                placeholder={t('inventory.issues.selectItem')}
                                 required
-                                className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white font-medium focus:outline-none"
-                              >
-                                <option value="">{t('inventory.issues.selectItem')}</option>
-                                {eligibleIssueItems.map((it) => {
+                                className="w-full"
+                                triggerClassName="p-2 font-medium bg-white text-xs rounded-lg"
+                                renderOption={(it) => {
                                   const locQty = getItemStockAtLocation(it, sourceLocationId);
                                   const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
                                   const out = locQty <= 0;
                                   return (
-                                    <option key={it.id} value={it.id} disabled={out}>
-                                      {getLocalizedMasterName(it, locale)} • {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
-                                    </option>
+                                    <div className="flex items-center justify-between w-full">
+                                      <div className="truncate font-medium text-stone-900">
+                                        {getLocalizedMasterName(it, locale) || it.name}
+                                      </div>
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ml-2 shrink-0 ${
+                                          out ? 'bg-rose-100 text-rose-700 font-bold' : 'bg-emerald-50 text-emerald-800'
+                                        }`}
+                                      >
+                                        {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
+                                      </span>
+                                    </div>
                                   );
-                                })}
-                              </select>
+                                }}
+                              />
                               {selectedItem && (
                                 <div className="mt-1 flex items-center gap-2 text-[10px]">
                                   <span className={storeStock > 0 ? 'text-stone-500' : 'text-rose-600 font-bold'}>
@@ -1170,28 +1198,45 @@ export default function StoreIssuesPage() {
                             }`}
                           >
                             <div className="flex-1 w-full">
-                              <select
+                              <SearchableSelect
+                                options={eligibleTransferItems}
                                 value={line.item_id}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   const updated = [...transferLines];
-                                  updated[idx].item_id = e.target.value;
+                                  updated[idx].item_id = val;
                                   setTransferLines(updated);
                                 }}
+                                isOptionDisabled={(it) => getItemStockAtLocation(it, transferSrcLoc) <= 0}
+                                labelKey={(it) => getLocalizedMasterName(it, locale) || it.name}
+                                secondaryLabelKey={(it) => {
+                                  const locQty = getItemStockAtLocation(it, transferSrcLoc);
+                                  const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
+                                  return locQty <= 0 ? t('inventory.issues.outOfStock') : `${locQty} ${itUnitSym}`;
+                                }}
+                                placeholder={t('inventory.issues.selectItem')}
                                 required
-                                className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 bg-white font-medium focus:outline-none"
-                              >
-                                <option value="">{t('inventory.issues.selectItem')}</option>
-                                {eligibleTransferItems.map((it) => {
+                                className="w-full"
+                                triggerClassName="p-2 font-medium bg-white text-xs rounded-lg"
+                                renderOption={(it) => {
                                   const locQty = getItemStockAtLocation(it, transferSrcLoc);
                                   const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
                                   const out = locQty <= 0;
                                   return (
-                                    <option key={it.id} value={it.id} disabled={out}>
-                                      {getLocalizedMasterName(it, locale)} • {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
-                                    </option>
+                                    <div className="flex items-center justify-between w-full">
+                                      <div className="truncate font-medium text-stone-900">
+                                        {getLocalizedMasterName(it, locale) || it.name}
+                                      </div>
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ml-2 shrink-0 ${
+                                          out ? 'bg-rose-100 text-rose-700 font-bold' : 'bg-emerald-50 text-emerald-800'
+                                        }`}
+                                      >
+                                        {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
+                                      </span>
+                                    </div>
                                   );
-                                })}
-                              </select>
+                                }}
+                              />
                               {selectedItem && (
                                 <div className="mt-1 text-[10px] text-stone-500">
                                   {t('inventory.issues.available')}: {storeStock} {baseUnitSym}

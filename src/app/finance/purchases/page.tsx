@@ -12,6 +12,7 @@ import { VendorModal } from '@/components/vendors/VendorModal';
 import { ShoppingBag, Plus, CreditCard, RefreshCw, CheckCircle, AlertCircle, Trash2, Building2, ExternalLink } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 interface VendorSummary {
   vendor_id: string;
@@ -561,11 +562,11 @@ export default function PurchasesPage() {
                     <div key={idx} className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2">
                       {/* Top Row: Item Select, Pack Toggle, Qty, Rate, Total, Delete */}
                       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                        <select
+                        <SearchableSelect
+                          options={items.filter((i) => i.is_active !== false || i.id === line.item_id)}
                           value={line.item_id}
-                          onChange={(e) => {
+                          onChange={(selectedId) => {
                             const next = [...lines];
-                            const selectedId = e.target.value;
                             next[idx].item_id = selectedId;
                             const selItem = items.find((it) => it.id === selectedId);
                             const mem = vendorPriceMemory[selectedId];
@@ -588,18 +589,23 @@ export default function PurchasesPage() {
                             }
                             setLines(next);
                           }}
+                          labelKey={(i) => (i.name_hi && locale === 'hi' ? i.name_hi : i.name)}
+                          secondaryLabelKey={(i) => i.item_code}
+                          placeholder={t('purchases.bills.selectItem')}
                           required
-                          className="flex-1 min-w-[200px] rounded-md border border-stone-300 bg-white p-2 text-stone-900 text-xs focus:outline-none"
-                        >
-                          <option value="">{t('purchases.bills.selectItem')}</option>
-                          {items
-                            .filter((i) => i.is_active !== false || i.id === line.item_id)
-                            .map((i) => (
-                              <option key={i.id} value={i.id}>
-                                {i.name_hi && locale === 'hi' ? i.name_hi : i.name} ({i.item_code})
-                              </option>
-                            ))}
-                        </select>
+                          className="flex-1 min-w-[200px]"
+                          triggerClassName="bg-white p-2 text-xs"
+                          renderOption={(i) => (
+                            <div className="flex items-center justify-between w-full">
+                              <div className="truncate font-medium">
+                                {i.name_hi && locale === 'hi' ? i.name_hi : i.name}
+                              </div>
+                              <span className="font-mono text-[10px] text-stone-500 bg-stone-100 px-1 py-0.5 rounded ml-2 shrink-0">
+                                {i.item_code}
+                              </span>
+                            </div>
+                          )}
+                        />
 
                         {/* Pack Toggle Button */}
                         {hasPack && (

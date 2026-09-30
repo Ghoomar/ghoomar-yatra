@@ -59,6 +59,16 @@ export function getTodayBusinessDate(): string {
   return formatter.format(new Date());
 }
 
+export function getYesterdayBusinessDate(): string {
+  const todayStr = getTodayBusinessDate();
+  const [y, m, d] = todayStr.split('-').map(Number);
+  const dObj = new Date(Date.UTC(y, m - 1, d - 1));
+  const year = dObj.getUTCFullYear();
+  const month = String(dObj.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(dObj.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function getDaysInMonth(year: number, month: number): number {
   // month is 1-indexed (1 = Jan, 2 = Feb, etc.)
   return new Date(year, month, 0).getDate();

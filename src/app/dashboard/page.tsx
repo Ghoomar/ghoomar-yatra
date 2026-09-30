@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
-import { getTodayBusinessDate, formatINR } from '@/lib/utils';
+import { getTodayBusinessDate, getYesterdayBusinessDate, formatINR } from '@/lib/utils';
 import { 
   calculateDailyProfitability, 
   calculateBreakEvenPacing, 
@@ -23,7 +23,9 @@ import { useI18n } from '@/lib/i18n/context';
 export default function DashboardPage() {
   const { t, locale } = useI18n();
   const supabase = createClient();
-  const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
+  const todayIST = useMemo(() => getTodayBusinessDate(), []);
+  const yesterdayIST = useMemo(() => getYesterdayBusinessDate(), []);
+  const [businessDate, setBusinessDate] = useState(todayIST);
   const [loading, setLoading] = useState(true);
 
   // Raw Query States
@@ -279,6 +281,34 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Quick Date Preset Pills */}
+          <div className="inline-flex rounded-lg bg-stone-100 p-0.5 border border-stone-200 text-xs">
+            <button
+              type="button"
+              data-testid="dashboard-preset-today"
+              onClick={() => setBusinessDate(todayIST)}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                businessDate === todayIST
+                  ? 'bg-white text-stone-900 shadow-2xs font-bold'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {t('common.labels.today')}
+            </button>
+            <button
+              type="button"
+              data-testid="dashboard-preset-yesterday"
+              onClick={() => setBusinessDate(yesterdayIST)}
+              className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer ${
+                businessDate === yesterdayIST
+                  ? 'bg-white text-stone-900 shadow-2xs font-bold'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {t('common.labels.yesterday')}
+            </button>
+          </div>
+
           <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
             <span className="text-stone-500">{t('dashboard.dateLabel')}</span>
             <input

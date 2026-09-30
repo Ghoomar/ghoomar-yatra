@@ -52,7 +52,10 @@
     "loading": "Loading...",
     "noData": "No data available",
     "required": "Required",
-    "optional": "Optional"
+    "optional": "Optional",
+    "searchPlaceholder": "Type to search...",
+    "noResultsFound": "No items found",
+    "showingResults": "Showing {count} of {total}"
   },
   "app": {
     "brandName": "Ghoomar Yatra",
