@@ -495,6 +495,8 @@ export function SalesAnalyticsDashboard({
               variant="outline"
               size="sm"
               onClick={() => {
+                setDrilldownDate(null);
+                onSelectDate?.(null);
                 loadAnalytics();
                 if (activeTab === 'bills') loadBills();
               }}
@@ -529,6 +531,8 @@ export function SalesAnalyticsDashboard({
         <SalesReconciliationBanner
           reconciliation={data.reconciliation}
           businessDate={isDrilldown && drilldownDate ? drilldownDate : activeStartDate}
+          periodStart={isDrilldown ? undefined : activeStartDate}
+          periodEnd={isDrilldown ? undefined : activeEndDate}
         />
       )}
 

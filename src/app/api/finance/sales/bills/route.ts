@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
+async function fetchAllRows<T = any>(queryBuilder: any): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  const allRows: T[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await queryBuilder.range(from, to);
+    if (error) throw error;
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+  return allRows;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -77,10 +102,8 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const { data: matchingItemRows, error: itemErr } = await itemQuery.limit(50000);
-      if (itemErr) throw itemErr;
-
-      matchingInvoices = Array.from(new Set((matchingItemRows || []).map((r) => r.invoice_no)));
+      const matchingItemRows = await fetchAllRows(itemQuery);
+      matchingInvoices = Array.from(new Set(matchingItemRows.map((r) => r.invoice_no)));
 
       // If item filters were applied and no items match, return empty bills
       if (matchingInvoices.length === 0) {
@@ -153,13 +176,13 @@ export async function GET(request: NextRequest) {
     // 2. Summary aggregates for total filtered set
     let summaryQuery = supabase.from('sales_orders').select('net_sales, grand_total, covers_pax');
     summaryQuery = applyOrderFilters(summaryQuery);
-    const { data: sumRows } = await summaryQuery.limit(50000);
+    const sumRows = await fetchAllRows(summaryQuery);
 
     let totalNetSales = 0;
     let totalGrandTotal = 0;
     let totalCovers = 0;
 
-    (sumRows || []).forEach((r) => {
+    sumRows.forEach((r: any) => {
       totalNetSales += Number(r.net_sales) || 0;
       totalGrandTotal += Number(r.grand_total) || 0;
       totalCovers += Number(r.covers_pax) || 0;

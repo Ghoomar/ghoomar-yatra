@@ -261,21 +261,155 @@ async function runTests() {
   );
 
   // --------------------------------------------------------------------------
-  // TEST GROUP 5: Multi-Day Period Aggregation Simulation
+  // TEST GROUP 5: Full Month Period Aggregation & Reconciliation
   // --------------------------------------------------------------------------
-  console.log('\n📌 Test Group 5: Multi-Day Period Aggregation');
+  console.log('\n📌 Test Group 5: Full Month Period Aggregation & Reconciliation');
 
-  const { data: multiDayItems } = await supabase
-    .from('sales_order_items')
-    .select('business_date, net_sales, quantity, hour_of_day')
+  // Helper for paginated fetch to simulate API fetchAllRows
+  async function fetchAll(query) {
+    let all = [];
+    let page = 0;
+    while (true) {
+      const { data, error } = await query.range(page * 1000, (page + 1) * 1000 - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < 1000) break;
+      page++;
+    }
+    return all;
+  }
+
+  // 1. Full-month reconciliation verification
+  const { data: fullMonthRecon } = await supabase
+    .from('daily_sales_reconciliation')
+    .select('*')
     .gte('business_date', '2026-09-01')
     .lte('business_date', '2026-09-30')
-    .eq('status', 'Success');
+    .order('business_date');
 
-  const multiDayNet = (multiDayItems || []).reduce((s, r) => s + Number(r.net_sales), 0);
+  assert(fullMonthRecon && fullMonthRecon.length === 27, `Found exactly 27 days in September reconciliation (got ${fullMonthRecon?.length})`);
+
+  const monthExecNet = (fullMonthRecon || []).reduce((s, r) => s + (Number(r.exec_net_sales) || 0), 0);
+  const monthOrdersNet = (fullMonthRecon || []).reduce((s, r) => s + (Number(r.orders_net_sales) || 0), 0);
+  const monthDiff = Math.round((monthOrdersNet - monthExecNet) * 100) / 100;
+  const isMonthReconciled = fullMonthRecon.every((r) => r.reconciliation_status === 'Reconciled');
+
+  assert(Math.round(monthExecNet * 100) / 100 === 1950753.90, `Full Month Executive Net Sales = ₹19,50,753.90 (got ${monthExecNet.toFixed(2)})`);
+  assert(Math.round(monthOrdersNet * 100) / 100 === 1950753.90, `Full Month Orders Net Sales = ₹19,50,753.90 (got ${monthOrdersNet.toFixed(2)})`);
+  assert(monthDiff === 0, `Full Month Reconciliation Difference = ₹0.00 (got ${monthDiff})`);
+  assert(isMonthReconciled, `All 27 days in September are 100% 'Reconciled'`);
+
+  // 2. Full-month hybrid data aggregation (combining detailed + legacy)
+  const { data: monthItemDateRows } = await supabase
+    .from('sales_order_items')
+    .select('business_date')
+    .gte('business_date', '2026-09-01')
+    .lte('business_date', '2026-09-30');
+
+  const detailedDatesSet = new Set((monthItemDateRows || []).map((r) => r.business_date));
+  assert(detailedDatesSet.size === 2, `Detailed dates identified: Sep 28 and Sep 29 (${Array.from(detailedDatesSet).join(', ')})`);
+
+  const monthDetailedItems = await fetchAll(
+    supabase
+      .from('sales_order_items')
+      .select('*')
+      .gte('business_date', '2026-09-01')
+      .lte('business_date', '2026-09-30')
+      .eq('status', 'Success')
+  );
+
+  const monthAllOrders = await fetchAll(
+    supabase
+      .from('sales_orders')
+      .select('*')
+      .gte('business_date', '2026-09-01')
+      .lte('business_date', '2026-09-30')
+      .eq('status', 'Success')
+  );
+
+  const monthAllHourly = await fetchAll(
+    supabase
+      .from('sales_hourly_items')
+      .select('*')
+      .gte('business_date', '2026-09-01')
+      .lte('business_date', '2026-09-30')
+  );
+
+  const monthLegacyOrders = monthAllOrders.filter((o) => !detailedDatesSet.has(o.business_date));
+  const monthLegacyHourly = monthAllHourly.filter((h) => !detailedDatesSet.has(h.business_date));
+
+  const totalAggregatedNet =
+    monthDetailedItems.reduce((s, i) => s + (Number(i.net_sales) || 0), 0) +
+    monthLegacyOrders.reduce((s, o) => s + (Number(o.net_sales) || 0), 0);
+
+  const totalAggregatedBills =
+    new Set(monthDetailedItems.map((i) => i.invoice_no)).size + monthLegacyOrders.length;
+
+  const totalAggregatedQty =
+    monthDetailedItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0) +
+    monthLegacyHourly.reduce((s, h) => s + (Number(h.quantity) || 0), 0);
+
   assert(
-    multiDayNet >= totalSuccessNet,
-    `Multi-day query successfully aggregates sales across period (Total Net: ₹${multiDayNet.toFixed(2)})`
+    Math.round(totalAggregatedNet * 100) / 100 === 1950753.90,
+    `Full Month Hybrid Net Sales = ₹19,50,753.90 (got ₹${totalAggregatedNet.toFixed(2)})`
+  );
+  assert(
+    totalAggregatedBills === 3182,
+    `Full Month Total Bills = 3,182 (got ${totalAggregatedBills})`
+  );
+  assert(
+    Math.round(totalAggregatedQty * 100) / 100 === 18782.53,
+    `Full Month Items Sold = 18,782.53 units (got ${totalAggregatedQty.toFixed(2)})`
+  );
+
+  // 3. Hourly cumulative distribution across all 24 buckets for the full month
+  let fullMonthHourlySum = 0;
+  for (let h = 0; h < 24; h++) {
+    const hDet = monthDetailedItems.filter((i) => i.hour_of_day === h).reduce((s, i) => s + Number(i.net_sales), 0);
+    const hLeg = monthLegacyHourly.filter((hRow) => hRow.hour_of_day === h).reduce((s, hRow) => s + Number(hRow.net_sales), 0);
+    fullMonthHourlySum += hDet + hLeg;
+  }
+  assert(
+    Math.round(fullMonthHourlySum * 100) / 100 === 1950753.91,
+    `Full Month 24 Hourly Buckets Cumulative Sum = ₹19,50,753.91 (got ₹${fullMonthHourlySum.toFixed(2)})`
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST GROUP 6: Single-Day Drilldown Isolation & Return to Period
+  // --------------------------------------------------------------------------
+  console.log('\n📌 Test Group 6: Single-Day Drilldown Isolation & Full Period Sync');
+
+  // Drilldown to 2026-09-29
+  const sep29Items = monthDetailedItems.filter((i) => i.business_date === '2026-09-29');
+  const sep29Net = sep29Items.reduce((s, i) => s + Number(i.net_sales), 0);
+  const sep29Bills = new Set(sep29Items.map((i) => i.invoice_no)).size;
+  assert(Math.round(sep29Net * 100) / 100 === 79767.14, `Sep 29 Drilldown: Net Sales = ₹79,767.14 (got ₹${sep29Net.toFixed(2)})`);
+  assert(sep29Bills === 163, `Sep 29 Drilldown: Total Bills = 163 (got ${sep29Bills})`);
+
+  // Drilldown to 2026-09-28
+  const sep28Items = monthDetailedItems.filter((i) => i.business_date === '2026-09-28');
+  const sep28Net = sep28Items.reduce((s, i) => s + Number(i.net_sales), 0);
+  const sep28Bills = new Set(sep28Items.map((i) => i.invoice_no)).size;
+  assert(Math.round(sep28Net * 100) / 100 === 54090.50, `Sep 28 Drilldown: Net Sales = ₹54,090.50 (got ₹${sep28Net.toFixed(2)})`);
+  assert(sep28Bills === 143, `Sep 28 Drilldown: Total Bills = 143 (got ${sep28Bills})`);
+
+  // Drilldown to legacy single day 2026-09-03
+  const sep03Orders = monthLegacyOrders.filter((o) => o.business_date === '2026-09-03');
+  const sep03Net = sep03Orders.reduce((s, o) => s + Number(o.net_sales), 0);
+  assert(Math.round(sep03Net * 100) / 100 === 7146.70, `Sep 03 Legacy Drilldown: Net Sales = ₹7,146.70 (got ₹${sep03Net.toFixed(2)})`);
+  assert(sep03Orders.length === 14, `Sep 03 Legacy Drilldown: Total Bills = 14 (got ${sep03Orders.length})`);
+
+  // Full month paginated bills endpoint simulation
+  const fullMonthOrdersCount = monthAllOrders.length;
+  const fullMonthPages = Math.ceil(fullMonthOrdersCount / 25);
+  const fullMonthOrdersNet = monthAllOrders.reduce((s, o) => s + Number(o.net_sales), 0);
+
+  assert(fullMonthOrdersCount === 3182, `Full Month Orders Count = 3,182 bills (got ${fullMonthOrdersCount})`);
+  assert(fullMonthPages === 128, `Full Month Bills Pages = 128 pages at 25/page (got ${fullMonthPages})`);
+  assert(
+    Math.round(fullMonthOrdersNet * 100) / 100 === 1950753.90,
+    `Full Month Bills Summary Net Sales = ₹19,50,753.90 (got ₹${fullMonthOrdersNet.toFixed(2)})`
   );
 
   // --------------------------------------------------------------------------

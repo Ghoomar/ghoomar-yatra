@@ -321,7 +321,7 @@ export function DailySalesLineGraph({
       .join(' ');
   }, [pointCoords]);
 
-  // Handle touch / drag interaction across the chart
+  // Handle touch / drag interaction across the chart to show tooltip
   const handlePointerInteraction = (clientX: number) => {
     if (!containerRef.current || pointCoords.length === 0) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -339,13 +339,6 @@ export function DailySalesLineGraph({
       }
     }
     setHoveredPoint(closest);
-    if (onSelectDate) {
-      if (closest.date === selectedDate) {
-        onSelectDate(null);
-      } else {
-        onSelectDate(closest.date);
-      }
-    }
   };
 
   return (
@@ -371,7 +364,10 @@ export function DailySalesLineGraph({
             <div className="flex items-center bg-[#E7E2D8]/60 p-0.5 rounded-lg">
               <button
                 type="button"
-                onClick={() => setFilterMode('month')}
+                onClick={() => {
+                  setFilterMode('month');
+                  onSelectDate?.(null);
+                }}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                   filterMode === 'month'
                     ? 'bg-white text-stone-900 shadow-xs'
@@ -382,7 +378,10 @@ export function DailySalesLineGraph({
               </button>
               <button
                 type="button"
-                onClick={() => setFilterMode('custom')}
+                onClick={() => {
+                  setFilterMode('custom');
+                  onSelectDate?.(null);
+                }}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all ${
                   filterMode === 'custom'
                     ? 'bg-white text-stone-900 shadow-xs'
@@ -399,7 +398,10 @@ export function DailySalesLineGraph({
                 <Calendar className="h-3.5 w-3.5 text-[#D97706]" />
                 <select
                   value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedMonth(e.target.value);
+                    onSelectDate?.(null);
+                  }}
                   className="bg-transparent font-medium text-stone-900 focus:outline-none cursor-pointer text-xs"
                 >
                   {monthOptions.map((opt) => (
@@ -418,14 +420,20 @@ export function DailySalesLineGraph({
                 <input
                   type="date"
                   value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  onChange={(e) => {
+                    setCustomStartDate(e.target.value);
+                    onSelectDate?.(null);
+                  }}
                   className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
                 />
                 <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.to')}</span>
                 <input
                   type="date"
                   value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  onChange={(e) => {
+                    setCustomEndDate(e.target.value);
+                    onSelectDate?.(null);
+                  }}
                   className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
                 />
               </div>
@@ -448,7 +456,10 @@ export function DailySalesLineGraph({
             <Button
               variant="outline"
               size="sm"
-              onClick={fetchSalesData}
+              onClick={() => {
+                onSelectDate?.(null);
+                fetchSalesData();
+              }}
               disabled={loading}
               className="h-8 px-2.5 text-xs text-stone-600 hover:text-stone-900 rounded-lg border-[#E7E2D8]"
               title={t('reports.salesLineGraph.refreshTitle')}

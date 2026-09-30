@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { DailySalesReconciliationRow } from '@/lib/types/sales';
-import { formatINR } from '@/lib/utils';
+import { formatINR, formatDisplayDate } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
 import { CheckCircle2, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
@@ -10,20 +10,29 @@ import { Badge } from '@/components/ui/Badge';
 interface SalesReconciliationBannerProps {
   reconciliation: DailySalesReconciliationRow | null;
   businessDate: string;
+  periodStart?: string;
+  periodEnd?: string;
 }
 
 export function SalesReconciliationBanner({
   reconciliation,
   businessDate,
+  periodStart,
+  periodEnd,
 }: SalesReconciliationBannerProps) {
   const { t } = useI18n();
+
+  const isMultiDay = Boolean(periodStart && periodEnd && periodStart !== periodEnd);
+  const displayDate = isMultiDay
+    ? `${formatDisplayDate(periodStart!, 'short')} – ${formatDisplayDate(periodEnd!, 'short')}`
+    : formatDisplayDate(businessDate, 'short');
 
   if (!reconciliation) {
     return (
       <div className="rounded-xl border border-stone-200 bg-stone-50/60 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-stone-500">
         <div className="flex items-center gap-2">
           <HelpCircle className="h-4 w-4 text-stone-400 shrink-0" />
-          <span>{t('finance.sales.reconciliation.noSummary', { date: businessDate })}</span>
+          <span>{t('finance.sales.reconciliation.noSummary', { date: displayDate })}</span>
         </div>
       </div>
     );
@@ -76,7 +85,7 @@ export function SalesReconciliationBanner({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-stone-900 text-sm">
-                {t('finance.sales.reconciliation.title', { date: businessDate })}
+                {t('finance.sales.reconciliation.title', { date: displayDate })}
               </h3>
               <Badge variant={isReconciled ? 'success' : 'warning'} className="text-[10px]">
                 {getStatusLabel(reconciliation.reconciliation_status)}

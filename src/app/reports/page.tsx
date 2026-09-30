@@ -809,6 +809,7 @@ export default function ReportsPage() {
               setSalesPeriodEnd(end);
               setSalesFilterMode(mode);
               setSalesSelectedMonth(month);
+              setSalesSelectedDate(null);
             }}
             onSelectDate={(date) => {
               setSalesSelectedDate(date);
@@ -1343,7 +1344,11 @@ export default function ReportsPage() {
                     {activeDrilldown === 'champi' && t('reports.drilldown.champiTitle')}
                   </span>
                   <Badge variant="outline" className="text-[10px] border-[#E7E2D8]">
-                    {formatDisplayDate(businessDate, 'short')}
+                    {activeDrilldown === 'restaurant'
+                      ? salesSelectedDate
+                        ? formatDisplayDate(salesSelectedDate, 'short')
+                        : `${formatDisplayDate(salesPeriodStart, 'short')} – ${formatDisplayDate(salesPeriodEnd, 'short')}`
+                      : formatDisplayDate(businessDate, 'short')}
                   </Badge>
                 </div>
                 <Button
@@ -1370,6 +1375,7 @@ export default function ReportsPage() {
                       setSalesPeriodEnd(end);
                       setSalesFilterMode(mode);
                       setSalesSelectedMonth(month);
+                      setSalesSelectedDate(null);
                     }}
                     onSelectDate={(date) => {
                       setSalesSelectedDate(date);
