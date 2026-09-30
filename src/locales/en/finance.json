@@ -32,7 +32,8 @@
         "hourlyItemSales": "Hourly Item Sales",
         "ordersMaster": "Orders Master",
         "executiveSummary": "Executive Summary",
-        "menuMaster": "Menu Master"
+        "menuMaster": "Menu Master",
+        "itemOrderDetails": "Item Report With Customer/Order Details"
       },
       "duplicateModal": {
         "title": "Duplicate Report Detected",
@@ -60,6 +61,23 @@
       "dateLabel": "Date:",
       "filteredViewActive": "Filtered View Active",
       "resetFilters": "Reset Filters",
+      "drilldownBanner": {
+        "viewingSingleDate": "Viewing Single Day: {date}",
+        "drilldownFromPeriod": "(Drill-down from period {start} – {end})",
+        "clearDrilldown": "Return to Full Period",
+        "monthly": "Monthly",
+        "customRange": "Custom Range",
+        "from": "From:",
+        "to": "To:"
+      },
+      "pagination": {
+        "previous": "Previous",
+        "next": "Next",
+        "pageInfo": "Page {page} of {totalPages} ({totalCount} bills)",
+        "showingBills": "Showing {showing} of {total} bills | Total: ",
+        "perPage": "{count} per page",
+        "loadingBills": "Loading bills..."
+      },
       "kpis": {
         "netSales": "Net Sales",
         "netOfDiscounts": "Net of discounts",

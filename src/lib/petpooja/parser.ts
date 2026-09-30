@@ -174,6 +174,11 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
       /Success Orders/i.test(rowText)
     ) {
       detectedType = 'EXECUTIVE_SUMMARY';
+    } else if (
+      /Item Report With Customer\/Order Details/i.test(rowText) ||
+      /Customer\/Order Details/i.test(rowText)
+    ) {
+      detectedType = 'ITEM_ORDER_DETAILS';
     } else if (/Parent_Category/i.test(rowText) && /GST%/i.test(rowText)) {
       detectedType = 'MENU_MASTER';
       headerRowIndex = i;
@@ -184,6 +189,15 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
   if (!detectedType) {
     for (let i = 0; i < Math.min(20, sheetRows.length); i++) {
       const row = sheetRows[i].map((c) => String(c || '').trim().toLowerCase());
+      if (
+        (row.includes('item name') || row.includes('item')) &&
+        row.includes('invoice no.') &&
+        (row.includes('sub total') || row.includes('price'))
+      ) {
+        detectedType = 'ITEM_ORDER_DETAILS';
+        headerRowIndex = i;
+        break;
+      }
       if (row.includes('hour') && row.includes('item') && row.some((c) => c.includes('net sales'))) {
         detectedType = 'HOURLY_ITEM_SALES';
         headerRowIndex = i;
@@ -213,7 +227,7 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
 
   if (!detectedType) {
     throw new Error(
-      'Unsupported Petpooja report format. Supported formats: Hourly Item Sales, Orders Master, Executive Sales Summary, or Menu Master.'
+      'Unsupported Petpooja report format. Supported formats: Hourly Item Sales, Orders Master, Executive Sales Summary, Menu Master, or Item Report With Customer/Order Details.'
     );
   }
 
@@ -227,6 +241,8 @@ export function parsePetpoojaBuffer(buffer: Buffer, fileName: string): ParseResu
       return parseExecutiveSummaryReport(sheetRows, fileName, fileChecksum);
     case 'MENU_MASTER':
       return parseMenuMasterReport(sheetRows, fileName, fileChecksum, headerRowIndex);
+    case 'ITEM_ORDER_DETAILS':
+      return parseItemOrderDetailsReport(sheetRows, fileName, fileChecksum);
   }
 }
 
@@ -754,6 +770,197 @@ function parseMenuMasterReport(sheetRows: any[][], fileName: string, fileChecksu
     totalNetSales: 0,
     totalGrossSales: 0,
     metadata: { fileName },
+    data,
+  };
+}
+
+/**
+ * 5. ITEM REPORT WITH CUSTOMER/ORDER DETAILS
+ */
+function parseItemOrderDetailsReport(
+  sheetRows: any[][],
+  fileName: string,
+  fileChecksum: string
+): ParseResult {
+  let businessDate = '';
+  let headerIndex = -1;
+
+  // Scan top 15 rows for Date/Period and header row
+  for (let i = 0; i < Math.min(15, sheetRows.length); i++) {
+    const row = sheetRows[i].map((c) => String(c || '').trim());
+    for (let c = 0; c < row.length; c++) {
+      if (/(?:period|date)\s*:/i.test(row[c])) {
+        const inlineVal = row[c].replace(/^(?:period|date)\s*:\s*/i, '').trim();
+        const nextCell = row[c + 1] ? String(row[c + 1]).trim() : '';
+        const candidate = nextCell || inlineVal;
+        if (candidate) {
+          const parsed = normalizeDateStringToIso(candidate);
+          if (parsed) {
+            businessDate = parsed;
+            break;
+          }
+        }
+      }
+    }
+    if (
+      row.map((c) => c.toLowerCase()).includes('invoice no.') &&
+      row.map((c) => c.toLowerCase()).includes('item name')
+    ) {
+      headerIndex = i;
+    }
+    if (businessDate && headerIndex !== -1) break;
+  }
+
+  if (headerIndex === -1) {
+    for (let i = 0; i < Math.min(15, sheetRows.length); i++) {
+      const lower = sheetRows[i].map((c) => String(c || '').trim().toLowerCase());
+      if (lower.includes('invoice no.') && (lower.includes('item name') || lower.includes('item'))) {
+        headerIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (headerIndex === -1) {
+    throw new Error('Could not find header row (Invoice No. & Item Name) in Item Report With Customer/Order Details.');
+  }
+
+  const rawHeaders = sheetRows[headerIndex].map((h) => String(h || '').trim());
+  const col: Record<string, number> = {};
+
+  rawHeaders.forEach((h, idx) => {
+    const clean = h.toLowerCase().trim();
+    if (clean === 'date') col.date = idx;
+    if (clean === 'timestamp') col.timestamp = idx;
+    if (clean.includes('invoice no.')) col.invoiceNo = idx;
+    if (clean.includes('payment type')) col.paymentType = idx;
+    if (clean === 'order type' || (clean.startsWith('order type') && !clean.includes('sub'))) col.orderType = idx;
+    if (clean === 'area') col.area = idx;
+    if (clean === 'item name' || clean === 'item') col.itemName = idx;
+    if (clean === 'price') col.price = idx;
+    if (clean.startsWith('qty')) col.qty = idx;
+    if (clean.includes('sub total')) col.subTotal = idx;
+    if (clean.startsWith('discount')) col.discount = idx;
+    if (clean === 'tax' || clean.includes('total tax')) col.tax = idx;
+    if (clean.includes('final total') || clean.includes('grand total')) col.finalTotal = idx;
+    if (clean === 'status') col.status = idx;
+    if (clean.includes('table no')) col.tableNo = idx;
+    if (clean.includes('server name') || clean === 'biller') col.serverName = idx;
+    if (clean.includes('covers') || clean.includes('pax')) col.covers = idx;
+    if (clean === 'variation') col.variation = idx;
+    if (clean === 'category') col.category = idx;
+    if (clean.includes('group name')) col.groupName = idx;
+    if (clean === 'phone' || clean.includes('mobile')) col.phone = idx;
+    if (clean === 'name' || clean === 'customer name') col.name = idx;
+    if (clean.includes('assign to') || clean.includes('captain')) col.assignTo = idx;
+  });
+
+  const data: any[] = [];
+  let totalNetSales = 0;
+  let totalGrossSales = 0;
+
+  for (let i = headerIndex + 1; i < sheetRows.length; i++) {
+    const row = sheetRows[i];
+    if (!row || row.length === 0) continue;
+
+    const invoiceNo = String(row[col.invoiceNo !== undefined ? col.invoiceNo : 2] || '').trim();
+    const itemName = String(row[col.itemName !== undefined ? col.itemName : 6] || '').trim();
+
+    if (!invoiceNo || !itemName) continue;
+    if (['total', 'grand total', 'sub total', 'min.', 'max.', 'avg.'].includes(invoiceNo.toLowerCase())) {
+      continue;
+    }
+
+    const timestampStr = col.timestamp !== undefined ? String(row[col.timestamp] || '').trim() : '';
+    let hourOfDay = 12;
+    if (timestampStr) {
+      const timeMatch = timestampStr.match(/(\d{1,2}):(\d{2})/);
+      if (timeMatch) {
+        hourOfDay = parseInt(timeMatch[1], 10);
+      }
+      if (!businessDate) {
+        businessDate = normalizeDateStringToIso(timestampStr);
+      }
+    }
+
+    const unitPrice = cleanNumericValue(row[col.price]);
+    const quantity = cleanNumericValue(row[col.qty]) || 1;
+    const subtotal = cleanNumericValue(row[col.subTotal]);
+    const discountAmount = cleanNumericValue(row[col.discount]);
+    const taxAmount = cleanNumericValue(row[col.tax]);
+    const finalTotal = cleanNumericValue(row[col.finalTotal]);
+    const netSales = Math.round((subtotal - discountAmount) * 100) / 100;
+
+    const status = String(row[col.status !== undefined ? col.status : 13] || 'Success').trim();
+    const paymentType = String(row[col.paymentType !== undefined ? col.paymentType : 3] || 'Cash').trim();
+    const orderType = String(row[col.orderType !== undefined ? col.orderType : 4] || 'Dine In').trim();
+    const area = col.area !== undefined ? String(row[col.area] || '').trim() || null : null;
+    const tableNo = col.tableNo !== undefined ? String(row[col.tableNo] || '').trim() || null : null;
+    const serverName = col.serverName !== undefined ? String(row[col.serverName] || '').trim() || null : null;
+    const assignTo = col.assignTo !== undefined ? String(row[col.assignTo] || '').trim() || null : null;
+    const captainName = assignTo || serverName || null;
+    const covers = col.covers !== undefined ? parseInt(String(row[col.covers] || '1'), 10) || 1 : 1;
+    const variation = col.variation !== undefined ? String(row[col.variation] || '').trim() || null : null;
+    const rawCategory = col.category !== undefined ? String(row[col.category] || '').trim() || 'General' : 'General';
+    const rawGroupName = col.groupName !== undefined ? String(row[col.groupName] || '').trim() || null : null;
+    const phone = col.phone !== undefined ? String(row[col.phone] || '').trim() || null : null;
+    const customerName = col.name !== undefined ? String(row[col.name] || '').trim() || null : null;
+
+    if (status === 'Success') {
+      totalNetSales += netSales;
+      totalGrossSales += finalTotal;
+    }
+
+    data.push({
+      business_date: businessDate,
+      order_timestamp: timestampStr || null,
+      hour_of_day: hourOfDay,
+      invoice_no: invoiceNo,
+      payment_type: paymentType,
+      order_type: orderType,
+      area,
+      table_no: tableNo,
+      server_name: serverName,
+      captain_name: captainName,
+      covers,
+      item_name: itemName,
+      variation,
+      raw_category: rawCategory,
+      raw_group_name: rawGroupName,
+      unit_price: Math.round(unitPrice * 100) / 100,
+      quantity: Math.round(quantity * 100) / 100,
+      subtotal: Math.round(subtotal * 100) / 100,
+      discount_amount: Math.round(discountAmount * 100) / 100,
+      tax_amount: Math.round(taxAmount * 100) / 100,
+      net_sales: netSales,
+      final_total: Math.round(finalTotal * 100) / 100,
+      status,
+      customer_phone: phone,
+      customer_name: customerName,
+    });
+  }
+
+  if (!businessDate && data.length > 0 && data[0].order_timestamp) {
+    businessDate = normalizeDateStringToIso(data[0].order_timestamp);
+  }
+
+  if (!businessDate) {
+    throw new Error(`Unable to extract report/business date from inside Item Report With Customer/Order Details (${fileName}).`);
+  }
+
+  return {
+    reportType: 'ITEM_ORDER_DETAILS',
+    businessDate,
+    fileChecksum,
+    recordCount: data.length,
+    totalNetSales: Math.round(totalNetSales * 100) / 100,
+    totalGrossSales: Math.round(totalGrossSales * 100) / 100,
+    metadata: {
+      fileName,
+      totalRows: data.length,
+      successRows: data.filter((d) => d.status === 'Success').length,
+      invoicesCount: new Set(data.map((d) => d.invoice_no)).size,
+    },
     data,
   };
 }

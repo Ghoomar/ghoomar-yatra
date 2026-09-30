@@ -83,6 +83,8 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
         return t('finance.sales.import.reportTypes.executiveSummary');
       case 'MENU_MASTER':
         return t('finance.sales.import.reportTypes.menuMaster');
+      case 'ITEM_ORDER_DETAILS':
+        return t('finance.sales.import.reportTypes.itemOrderDetails');
       default:
         return type;
     }

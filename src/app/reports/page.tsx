@@ -56,6 +56,18 @@ export default function ReportsPage() {
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [activeTab, setActiveTab] = useState<'sales' | 'inventory' | 'vendors'>('sales');
 
+  // Synchronized period state for Sales Line Graph & Sales Analytics
+  const todayIST = getTodayBusinessDate();
+  const currentYearMonth = todayIST.substring(0, 7);
+  const [salesPeriodStart, setSalesPeriodStart] = useState<string>(() => {
+    const [year, month] = currentYearMonth.split('-').map(Number);
+    return `${year}-${String(month).padStart(2, '0')}-01`;
+  });
+  const [salesPeriodEnd, setSalesPeriodEnd] = useState<string>(todayIST);
+  const [salesFilterMode, setSalesFilterMode] = useState<'month' | 'custom'>('month');
+  const [salesSelectedMonth, setSalesSelectedMonth] = useState<string>(currentYearMonth);
+  const [salesSelectedDate, setSalesSelectedDate] = useState<string | null>(null);
+
   // Active drilldown card
   const [activeDrilldown, setActiveDrilldown] = useState<DrilldownType>(null);
   // Expand Gate detailed analytics in Tab 1
@@ -787,8 +799,23 @@ export default function ReportsPage() {
         <div className="space-y-6">
           {/* Section 1: Consolidated Daily Gross Sales Graph */}
           <DailySalesLineGraph
-            selectedDate={businessDate}
-            onSelectDate={(date) => setBusinessDate(date)}
+            selectedDate={salesSelectedDate}
+            startDate={salesPeriodStart}
+            endDate={salesPeriodEnd}
+            filterMode={salesFilterMode}
+            selectedMonth={salesSelectedMonth}
+            onPeriodChange={(start, end, mode, month) => {
+              setSalesPeriodStart(start);
+              setSalesPeriodEnd(end);
+              setSalesFilterMode(mode);
+              setSalesSelectedMonth(month);
+            }}
+            onSelectDate={(date) => {
+              setSalesSelectedDate(date);
+              if (date) {
+                setBusinessDate(date);
+              }
+            }}
           />
 
           {/* Section 2: Internal Reconciliation Notice Banner */}
@@ -1333,9 +1360,23 @@ export default function ReportsPage() {
               {activeDrilldown === 'restaurant' && (
                 <div>
                   <SalesAnalyticsDashboard
-                    initialDate={businessDate}
-                    onDateChange={(d) => setBusinessDate(d)}
-                    hideDatePicker={true}
+                    startDate={salesPeriodStart}
+                    endDate={salesPeriodEnd}
+                    selectedDate={salesSelectedDate}
+                    filterMode={salesFilterMode}
+                    selectedMonth={salesSelectedMonth}
+                    onPeriodChange={(start, end, mode, month) => {
+                      setSalesPeriodStart(start);
+                      setSalesPeriodEnd(end);
+                      setSalesFilterMode(mode);
+                      setSalesSelectedMonth(month);
+                    }}
+                    onSelectDate={(date) => {
+                      setSalesSelectedDate(date);
+                      if (date) {
+                        setBusinessDate(date);
+                      }
+                    }}
                   />
                 </div>
               )}

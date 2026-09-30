@@ -32,7 +32,8 @@
         "hourlyItemSales": "घंटेवार आइटम सेल",
         "ordersMaster": "ऑर्डर्स मास्टर",
         "executiveSummary": "एग्जीक्यूटिव समरी",
-        "menuMaster": "मेनू मास्टर"
+        "menuMaster": "मेनू मास्टर",
+        "itemOrderDetails": "आइटम व ऑर्डर विवरण रिपोर्ट"
       },
       "duplicateModal": {
         "title": "यह रिपोर्ट पहले से मौजूद है",
@@ -60,6 +61,23 @@
       "dateLabel": "तारीख:",
       "filteredViewActive": "फ़िल्टर लगा हुआ है",
       "resetFilters": "फ़िल्टर हटाएं",
+      "drilldownBanner": {
+        "viewingSingleDate": "एक दिन देख रहे हैं: {date}",
+        "drilldownFromPeriod": "({start} – {end} अवधि से ड्रिल-डाउन)",
+        "clearDrilldown": "पूरी अवधि पर वापस जाएं",
+        "monthly": "मासिक",
+        "customRange": "कस्टम अवधि",
+        "from": "से:",
+        "to": "तक:"
+      },
+      "pagination": {
+        "previous": "पिछला",
+        "next": "अगला",
+        "pageInfo": "पृष्ठ {page} / {totalPages} (कुल {totalCount} बिल)",
+        "showingBills": "कुल {total} में से {showing} बिल | कुल योग: ",
+        "perPage": "{count} प्रति पृष्ठ",
+        "loadingBills": "बिल लोड हो रहे हैं..."
+      },
       "kpis": {
         "netSales": "नेट सेल",
         "netOfDiscounts": "छूट के बाद",

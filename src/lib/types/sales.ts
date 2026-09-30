@@ -2,7 +2,41 @@ export type PetpoojaReportType =
   | 'HOURLY_ITEM_SALES'
   | 'ORDERS_MASTER'
   | 'EXECUTIVE_SUMMARY'
-  | 'MENU_MASTER';
+  | 'MENU_MASTER'
+  | 'ITEM_ORDER_DETAILS';
+
+export interface SalesOrderItem {
+  id: string;
+  batch_id?: string;
+  business_date: string;
+  order_timestamp?: string | null;
+  hour_of_day: number;
+  invoice_no: string;
+  payment_type?: string | null;
+  order_type?: string | null;
+  area?: string | null;
+  table_no?: string | null;
+  server_name?: string | null;
+  captain_name?: string | null;
+  covers?: number;
+  item_name: string;
+  variation?: string | null;
+  parent_category?: string | null;
+  category?: string | null;
+  raw_group_name?: string | null;
+  raw_category?: string | null;
+  unit_price: number;
+  quantity: number;
+  subtotal: number;
+  discount_amount: number;
+  tax_amount: number;
+  net_sales: number;
+  final_total: number;
+  status: string;
+  customer_phone?: string | null;
+  customer_name?: string | null;
+  created_at?: string;
+}
 
 export interface PosMenuItem {
   id: string;

@@ -31,8 +31,13 @@ export interface DailySalesDataPoint {
 }
 
 interface DailySalesLineGraphProps {
-  onSelectDate?: (date: string) => void;
-  selectedDate?: string;
+  onSelectDate?: (date: string | null) => void;
+  selectedDate?: string | null;
+  startDate?: string;
+  endDate?: string;
+  onPeriodChange?: (start: string, end: string, mode: 'month' | 'custom', month: string) => void;
+  filterMode?: 'month' | 'custom';
+  selectedMonth?: string;
 }
 
 function generateDateRange(startStr: string, endStr: string): string[] {
@@ -73,17 +78,41 @@ function getMonthBoundaries(yearMonth: string) {
   return { startDate, endDate };
 }
 
-export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLineGraphProps) {
+export function DailySalesLineGraph({
+  onSelectDate,
+  selectedDate,
+  startDate: parentStartDate,
+  endDate: parentEndDate,
+  onPeriodChange,
+  filterMode: parentFilterMode,
+  selectedMonth: parentSelectedMonth,
+}: DailySalesLineGraphProps) {
   const { t, locale } = useI18n();
   const supabase = createClient();
   const todayIST = getTodayBusinessDate();
   const currentYearMonth = todayIST.substring(0, 7); // e.g. "2026-09"
 
   // Filter Mode: 'month' or 'custom'
-  const [filterMode, setFilterMode] = useState<'month' | 'custom'>('month');
-  const [selectedMonth, setSelectedMonth] = useState(currentYearMonth);
-  const [customStartDate, setCustomStartDate] = useState(getMonthBoundaries(currentYearMonth).startDate);
-  const [customEndDate, setCustomEndDate] = useState(todayIST);
+  const [filterMode, setFilterMode] = useState<'month' | 'custom'>(parentFilterMode || 'month');
+  const [selectedMonth, setSelectedMonth] = useState(parentSelectedMonth || currentYearMonth);
+  const [customStartDate, setCustomStartDate] = useState(parentStartDate || getMonthBoundaries(currentYearMonth).startDate);
+  const [customEndDate, setCustomEndDate] = useState(parentEndDate || todayIST);
+
+  useEffect(() => {
+    if (parentFilterMode && parentFilterMode !== filterMode) setFilterMode(parentFilterMode);
+  }, [parentFilterMode]);
+
+  useEffect(() => {
+    if (parentSelectedMonth && parentSelectedMonth !== selectedMonth) setSelectedMonth(parentSelectedMonth);
+  }, [parentSelectedMonth]);
+
+  useEffect(() => {
+    if (parentStartDate && parentStartDate !== customStartDate) setCustomStartDate(parentStartDate);
+  }, [parentStartDate]);
+
+  useEffect(() => {
+    if (parentEndDate && parentEndDate !== customEndDate) setCustomEndDate(parentEndDate);
+  }, [parentEndDate]);
 
   const [loading, setLoading] = useState(true);
   const [dailyPoints, setDailyPoints] = useState<DailySalesDataPoint[]>([]);
@@ -113,6 +142,12 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
       activeEndDate: customStartDate <= customEndDate ? customEndDate : customStartDate,
     };
   }, [filterMode, selectedMonth, customStartDate, customEndDate]);
+
+  useEffect(() => {
+    if (onPeriodChange) {
+      onPeriodChange(activeStartDate, activeEndDate, filterMode, selectedMonth);
+    }
+  }, [activeStartDate, activeEndDate, filterMode, selectedMonth, onPeriodChange]);
 
   // Available Month options
   const monthOptions = useMemo(() => {
@@ -304,8 +339,12 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
       }
     }
     setHoveredPoint(closest);
-    if (onSelectDate && closest.date !== selectedDate) {
-      onSelectDate(closest.date);
+    if (onSelectDate) {
+      if (closest.date === selectedDate) {
+        onSelectDate(null);
+      } else {
+        onSelectDate(closest.date);
+      }
     }
   };
 
@@ -389,6 +428,20 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                   onChange={(e) => setCustomEndDate(e.target.value)}
                   className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
                 />
+              </div>
+            )}
+
+            {selectedDate && (
+              <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 rounded-lg px-2 py-1 text-xs text-amber-900 font-medium animate-in fade-in">
+                <span>{formatAxisDate(selectedDate, locale)}</span>
+                <button
+                  type="button"
+                  onClick={() => onSelectDate && onSelectDate(null)}
+                  className="text-amber-700 hover:text-amber-950 font-bold ml-1 cursor-pointer"
+                  title="Clear drill-down"
+                >
+                  ✕
+                </button>
               </div>
             )}
 
@@ -678,7 +731,14 @@ export function DailySalesLineGraph({ onSelectDate, selectedDate }: DailySalesLi
                       className="cursor-pointer"
                       onPointerEnter={() => setHoveredPoint(pt)}
                       onPointerLeave={() => setHoveredPoint(null)}
-                      onClick={() => onSelectDate && onSelectDate(pt.date)}
+                      onClick={() => {
+                        if (!onSelectDate) return;
+                        if (selectedDate === pt.date) {
+                          onSelectDate(null);
+                        } else {
+                          onSelectDate(pt.date);
+                        }
+                      }}
                     />
                   </g>
                 );

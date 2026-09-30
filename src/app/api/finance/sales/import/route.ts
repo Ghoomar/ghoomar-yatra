@@ -222,8 +222,100 @@ export async function POST(request: NextRequest) {
         payment_mode_breakdown: exec.payment_mode_breakdown,
         raw_metadata: metadata,
       });
-      if (execErr) {
-        throw new Error(`Failed to insert executive summary: ${execErr.message}`);
+    } else if (reportType === 'ITEM_ORDER_DETAILS') {
+      // Fetch authoritative Menu Master mapping & hierarchy directly from database
+      const lookup = await loadMenuMasterLookupFromDb(supabase);
+
+      const unmappedItemsMap = new Map<string, number>();
+
+      const itemsPayload = data.map((item: any) => {
+        const resolution = resolveItemCategory(item.item_name, lookup);
+
+        if (!resolution.isMatched || resolution.category === 'Uncategorized') {
+          const cleanName = item.item_name.trim();
+          if (!unmappedItemsMap.has(cleanName)) {
+            unmappedItemsMap.set(cleanName, Number(item.unit_price) || 0);
+          }
+        }
+
+        return {
+          batch_id: newBatch.id,
+          business_date: businessDate,
+          order_timestamp: item.order_timestamp,
+          hour_of_day: item.hour_of_day,
+          invoice_no: item.invoice_no,
+          payment_type: item.payment_type,
+          order_type: item.order_type,
+          area: item.area,
+          table_no: item.table_no,
+          server_name: item.server_name,
+          captain_name: item.captain_name,
+          covers: item.covers,
+          item_name: item.item_name,
+          variation: item.variation,
+          parent_category: resolution.parentCategory,
+          category: resolution.category,
+          raw_group_name: item.raw_group_name,
+          raw_category: item.raw_category,
+          unit_price: item.unit_price,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
+          discount_amount: item.discount_amount,
+          tax_amount: item.tax_amount,
+          net_sales: item.net_sales,
+          final_total: item.final_total,
+          status: item.status,
+          customer_phone: item.customer_phone,
+          customer_name: item.customer_name,
+        };
+      });
+
+      // Insert in chunks of 100
+      for (let i = 0; i < itemsPayload.length; i += 100) {
+        const chunk = itemsPayload.slice(i, i + 100);
+        const { error: insErr } = await supabase.from('sales_order_items').insert(chunk);
+        if (insErr) {
+          throw new Error(`Failed to insert detailed order items: ${insErr.message}`);
+        }
+      }
+
+      // Discover and register genuinely newly seen items into pos_menu_items with needs_setup: true
+      if (unmappedItemsMap.size > 0) {
+        const { data: allMenuItems } = await supabase
+          .from('pos_menu_items')
+          .select('name, normalized_name, needs_setup, category');
+
+        const existingNames = new Set((allMenuItems || []).map((e) => e.name.toLowerCase().trim()));
+        const existingNorms = new Set(
+          (allMenuItems || []).map((e) => e.normalized_name || normalizeItemName(e.name))
+        );
+
+        const newItemsToRegister: any[] = [];
+        for (const [name, price] of unmappedItemsMap.entries()) {
+          const norm = normalizeItemName(name);
+          if (!existingNames.has(name.toLowerCase()) && !existingNorms.has(norm)) {
+            newItemsToRegister.push({
+              name,
+              normalized_name: norm,
+              parent_category: 'Uncategorized',
+              category: 'General',
+              price,
+              gst_percent: 5.0,
+              tax_type: 'GST',
+              is_active: true,
+              needs_setup: true,
+              name_hi: suggestHindiName(name, 'menu_item').suggestion,
+              name_hi_is_custom: false,
+            });
+          }
+        }
+
+        if (newItemsToRegister.length > 0) {
+          for (let i = 0; i < newItemsToRegister.length; i += 100) {
+            const chunk = newItemsToRegister.slice(i, i + 100);
+            await supabase.from('pos_menu_items').insert(chunk);
+          }
+        }
       }
     } else if (reportType === 'MENU_MASTER') {
       // Fetch existing items to preserve human-customized Hindi names
@@ -355,6 +447,7 @@ export async function DELETE(request: NextRequest) {
     await supabase.from('sales_orders').delete().eq('batch_id', batchId);
     await supabase.from('sales_hourly_items').delete().eq('batch_id', batchId);
     await supabase.from('sales_executive_summaries').delete().eq('batch_id', batchId);
+    await supabase.from('sales_order_items').delete().eq('batch_id', batchId);
 
     const { error: delErr } = await supabase
       .from('sales_import_batches')
