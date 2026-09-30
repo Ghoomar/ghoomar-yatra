@@ -247,6 +247,37 @@ export function calculateBreakEvenPacing({
   };
 }
 
+export function calculateDinerPacing(
+  revenue: number,
+  restaurantApc: number,
+  dailyTarget: number,
+  targetSpendPerDiner = 300
+) {
+  const actualSpendPerDiner = restaurantApc > 0 ? Number(restaurantApc.toFixed(2)) : 0;
+  const remainingRevenue = Math.max(0, dailyTarget - revenue);
+  const requiredDinersAtTargetSpend = remainingRevenue > 0 
+    ? Math.ceil(remainingRevenue / targetSpendPerDiner) 
+    : 0;
+
+  const requiredDinersAtCurrentSpend = (remainingRevenue > 0 && actualSpendPerDiner > 0)
+    ? Math.ceil(remainingRevenue / actualSpendPerDiner)
+    : requiredDinersAtTargetSpend;
+
+  const achievementPercent = dailyTarget > 0 ? Number(((revenue / dailyTarget) * 100).toFixed(1)) : 0;
+
+  return {
+    actualSpendPerDiner,
+    remainingRevenue,
+    requiredDinersAtTargetSpend,
+    requiredDinersAtCurrentSpend,
+    achievementPercent,
+    // Backwards-compatibility aliases
+    actualSpendPerVisitor: actualSpendPerDiner,
+    requiredVisitorsAtTargetSpend: requiredDinersAtTargetSpend,
+    requiredVisitorsAtCurrentSpend: requiredDinersAtCurrentSpend,
+  };
+}
+
 export function calculateVisitorPacing(revenue: number, visitors: number, dailyTarget: number, targetSpendPerVisitor = 300) {
   const actualSpendPerVisitor = visitors > 0 ? Number((revenue / visitors).toFixed(2)) : 0;
   const remainingRevenue = Math.max(0, dailyTarget - revenue);
@@ -266,6 +297,10 @@ export function calculateVisitorPacing(revenue: number, visitors: number, dailyT
     requiredVisitorsAtTargetSpend,
     requiredVisitorsAtCurrentSpend,
     achievementPercent,
+    // Diners aliases
+    actualSpendPerDiner: actualSpendPerVisitor,
+    requiredDinersAtTargetSpend: requiredVisitorsAtTargetSpend,
+    requiredDinersAtCurrentSpend: requiredVisitorsAtCurrentSpend,
   };
 }
 

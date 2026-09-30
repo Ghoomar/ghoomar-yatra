@@ -16,7 +16,8 @@ interface KPICardsProps {
   visitorsUpdatedAt?: string;
   cars: number;
   carsUpdatedAt?: string;
-  spendPerVisitor: number;
+  spendPerVisitor?: number;
+  restaurantApc?: number;
   dailyTarget: number;
   achievementPercent: number;
   estimatedNetProfit: number;
@@ -34,7 +35,8 @@ export function KPICards({
   visitorsUpdatedAt,
   cars,
   carsUpdatedAt,
-  spendPerVisitor,
+  spendPerVisitor = 0,
+  restaurantApc,
   dailyTarget,
   achievementPercent,
   estimatedNetProfit,
@@ -44,6 +46,7 @@ export function KPICards({
   calculatedBreakEven,
 }: KPICardsProps) {
   const { t, formatTime } = useI18n();
+  const apc = restaurantApc ?? spendPerVisitor;
 
   const getBadgeClass = (status: BreakEvenStatus | string) => {
     const norm = (status || '').toUpperCase();
@@ -166,11 +169,11 @@ export function KPICards({
             <span className="text-[10px] text-stone-400 font-mono">{t('dashboard.kpis.targetSpend', { target: 300 })}</span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
-            {formatINR(spendPerVisitor)}
+            {formatINR(apc)}
           </div>
           <div className="text-[11px] mt-1">
-            <span className={spendPerVisitor >= 300 ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
-              {spendPerVisitor >= 300 ? t('dashboard.kpis.aboveTarget') : t('dashboard.kpis.belowTarget')}
+            <span className={apc >= 300 ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
+              {apc >= 300 ? t('dashboard.kpis.aboveTarget') : t('dashboard.kpis.belowTarget')}
             </span>
           </div>
         </Card>

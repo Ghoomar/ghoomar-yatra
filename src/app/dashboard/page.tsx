@@ -8,8 +8,10 @@ import {
   calculateDailyProfitability, 
   calculateBreakEvenPacing, 
   calculateVisitorPacing,
+  calculateDinerPacing,
   fetchMTDFinancialSummary 
 } from '@/lib/finance-engine';
+import { isDineInOrder } from '@/lib/sales/business-units';
 import { KPICards } from '@/components/dashboard/KPICards';
 import { TargetPacing } from '@/components/dashboard/TargetPacing';
 import { MonthlyPosition } from '@/components/dashboard/MonthlyPosition';
@@ -30,6 +32,7 @@ export default function DashboardPage() {
 
   // Raw Query States
   const [salesSummary, setSalesSummary] = useState<any>(null);
+  const [dayOrders, setDayOrders] = useState<any[]>([]);
   const [targetProgress, setTargetProgress] = useState<any>(null);
   const [financialSummary, setFinancialSummary] = useState<any>(null);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
@@ -56,28 +59,16 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch daily_sales_summary view
-      const { data: salesData } = await supabase
-        .from('daily_sales_summary')
-        .select('*')
-        .eq('business_date', businessDate)
-        .maybeSingle();
+      // 1. Fetch sales summary, sales orders (for authentic dine-in calculations), targets, and financial summary in parallel
+      const [{ data: salesData }, { data: ordersData }, { data: targetData }, { data: finData }] = await Promise.all([
+        supabase.from('daily_sales_summary').select('*').eq('business_date', businessDate).maybeSingle(),
+        supabase.from('sales_orders').select('order_type, area, payment_type, covers_pax, net_sales, grand_total, status').eq('business_date', businessDate),
+        supabase.from('daily_target_progress').select('*').eq('business_date', businessDate).maybeSingle(),
+        supabase.from('daily_financial_summary').select('*').eq('business_date', businessDate).maybeSingle(),
+      ]);
       setSalesSummary(salesData || null);
-
-      // 2. Fetch daily_target_progress view
-      const { data: targetData } = await supabase
-        .from('daily_target_progress')
-        .select('*')
-        .eq('business_date', businessDate)
-        .maybeSingle();
+      setDayOrders(ordersData || []);
       setTargetProgress(targetData || null);
-
-      // 3. Fetch daily_financial_summary view
-      const { data: finData } = await supabase
-        .from('daily_financial_summary')
-        .select('*')
-        .eq('business_date', businessDate)
-        .maybeSingle();
       setFinancialSummary(finData || null);
 
       // 4. Fetch Visitor and Vehicle events for exact Last-Updated timestamps
@@ -173,19 +164,46 @@ export default function DashboardPage() {
   }, [businessDate]);
 
   // Derived Calculations
+  // 1. Consolidated Net Sales across all channels (Petpooja POS settled)
   const revenue = Number(salesSummary?.net_sales) || 0;
   const isSalesReported = Boolean(salesSummary?.is_reported);
   const revenueUpdatedAt = salesSummary?.last_updated_at;
 
+  // 2. Gate Footfall (people entering the property via gate turnstile/taps)
   const totalVisitors = visitorEvents.reduce((s, e) => s + (e.increment || 0), 0);
   const visitorsUpdatedAt = visitorEvents[0]?.timestamp;
 
   const totalCars = vehicleEvents.reduce((s, e) => s + (e.increment || 0), 0);
   const carsUpdatedAt = vehicleEvents[0]?.timestamp;
 
+  // 3. Restaurant Dine-In covers, net sales, and APC (authoritative Dine In only, excluding Snacks Stall, Takeaway, Lancho, and non-Success)
+  const dineInOrders = useMemo(() => {
+    return (dayOrders || []).filter((o) => isDineInOrder(o) && o.status === 'Success');
+  }, [dayOrders]);
+
+  const restaurantDineInNet = useMemo(() => {
+    return dineInOrders.reduce((sum, o) => sum + (Number(o.net_sales) || 0), 0);
+  }, [dineInOrders]);
+
+  const restaurantDineInPax = useMemo(() => {
+    return dineInOrders.reduce((sum, o) => sum + (Number(o.covers_pax) || 0), 0);
+  }, [dineInOrders]);
+
+  const restaurantApc = restaurantDineInPax > 0
+    ? Number((restaurantDineInNet / restaurantDineInPax).toFixed(2))
+    : 0;
+
+  // 4. Target Pacing (Restaurant APC and Diners Needed)
   const dailyTarget = Number(targetProgress?.daily_target) || 100000;
-  const { actualSpendPerVisitor, remainingRevenue, requiredVisitorsAtTargetSpend, achievementPercent } = 
-    calculateVisitorPacing(revenue, totalVisitors, dailyTarget);
+  const { 
+    actualSpendPerDiner, 
+    remainingRevenue, 
+    requiredDinersAtTargetSpend, 
+    requiredDinersAtCurrentSpend, 
+    achievementPercent 
+  } = calculateDinerPacing(revenue, restaurantApc, dailyTarget);
+  const actualSpendPerVisitor = restaurantApc;
+  const requiredVisitorsAtTargetSpend = requiredDinersAtTargetSpend;
 
   const { daysInMonth, daysElapsed } = getMonthDateRange(businessDate);
   const actualSalariesPool = monthlySalaries > 0 ? monthlySalaries : (activeStaffCount * 18000);
@@ -333,7 +351,8 @@ export default function DashboardPage() {
         visitorsUpdatedAt={visitorsUpdatedAt}
         cars={totalCars}
         carsUpdatedAt={carsUpdatedAt}
-        spendPerVisitor={actualSpendPerVisitor}
+        spendPerVisitor={restaurantApc}
+        restaurantApc={restaurantApc}
         dailyTarget={dailyTarget}
         achievementPercent={achievementPercent}
         estimatedNetProfit={profitResult.estimatedNetProfit}
@@ -349,8 +368,10 @@ export default function DashboardPage() {
           dailyTarget={dailyTarget}
           revenueAchieved={revenue}
           remainingRevenue={remainingRevenue}
-          actualSpendPerVisitor={actualSpendPerVisitor}
-          requiredVisitorsRemaining={requiredVisitorsAtTargetSpend}
+          actualSpendPerDiner={restaurantApc}
+          actualSpendPerVisitor={restaurantApc}
+          requiredDinersRemaining={requiredDinersAtCurrentSpend > 0 ? requiredDinersAtCurrentSpend : requiredDinersAtTargetSpend}
+          requiredVisitorsRemaining={requiredDinersAtTargetSpend}
           achievementPercent={achievementPercent}
         />
 

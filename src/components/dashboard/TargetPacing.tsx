@@ -9,8 +9,10 @@ interface TargetPacingProps {
   dailyTarget: number;
   revenueAchieved: number;
   remainingRevenue: number;
-  actualSpendPerVisitor: number;
-  requiredVisitorsRemaining: number;
+  actualSpendPerDiner?: number;
+  actualSpendPerVisitor?: number;
+  requiredDinersRemaining?: number;
+  requiredVisitorsRemaining?: number;
   achievementPercent: number;
 }
 
@@ -18,12 +20,16 @@ export function TargetPacing({
   dailyTarget,
   revenueAchieved,
   remainingRevenue,
+  actualSpendPerDiner,
   actualSpendPerVisitor,
+  requiredDinersRemaining,
   requiredVisitorsRemaining,
   achievementPercent,
 }: TargetPacingProps) {
   const { t } = useI18n();
-  const spendBase = actualSpendPerVisitor > 0 ? actualSpendPerVisitor : 300;
+  const spend = actualSpendPerDiner ?? actualSpendPerVisitor ?? 0;
+  const spendBase = spend > 0 ? spend : 300;
+  const dinersNeeded = requiredDinersRemaining ?? requiredVisitorsRemaining ?? 0;
 
   return (
     <Card>
@@ -62,9 +68,9 @@ export function TargetPacing({
           </div>
 
           <div className="p-2.5 bg-stone-50 rounded-lg border border-stone-200/60">
-            <div className="text-[11px] text-stone-500 font-medium">{t('dashboard.targetPacing.visitorsNeeded')}</div>
+            <div className="text-[11px] text-stone-500 font-medium">{t('dashboard.targetPacing.dinersNeeded')}</div>
             <div className="text-lg font-bold text-sky-700 mt-0.5">
-              {remainingRevenue > 0 ? `+${formatNumber(requiredVisitorsRemaining)}` : t('dashboard.targetPacing.targetMet')}
+              {remainingRevenue > 0 ? `+${formatNumber(dinersNeeded)}` : t('dashboard.targetPacing.targetMet')}
             </div>
           </div>
         </div>
@@ -72,7 +78,7 @@ export function TargetPacing({
         <div className="p-3 bg-amber-50/60 border border-amber-200/70 rounded-lg text-amber-900 text-[11px]">
           {t('dashboard.targetPacing.guidance', {
             spend: formatINR(spendBase),
-            count: formatNumber(requiredVisitorsRemaining),
+            count: formatNumber(dinersNeeded),
             target: formatINR(dailyTarget),
           })}
         </div>
