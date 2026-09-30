@@ -58,6 +58,7 @@ class MockObjectStore {
     this.keyPath = options.keyPath || 'id';
     this.records = new Map();
     this.indexes = indexes;
+    this.seq = 0;
   }
 
   createIndex(name, keyPath, options) {
@@ -98,9 +99,17 @@ class MockObjectStore {
             items = items.filter((item) => item[idxMeta.keyPath] === range.lower);
           }
           if (direction === 'prev') {
-            items.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+            items.sort((a, b) => {
+              const diff = (b.timestamp || '').localeCompare(a.timestamp || '');
+              if (diff !== 0) return diff;
+              return (b._seq || 0) - (a._seq || 0);
+            });
           } else {
-            items.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+            items.sort((a, b) => {
+              const diff = (a.timestamp || '').localeCompare(b.timestamp || '');
+              if (diff !== 0) return diff;
+              return (a._seq || 0) - (b._seq || 0);
+            });
           }
 
           let currentIndex = 0;
@@ -146,6 +155,7 @@ class MockObjectStore {
     const req = { onsuccess: null, onerror: null };
     setTimeout(() => {
       const key = record[this.keyPath];
+      if (!record._seq) record._seq = ++this.seq;
       this.records.set(key, JSON.parse(JSON.stringify(record)));
       req.onsuccess?.();
     }, 0);
@@ -160,6 +170,7 @@ class MockObjectStore {
         req.error = new Error(`Key already exists: ${key}`);
         req.onerror?.();
       } else {
+        record._seq = ++this.seq;
         this.records.set(key, JSON.parse(JSON.stringify(record)));
         req.onsuccess?.();
       }
@@ -511,29 +522,34 @@ assert(v10.increment === 10 && v10.event_type === 'visitor', "Visitor +10 event 
 assert(v1.sync_status === 'pending', "Visitor event sync_status is 'pending'");
 assert(Boolean(v1.timestamp && !isNaN(Date.parse(v1.timestamp))), `Original event timestamp is a valid ISO string (${v1.timestamp})`);
 
-// 3. Test Vehicle increments
-const carDL = await recordVehicleEvent('loc-dl', 'DL', businessDate, 'user-gate-001', 'device-test-uuid');
-const carUP = await recordVehicleEvent('loc-up16', 'UP16', businessDate, 'user-gate-001', 'device-test-uuid');
+// 3. Test Vehicle increments (Quick prefixes, Manual smart prefix MP09, and Bike)
+const carDL = await recordVehicleEvent('loc-dl', 'DL', businessDate, 'user-gate-001', 'device-test-uuid', 'DL');
+const carUP = await recordVehicleEvent('loc-up16', 'UP16', businessDate, 'user-gate-001', 'device-test-uuid', 'UP16');
+const carMP = await recordVehicleEvent('loc-others', 'Others', businessDate, 'user-gate-001', 'device-test-uuid', 'MP09');
 const bike = await recordVehicleEvent('loc-bike', 'Bike', businessDate, 'user-gate-001', 'device-test-uuid');
 
-assert(carDL.location_name === 'DL' && carDL.increment === 1, "Vehicle 'DL' event recorded with increment = 1");
-assert(carUP.location_name === 'UP16' && carUP.increment === 1, "Vehicle 'UP16' event recorded with increment = 1");
-assert(bike.location_name === 'Bike' && bike.increment === 1, "Vehicle 'Bike' event recorded with increment = 1");
+assert(carDL.location_name === 'DL' && carDL.vehicle_prefix === 'DL' && carDL.increment === 1, "Quick vehicle 'DL' event recorded with vehicle_prefix = 'DL'");
+assert(carUP.location_name === 'UP16' && carUP.vehicle_prefix === 'UP16' && carUP.increment === 1, "Quick vehicle 'UP16' event recorded with vehicle_prefix = 'UP16'");
+assert(carMP.location_name === 'Others' && carMP.vehicle_prefix === 'MP09' && carMP.increment === 1, "Manual smart prefix 'MP09' event recorded with vehicle_prefix = 'MP09'");
+assert(bike.location_name === 'Bike' && bike.vehicle_prefix === null && bike.increment === 1, "Vehicle 'Bike' event recorded with vehicle_prefix = null");
 
 // 4. Test Local Store Aggregates & Pending Queue
 const allEvents = await getLocalDayEvents(businessDate);
-assert(allEvents.length === 7, `Local IndexedDB contains exactly 7 events (got ${allEvents.length})`);
+assert(allEvents.length === 8, `Local IndexedDB contains exactly 8 events (got ${allEvents.length})`);
 
 const pendingBefore = await getPendingEvents();
-assert(pendingBefore.length === 7, `Offline pending queue contains exactly 7 pending events (got ${pendingBefore.length})`);
+assert(pendingBefore.length === 8, `Offline pending queue contains exactly 8 pending events (got ${pendingBefore.length})`);
 
 // 5. Test Undo functionality
 console.log('\n📌 Test Group 5: Local Undo Operations');
-const undone = await undoLastLocalEvent();
-assert(undone?.location_name === 'Bike', `Undo removed the most recent event ('Bike', id=${undone?.id})`);
+const undoneBike = await undoLastLocalEvent();
+assert(undoneBike?.location_name === 'Bike', `Undo removed the most recent event ('Bike', id=${undoneBike?.id})`);
+
+const undoneManual = await undoLastLocalEvent();
+assert(undoneManual?.vehicle_prefix === 'MP09', `Undo removed manual vehicle prefix ('MP09', id=${undoneManual?.id})`);
 
 const pendingAfterUndo = await getPendingEvents();
-assert(pendingAfterUndo.length === 6, `Pending queue after undo reduced to exactly 6 events (got ${pendingAfterUndo.length})`);
+assert(pendingAfterUndo.length === 6, `Pending queue after 2 undos reduced to exactly 6 events (got ${pendingAfterUndo.length})`);
 
 // 6. Test Offline Safety: sync attempts while offline must NOT drop events
 console.log('\n📌 Test Group 6: Offline Sync Queue Resilience');
@@ -571,6 +587,7 @@ const totalVisitorsSynced = upsertedVisitors.reduce((sum, r) => sum + r.incremen
 assert(totalVisitorsSynced === 18, `Total visitor increment sum equals 18 (1 + 2 + 5 + 10 = 18)`);
 
 assert(upsertedVehicles.length === 2, `Successfully upserted 2 vehicle events (DL and UP16)`);
+assert(upsertedVehicles.every((v) => Boolean(v.vehicle_prefix)), `All vehicle events sent to server preserved vehicle_prefix ('DL', 'UP16')`);
 
 // Verify timestamps preserved verbatim
 let allTimestampsPreserved = true;

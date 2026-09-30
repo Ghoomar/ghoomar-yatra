@@ -140,6 +140,7 @@ export async function syncPendingEvents(): Promise<{ success: boolean; synced: n
         business_date: e.business_date,
         timestamp: e.timestamp,
         location_id: e.location_id,
+        vehicle_prefix: e.vehicle_prefix || null,
         increment: e.increment,
         entered_by: e.entered_by || enrollment?.userId || null,
       }));

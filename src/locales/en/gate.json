@@ -18,13 +18,24 @@
     "lastAction": "Last: {action}",
     "undoLastTap": "Undo Last Tap",
     "person": "Person",
-    "group": "Group"
+    "group": "Group",
+    "addOnePerson": "+1 Person"
   },
   "vehicles": {
     "title": "Vehicles",
     "car": "Car",
     "bike": "Bike",
-    "others": "Others"
+    "others": "Others",
+    "smartPrefixTitle": "Enter Vehicle Prefix",
+    "smartPrefixSubtitle": "Enter 2-letter state code and 2-digit RTO number",
+    "lettersLabel": "State",
+    "digitsLabel": "RTO",
+    "lettersPlaceholder": "MP",
+    "digitsPlaceholder": "09",
+    "addVehicle": "Add Vehicle",
+    "cancel": "Cancel",
+    "invalidPrefix": "Enter 2 letters and 2 digits (e.g. MP09)",
+    "enterPrefixShort": "Enter Prefix"
   },
   "regions": {
     "DL": "DL",

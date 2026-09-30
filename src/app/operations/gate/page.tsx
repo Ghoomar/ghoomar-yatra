@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate, formatNumber } from '@/lib/utils';
@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   Smartphone,
   Bike,
+  X,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 
@@ -41,22 +42,22 @@ interface VehicleLocation {
   id: string;
   name: string;
   count: number;
+  display_order?: number;
+  is_quick_prefix?: boolean;
 }
 
 const BIKE_LOCATION_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
 
 const DEFAULT_LOCATIONS: VehicleLocation[] = [
-  { id: 'd343fa14-72f7-49c1-bfbc-e8bffdd2ddd9', name: 'DL', count: 0 },
-  { id: 'c59f0429-9ed0-47f4-8cbb-8542ca4ec5d7', name: 'UP16', count: 0 },
-  { id: 'b1c52c0e-2d4c-4d3b-b3fd-0b62c1fa6c15', name: 'UP22', count: 0 },
-  { id: 'eec2b68d-7725-42a9-a0b8-91321a53b803', name: 'UP23', count: 0 },
-  { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'HR', count: 0 },
-  { id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', name: 'UK', count: 0 },
-  { id: 'ef6e8d6b-a68b-409f-a2e0-5794c6205833', name: 'Others', count: 0 },
-  { id: BIKE_LOCATION_ID, name: 'Bike', count: 0 },
+  { id: 'd343fa14-72f7-49c1-bfbc-e8bffdd2ddd9', name: 'DL', count: 0, display_order: 1, is_quick_prefix: true },
+  { id: 'c59f0429-9ed0-47f4-8cbb-8542ca4ec5d7', name: 'UP16', count: 0, display_order: 2, is_quick_prefix: true },
+  { id: 'b1c52c0e-2d4c-4d3b-b3fd-0b62c1fa6c15', name: 'UP22', count: 0, display_order: 3, is_quick_prefix: true },
+  { id: 'eec2b68d-7725-42a9-a0b8-91321a53b803', name: 'UP23', count: 0, display_order: 4, is_quick_prefix: true },
+  { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'HR', count: 0, display_order: 5, is_quick_prefix: false },
+  { id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', name: 'UK', count: 0, display_order: 6, is_quick_prefix: false },
+  { id: 'ef6e8d6b-a68b-409f-a2e0-5794c6205833', name: 'Others', count: 0, display_order: 7, is_quick_prefix: false },
+  { id: BIKE_LOCATION_ID, name: 'Bike', count: 0, display_order: 8, is_quick_prefix: false },
 ];
-
-const PREFIX_ORDER = ['DL', 'UP16', 'UP22', 'UP23', 'HR', 'UK', 'Others'];
 
 export default function GateCounterPage() {
   const supabase = createClient();
@@ -78,6 +79,25 @@ export default function GateCounterPage() {
     lastSyncAt: null,
     errorMessage: null,
   });
+
+  // Smart prefix entry state for "Others"
+  const [isOthersOpen, setIsOthersOpen] = useState(false);
+  const [prefixLetters, setPrefixLetters] = useState('');
+  const [prefixDigits, setPrefixDigits] = useState('');
+  const [prefixError, setPrefixError] = useState<string | null>(null);
+
+  const lettersRef = useRef<HTMLInputElement>(null);
+  const digitsRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus letters input when smart prefix modal opens
+  useEffect(() => {
+    if (isOthersOpen) {
+      const timer = setTimeout(() => {
+        lettersRef.current?.focus();
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [isOthersOpen]);
 
   // 1. Initial Load: Read local cache immediately (0ms lag), then reconcile with server in background
   const loadData = useCallback(async () => {
@@ -120,6 +140,8 @@ export default function GateCounterPage() {
           id: loc.id,
           name: loc.name,
           count: localLocMap[loc.id] || 0,
+          display_order: loc.display_order ?? 0,
+          is_quick_prefix: Boolean(loc.is_quick_prefix),
         }))
       );
 
@@ -142,7 +164,7 @@ export default function GateCounterPage() {
               .eq('business_date', businessDate),
             supabase
               .from('vehicle_counter_events')
-              .select('location_id, increment, timestamp')
+              .select('location_id, increment, timestamp, vehicle_prefix')
               .eq('business_date', businessDate),
           ]);
 
@@ -174,6 +196,8 @@ export default function GateCounterPage() {
               id: loc.id,
               name: loc.name,
               count: (serverLocMap[loc.id] || 0) + (localLocMap[loc.id] || 0),
+              display_order: loc.display_order ?? 0,
+              is_quick_prefix: Boolean(loc.is_quick_prefix),
             }))
           );
         } catch {
@@ -207,7 +231,7 @@ export default function GateCounterPage() {
   }, [loadData]);
 
   // 3. Instant Touch Handlers (< 5ms local IndexedDB commit)
-  const handleAddVisitors = async (increment: number) => {
+  const handleAddVisitors = async (increment = 1) => {
     setTotalVisitors((prev) => prev + increment);
     setLastAction(t('gate.messages.addedVisitors', { count: increment }));
     setLastUpdatedAt(new Date().toISOString());
@@ -225,14 +249,16 @@ export default function GateCounterPage() {
     }
   };
 
-  const handleAddVehicle = async (locationId: string, locationName: string) => {
+  const handleAddVehicle = async (locationId: string, locationName: string, vehiclePrefix?: string) => {
     setTotalCars((prev) => prev + 1);
     setLocations((prev) =>
       prev.map((l) => (l.id === locationId ? { ...l, count: l.count + 1 } : l))
     );
-    const locDisplay = locationName === 'Bike' 
+    const isBike = locationName === 'Bike';
+    const recordedPrefix = vehiclePrefix || (isBike ? null : locationName);
+    const locDisplay = isBike 
       ? t('gate.vehicles.bike') 
-      : (locationName.toLowerCase() === 'others' ? t('gate.regions.Others') : locationName);
+      : (recordedPrefix || (locationName.toLowerCase() === 'others' ? t('gate.regions.Others') : locationName));
     setLastAction(t('gate.messages.addedVehicle', { location: locDisplay }));
     setLastUpdatedAt(new Date().toISOString());
 
@@ -242,7 +268,8 @@ export default function GateCounterPage() {
         locationName,
         businessDate,
         enrollment?.userId || null,
-        enrollment?.deviceId || null
+        enrollment?.deviceId || null,
+        recordedPrefix
       );
       syncPendingEvents();
     } catch (err) {
@@ -264,10 +291,11 @@ export default function GateCounterPage() {
           );
           const isBike =
             undone.location_id === BIKE_LOCATION_ID ||
-            undone.location_name?.toLowerCase() === 'bike';
+            undone.location_name?.toLowerCase() === 'bike' ||
+            undone.vehicle_prefix?.toLowerCase() === 'bike';
           const locDisplay = isBike 
             ? t('gate.vehicles.bike') 
-            : (undone.location_name?.toLowerCase() === 'others' ? t('gate.regions.Others') : (undone.location_name || ''));
+            : (undone.vehicle_prefix || (undone.location_name?.toLowerCase() === 'others' ? t('gate.regions.Others') : (undone.location_name || '')));
           setLastAction(t('gate.messages.undoneVehicle', { location: locDisplay }));
         }
       } else {
@@ -285,19 +313,75 @@ export default function GateCounterPage() {
     setLoading(false);
   };
 
-  // Derive the 7 car prefix locations in guaranteed order
-  const carLocations = useMemo(() => {
-    return PREFIX_ORDER.map((prefix) => {
-      const found = locations.find((l) => l.name.toUpperCase() === prefix.toUpperCase());
-      const fallback = DEFAULT_LOCATIONS.find((d) => d.name === prefix);
-      return (
-        found || {
-          id: fallback ? fallback.id : prefix.toLowerCase(),
-          name: prefix,
-          count: 0,
-        }
-      );
-    });
+  // 4. Smart Prefix Input Handlers
+  const handleLettersChange = (raw: string) => {
+    setPrefixError(null);
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+    // Allow pasting or typing 4-char string (e.g. "MP09" or "MP 09") directly in letters box
+    if (clean.length > 2 && /^[A-Z]{2}[0-9]{1,2}$/.test(clean)) {
+      const l = clean.slice(0, 2);
+      const d = clean.slice(2, 4);
+      setPrefixLetters(l);
+      setPrefixDigits(d);
+      digitsRef.current?.focus();
+      return;
+    }
+
+    const onlyLetters = raw.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+    setPrefixLetters(onlyLetters);
+    if (onlyLetters.length === 2) {
+      digitsRef.current?.focus();
+    }
+  };
+
+  const handleDigitsChange = (raw: string) => {
+    setPrefixError(null);
+    const onlyDigits = raw.replace(/[^0-9]/g, '').slice(0, 2);
+    setPrefixDigits(onlyDigits);
+  };
+
+  const isValidPrefix = useMemo(() => {
+    return /^[A-Z]{2}$/.test(prefixLetters) && /^[0-9]{2}$/.test(prefixDigits);
+  }, [prefixLetters, prefixDigits]);
+
+  const handlePrefixSubmit = async () => {
+    const normalized = `${prefixLetters.trim().toUpperCase()}${prefixDigits.trim()}`;
+    if (!/^[A-Z]{2}[0-9]{2}$/.test(normalized)) {
+      setPrefixError(t('gate.vehicles.invalidPrefix'));
+      return;
+    }
+
+    await handleAddVehicle(othersLocation.id, 'Others', normalized);
+    setIsOthersOpen(false);
+    setPrefixLetters('');
+    setPrefixDigits('');
+    setPrefixError(null);
+  };
+
+  // Derive dynamic quick prefixes from configuration/master data (is_quick_prefix === true)
+  const quickLocations = useMemo(() => {
+    const quicks = locations
+      .filter((l) => Boolean(l.is_quick_prefix) && l.name.toUpperCase() !== 'BIKE')
+      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+
+    if (quicks.length > 0) return quicks;
+
+    // Fallback if is_quick_prefix not yet populated: default to first 4 non-bike, non-others
+    return locations
+      .filter((l) => !['BIKE', 'OTHERS', 'MEERUT'].includes(l.name.toUpperCase()))
+      .slice(0, 4);
+  }, [locations]);
+
+  // Derive Others location
+  const othersLocation = useMemo(() => {
+    return (
+      locations.find((l) => l.name.toUpperCase() === 'OTHERS') || {
+        id: 'ef6e8d6b-a68b-409f-a2e0-5794c6205833',
+        name: 'Others',
+        count: 0,
+      }
+    );
   }, [locations]);
 
   // Derive the Bike location
@@ -312,7 +396,7 @@ export default function GateCounterPage() {
   }, [locations]);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-3 sm:space-y-4 pb-8">
+    <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4 pb-8">
       {/* 1. COMPACT HEADER */}
       <div className="bg-stone-900 text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
@@ -378,122 +462,246 @@ export default function GateCounterPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-        <div className="bg-white border border-stone-200 rounded-xl p-2.5 sm:p-3.5 text-center shadow-xs">
-          <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-            <Users className="h-3.5 w-3.5 text-amber-600" /> {t('gate.kpi.todaysVisitors')}
-          </div>
-          <div
-            data-testid="visitors-count"
-            className="text-3xl sm:text-4xl font-black text-stone-900 mt-0.5 tracking-tight"
-          >
-            {formatNumber(totalVisitors)}
-          </div>
+      {/* 2. LAST ACTION BAR WITH COMPACT UNDO */}
+      <div className="flex items-center justify-between bg-white border border-stone-200 rounded-xl px-3 py-2 shadow-2xs">
+        <div className="flex items-center gap-1.5 text-xs text-stone-600 truncate max-w-[200px] sm:max-w-md">
+          <span className="font-semibold text-stone-700 truncate">
+            {t('gate.visitors.lastAction', { action: lastAction || '—' })}
+          </span>
         </div>
-
-        <div className="bg-white border border-stone-200 rounded-xl p-2.5 sm:p-3.5 text-center shadow-xs">
-          <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-            <Car className="h-3.5 w-3.5 text-sky-600" /> {t('gate.kpi.todaysVehicles')}
-          </div>
-          <div
-            data-testid="vehicles-count"
-            className="text-3xl sm:text-4xl font-black text-stone-900 mt-0.5 tracking-tight"
-          >
-            {formatNumber(totalCars)}
-          </div>
-        </div>
+        <button
+          type="button"
+          data-testid="btn-undo"
+          onClick={handleUndo}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 border border-stone-300 active:scale-95 transition-transform cursor-pointer shadow-2xs shrink-0"
+        >
+          <Undo2 className="h-4 w-4 text-amber-600" />
+          <span>{t('gate.visitors.undoLastTap')}</span>
+        </button>
       </div>
 
-      {/* SECTION 1: VISITOR COUNTER BUTTONS + INTEGRATED COMPACT UNDO */}
-      <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-amber-600" /> {t('gate.visitors.title')}
-          </h2>
-
-          {/* Integrated Compact Undo Action */}
+      {/* 3. SECTION 1: VEHICLE COUNTING — PRIMARY FUNCTION */}
+      <div className="bg-white border border-stone-200 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
           <div className="flex items-center gap-2">
-            {lastAction && (
-              <span className="text-[11px] text-stone-500 truncate max-w-[120px] sm:max-w-[200px]">
-                {t('gate.visitors.lastAction', { action: lastAction })}
-              </span>
-            )}
-            <button
-              type="button"
-              data-testid="btn-undo"
-              onClick={handleUndo}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-stone-100 hover:bg-stone-200 active:bg-stone-300 text-stone-800 border border-stone-300 active:scale-95 transition-transform cursor-pointer shadow-2xs"
-            >
-              <Undo2 className="h-3.5 w-3.5 text-amber-600" />
-              <span>{t('gate.visitors.undoLastTap')}</span>
-            </button>
+            <Car className="h-5 w-5 text-sky-600" />
+            <h2 className="text-sm font-black text-stone-900 uppercase tracking-wider">
+              {t('gate.vehicles.title')}
+            </h2>
+          </div>
+          <div className="text-xs text-stone-500 font-medium">
+            {t('gate.kpi.todaysVehicles')}: <strong data-testid="vehicles-count" className="text-base font-black text-stone-900">{formatNumber(totalCars)}</strong>
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
-          {[1, 2, 5, 10].map((inc) => (
+        {/* 4 Quick-entry buttons in a 2x2 grid */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-3.5">
+          {quickLocations.map((loc) => (
             <button
-              key={inc}
-              data-testid={`btn-visitor-${inc}`}
-              onClick={() => handleAddVisitors(inc)}
-              className="h-20 sm:h-24 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-2xl sm:text-3xl shadow-xs flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer touch-manipulation"
+              key={loc.id}
+              data-testid={`btn-vehicle-${loc.id}`}
+              onClick={() => handleAddVehicle(loc.id, loc.name)}
+              className="h-20 sm:h-24 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer touch-manipulation shadow-xs border border-amber-600/30"
             >
-              <span>+{inc}</span>
-              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-amber-950/75 mt-0.5">
-                {inc === 1 ? t('gate.visitors.person') : t('gate.visitors.group')}
-              </span>
+              <span className="text-3xl sm:text-4xl font-black tracking-tight leading-none">{loc.name}</span>
+              <span className="text-xs font-bold text-amber-950/80 mt-1">+1</span>
             </button>
           ))}
         </div>
+
+        {/* Prominent "Others" button */}
+        <button
+          type="button"
+          data-testid="btn-vehicle-others"
+          onClick={() => {
+            setPrefixLetters('');
+            setPrefixDigits('');
+            setPrefixError(null);
+            setIsOthersOpen(true);
+          }}
+          className="w-full h-15 sm:h-16 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-xl sm:text-2xl shadow-xs flex items-center justify-center gap-2.5 transition-transform active:scale-95 cursor-pointer touch-manipulation border border-amber-600/30"
+        >
+          <span>{t('gate.regions.Others')}</span>
+          <span className="text-xs font-bold text-amber-950/80 bg-amber-400/70 px-2 py-0.5 rounded-md">
+            +1 ({t('gate.vehicles.enterPrefixShort')})
+          </span>
+        </button>
       </div>
 
-      {/* SECTION 2: VEHICLE COUNTER BUTTONS */}
-      <div className="bg-white border border-stone-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs sm:text-sm font-bold text-stone-900 uppercase tracking-wider flex items-center gap-1.5">
-            <Car className="h-4 w-4 text-sky-600" /> {t('gate.vehicles.title')}
-          </h2>
+      {/* 4. SECTION 2: BIKES */}
+      <div className="bg-white border border-stone-200 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+          <div className="flex items-center gap-2">
+            <Bike className="h-5 w-5 text-emerald-600" />
+            <h2 className="text-sm font-black text-stone-900 uppercase tracking-wider">
+              {t('gate.vehicles.bike')}
+            </h2>
+          </div>
+          <div className="text-xs text-stone-500 font-medium">
+            {t('gate.vehicles.bike')}: <strong className="text-base font-black text-stone-900">{formatNumber(bikeLocation.count)}</strong>
+          </div>
         </div>
 
-        {/* 7 Registration-prefix buttons: DL, UP16, UP22, UP23 on row 1; HR, UK, Others on row 2 */}
-        <div className="grid grid-cols-4 gap-2 sm:gap-2.5">
-          {carLocations.map((loc) => {
-            const isOthers = loc.name.toLowerCase() === 'others';
-            const displayName = isOthers ? t('gate.regions.Others') : loc.name;
-            return (
-              <button
-                key={loc.id}
-                data-testid={`btn-vehicle-${loc.id}`}
-                onClick={() => handleAddVehicle(loc.id, loc.name)}
-                className={`h-16 sm:h-18 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer touch-manipulation shadow-xs ${
-                  isOthers ? 'col-span-2' : 'col-span-1'
-                }`}
-              >
-                <div
-                  className={`font-black tracking-tight leading-none ${
-                    isOthers ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'
-                  }`}
-                >
-                  {displayName}
-                </div>
-                <div className="text-[11px] font-bold text-amber-950/75 mt-1">+1</div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Separate +1 Bike Button */}
         <button
           type="button"
           data-testid="btn-vehicle-bike"
           onClick={() => handleAddVehicle(bikeLocation.id, 'Bike')}
-          className="w-full h-12 sm:h-13 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-base sm:text-lg shadow-xs flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer touch-manipulation"
+          className="w-full h-14 sm:h-15 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950 font-black text-lg sm:text-xl shadow-xs flex items-center justify-center gap-2.5 transition-transform active:scale-95 cursor-pointer touch-manipulation border border-amber-600/30"
         >
-          <Bike className="h-5 w-5" />
+          <Bike className="h-6 w-6 text-stone-950" />
           <span>+1 {t('gate.vehicles.bike')}</span>
         </button>
       </div>
+
+      {/* 5. SECTION 3: VISITOR COUNTING — DE-PRIORITISED (VISUALLY SECONDARY) */}
+      <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-2.5">
+        <div className="flex items-center justify-between border-b border-stone-200/80 pb-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600 uppercase tracking-wider">
+            <Users className="h-4 w-4 text-amber-600" />
+            <span>{t('gate.visitors.title')}</span>
+          </div>
+          <div className="text-xs font-medium text-stone-500">
+            {t('gate.kpi.todaysVisitors')}: <strong data-testid="visitors-count" className="text-base font-black text-stone-900">{formatNumber(totalVisitors)}</strong>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          data-testid="btn-visitor-1"
+          onClick={() => handleAddVisitors(1)}
+          className="w-full h-12 sm:h-13 rounded-xl bg-white hover:bg-amber-50 active:bg-amber-100 text-stone-900 border-2 border-stone-300 hover:border-amber-400 font-black text-base sm:text-lg shadow-2xs flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer touch-manipulation"
+        >
+          <Users className="h-4 w-4 text-amber-600" />
+          <span>{t('gate.visitors.addOnePerson')}</span>
+        </button>
+      </div>
+
+      {/* 6. SMART PREFIX ENTRY MODAL */}
+      {isOthersOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsOthersOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-sm w-full p-4 sm:p-5 shadow-2xl border border-stone-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div>
+                <h3 className="text-base font-black text-stone-900">
+                  {t('gate.vehicles.smartPrefixTitle')}
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  {t('gate.vehicles.smartPrefixSubtitle')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOthersOpen(false)}
+                className="p-1 rounded-lg text-stone-400 hover:text-stone-600 hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Two license-plate-styled boxes */}
+            <div className="flex items-center justify-center gap-3 py-2">
+              <div className="flex flex-col items-center">
+                <input
+                  ref={lettersRef}
+                  type="text"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={2}
+                  value={prefixLetters}
+                  onChange={(e) => handleLettersChange(e.target.value)}
+                  placeholder={t('gate.vehicles.lettersPlaceholder')}
+                  className="w-24 h-20 text-center font-mono text-3xl font-black rounded-2xl border-2 border-amber-400 bg-amber-50/50 text-stone-900 focus:outline-none focus:ring-4 focus:ring-amber-500/20 uppercase tracking-widest"
+                />
+                <span className="text-[10px] text-stone-500 mt-1 font-bold uppercase tracking-wider">
+                  {t('gate.vehicles.lettersLabel')}
+                </span>
+              </div>
+
+              <span className="text-3xl font-black text-stone-300 pb-5">−</span>
+
+              <div className="flex flex-col items-center">
+                <input
+                  ref={digitsRef}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
+                  maxLength={2}
+                  value={prefixDigits}
+                  onChange={(e) => handleDigitsChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Backspace' && !prefixDigits) {
+                      lettersRef.current?.focus();
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (isValidPrefix) {
+                        handlePrefixSubmit();
+                      }
+                    }
+                  }}
+                  placeholder={t('gate.vehicles.digitsPlaceholder')}
+                  className="w-24 h-20 text-center font-mono text-3xl font-black rounded-2xl border-2 border-amber-400 bg-amber-50/50 text-stone-900 focus:outline-none focus:ring-4 focus:ring-amber-500/20 tracking-widest"
+                />
+                <span className="text-[10px] text-stone-500 mt-1 font-bold uppercase tracking-wider">
+                  {t('gate.vehicles.digitsLabel')}
+                </span>
+              </div>
+            </div>
+
+            {/* Normalized plate preview */}
+            <div className="text-center">
+              {prefixLetters || prefixDigits ? (
+                <span className="inline-block font-mono font-black text-base text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1 rounded-lg">
+                  {(prefixLetters || '__').toUpperCase()}{(prefixDigits || '--')}
+                </span>
+              ) : (
+                <span className="text-xs text-stone-400">
+                  e.g. MP09, RJ14, PB10, HR26
+                </span>
+              )}
+            </div>
+
+            {prefixError && (
+              <p className="text-xs font-semibold text-rose-600 text-center">
+                {prefixError}
+              </p>
+            )}
+
+            {/* Actions */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsOthersOpen(false)}
+                className="h-12 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-sm transition-transform active:scale-95 cursor-pointer"
+              >
+                {t('gate.vehicles.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={!isValidPrefix}
+                onClick={handlePrefixSubmit}
+                className={`h-12 rounded-xl font-black text-sm transition-transform active:scale-95 cursor-pointer shadow-xs flex items-center justify-center gap-1.5 ${
+                  isValidPrefix
+                    ? 'bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-stone-950'
+                    : 'bg-stone-200 text-stone-400 cursor-not-allowed opacity-60'
+                }`}
+              >
+                <span>{t('gate.vehicles.addVehicle')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

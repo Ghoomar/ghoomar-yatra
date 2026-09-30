@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
     const cEvents = await fetchAllRows((from, to) => {
       let q = supabase
         .from('vehicle_counter_events')
-        .select('increment, timestamp, location:vehicle_origin_locations(id, name)');
+        .select('increment, timestamp, vehicle_prefix, location:vehicle_origin_locations(id, name)');
 
       if (isRange) {
         q = q.gte('business_date', startDate).lte('business_date', endDate);
@@ -187,13 +187,14 @@ export async function GET(request: NextRequest) {
       const point = hourlyMap.get(hour);
       if (point) {
         const inc = Number(ev.increment) || 1;
-        const originName = ev.location?.name || 'Others';
-        const isBike = originName.toLowerCase() === 'bike';
+        const isBike = (ev.location?.name || '').toLowerCase() === 'bike' || (ev.vehicle_prefix || '').toLowerCase() === 'bike';
 
         if (isBike) {
           point.bikes += inc;
           totalBikes += inc;
         } else {
+          // Priority: actual vehicle_prefix if recorded, fallback to location name, fallback to 'Others'
+          const originName = ev.vehicle_prefix || ev.location?.name || 'Others';
           point.cars += inc;
           totalCars += inc;
           point.prefixes[originName] = (point.prefixes[originName] || 0) + inc;
@@ -230,13 +231,16 @@ export async function GET(request: NextRequest) {
     const totalVehicles = totalCars + totalBikes;
     const nightTotalVehicles = nightCars + nightBikes;
 
-    // Format prefixes summary
-    const PREFIX_LIST = ['DL', 'UP16', 'UP22', 'UP23', 'HR', 'UK', 'Others'];
-    const prefixSummary = PREFIX_LIST.map((pref) => {
-      const count = prefixCountMap[pref] || 0;
-      const percent = totalCars > 0 ? Math.round((count / totalCars) * 1000) / 10 : 0;
-      return { name: pref, count, percent };
-    });
+    // Format prefixes summary: preserve standard prefixes and dynamically include any newly entered prefixes
+    const standardPrefixes = ['DL', 'UP16', 'UP22', 'UP23', 'HR', 'UK', 'Others'];
+    const allPrefixKeys = Array.from(new Set([...standardPrefixes, ...Object.keys(prefixCountMap)]));
+    const prefixSummary = allPrefixKeys
+      .map((pref) => {
+        const count = prefixCountMap[pref] || 0;
+        const percent = totalCars > 0 ? Math.round((count / totalCars) * 1000) / 10 : 0;
+        return { name: pref, count, percent };
+      })
+      .filter((p) => p.count > 0 || standardPrefixes.includes(p.name));
 
     const startFmt = `${String(nightStart).padStart(2, '0')}:00`;
     const endFmt = `${String(nightEnd).padStart(2, '0')}:00`;

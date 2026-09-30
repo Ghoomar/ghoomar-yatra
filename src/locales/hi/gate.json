@@ -18,13 +18,24 @@
     "lastAction": "पिछली एंट्री: {action}",
     "undoLastTap": "पिछली एंट्री हटाएं",
     "person": "1 व्यक्ति",
-    "group": "फैमिली / ग्रुप"
+    "group": "फैमिली / ग्रुप",
+    "addOnePerson": "+1 व्यक्ति"
   },
   "vehicles": {
     "title": "गाड़ियां",
     "car": "कार",
     "bike": "बाइक",
-    "others": "अन्य गाड़ियां"
+    "others": "अन्य गाड़ियां",
+    "smartPrefixTitle": "गाड़ी का नंबर-प्लेट कोड डालें",
+    "smartPrefixSubtitle": "2 अक्षर (राज्य) और 2 अंक (RTO नंबर) डालें",
+    "lettersLabel": "राज्य",
+    "digitsLabel": "RTO",
+    "lettersPlaceholder": "MP",
+    "digitsPlaceholder": "09",
+    "addVehicle": "गाड़ी दर्ज करें",
+    "cancel": "रद्द करें",
+    "invalidPrefix": "2 अक्षर और 2 अंक डालें (जैसे MP09)",
+    "enterPrefixShort": "कोड डालें"
   },
   "regions": {
     "DL": "DL",

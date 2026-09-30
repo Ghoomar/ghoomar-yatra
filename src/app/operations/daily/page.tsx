@@ -111,7 +111,7 @@ export default function DailyOperationsPage() {
           .eq('business_date', businessDate),
         supabase
           .from('vehicle_counter_events')
-          .select('increment, location:vehicle_origin_locations(id, name)')
+          .select('increment, vehicle_prefix, location:vehicle_origin_locations(id, name)')
           .eq('business_date', businessDate),
       ]);
 
@@ -122,12 +122,13 @@ export default function DailyOperationsPage() {
 
       (cEvents || []).forEach((e: any) => {
         const inc = Number(e.increment) || 1;
-        const name = e.location?.name || 'Others';
-        if (name.toLowerCase() === 'bike') {
+        const isBike = (e.location?.name || '').toLowerCase() === 'bike' || (e.vehicle_prefix || '').toLowerCase() === 'bike';
+        if (isBike) {
           bikes += inc;
         } else {
           cars += inc;
-          prefMap[name] = (prefMap[name] || 0) + inc;
+          const originName = e.vehicle_prefix || e.location?.name || 'Others';
+          prefMap[originName] = (prefMap[originName] || 0) + inc;
         }
       });
 

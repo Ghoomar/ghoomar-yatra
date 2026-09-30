@@ -8,6 +8,7 @@ export interface GateEvent {
   increment: number;
   location_id?: string | null;
   location_name?: string | null;
+  vehicle_prefix?: string | null;
   counter_type?: string; // 'entry'
   entered_by?: string | null;
   device_id?: string | null;
@@ -216,7 +217,8 @@ export async function recordVehicleEvent(
   locationName: string,
   businessDate: string,
   enteredBy?: string | null,
-  deviceId?: string | null
+  deviceId?: string | null,
+  vehiclePrefix?: string | null
 ): Promise<GateEvent> {
   const db = await getDB();
   const event: GateEvent = {
@@ -226,6 +228,7 @@ export async function recordVehicleEvent(
     timestamp: new Date().toISOString(),
     location_id: locationId,
     location_name: locationName,
+    vehicle_prefix: vehiclePrefix || (locationName === 'Bike' ? null : locationName),
     increment: 1,
     counter_type: 'entry',
     entered_by: enteredBy || null,
