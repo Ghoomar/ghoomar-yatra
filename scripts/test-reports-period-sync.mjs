@@ -83,6 +83,22 @@ function parseActivityStream(hourlyItems, itemNamePattern) {
   return { totalQty, totalGross, totalNet, abv, hourlyData: Array.from(hourMap.values()) };
 }
 
+async function fetchPagedRows(queryFactory, pageSize = 1000) {
+  const all = [];
+  let page = 0;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await queryFactory(from, to);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return all;
+}
+
 async function runTests() {
   console.log('================================================================');
   console.log('🧪 REPORTS PERIOD UNIFICATION & MULTI-DAY VERIFICATION SUITE');
@@ -99,24 +115,30 @@ async function runTests() {
 
   // Fetch full month vs single day Sep 30
   const [
-    { data: monthOrders },
+    monthOrders,
     { data: sep30Orders },
     { data: monthHourly },
     { data: sep30Hourly },
-    { data: monthVisitors },
+    monthVisitors,
     { data: sep30Visitors },
-    { data: monthVehicles },
+    monthVehicles,
     { data: sep30Vehicles },
     { data: monthExec },
     { data: sep30Exec },
   ] = await Promise.all([
-    supabase.from('sales_orders').select('*').gte('business_date', sepStart).lte('business_date', sepEnd),
+    fetchPagedRows((from, to) =>
+      supabase.from('sales_orders').select('*').gte('business_date', sepStart).lte('business_date', sepEnd).range(from, to)
+    ),
     supabase.from('sales_orders').select('*').eq('business_date', '2026-09-30'),
     supabase.from('sales_hourly_items').select('*').gte('business_date', sepStart).lte('business_date', sepEnd),
     supabase.from('sales_hourly_items').select('*').eq('business_date', '2026-09-30'),
-    supabase.from('visitor_counter_events').select('increment, timestamp, business_date').gte('business_date', sepStart).lte('business_date', sepEnd),
+    fetchPagedRows((from, to) =>
+      supabase.from('visitor_counter_events').select('increment, timestamp, business_date').gte('business_date', sepStart).lte('business_date', sepEnd).range(from, to)
+    ),
     supabase.from('visitor_counter_events').select('increment, timestamp, business_date').eq('business_date', '2026-09-30'),
-    supabase.from('vehicle_counter_events').select('increment, timestamp, business_date').gte('business_date', sepStart).lte('business_date', sepEnd),
+    fetchPagedRows((from, to) =>
+      supabase.from('vehicle_counter_events').select('increment, timestamp, business_date').gte('business_date', sepStart).lte('business_date', sepEnd).range(from, to)
+    ),
     supabase.from('vehicle_counter_events').select('increment, timestamp, business_date').eq('business_date', '2026-09-30'),
     supabase.from('sales_executive_summaries').select('*').gte('business_date', sepStart).lte('business_date', sepEnd),
     supabase.from('sales_executive_summaries').select('*').eq('business_date', '2026-09-30'),
@@ -171,9 +193,20 @@ async function runTests() {
   const monthTotalVehicles = (monthVehicles || []).reduce((sum, e) => sum + (Number(e.increment) || 1), 0);
   const sep30TotalVehicles = (sep30Vehicles || []).reduce((sum, e) => sum + (Number(e.increment) || 1), 0);
 
-  assert(monthTotalVisitors > 0, `Full month visitors total is non-zero (${monthTotalVisitors} visitors)`);
+  assert(monthVisitors.length === 5205, `All 5,205 visitor counter events retrieved via pagination (no 1,000-row cutoff)`);
+  assert(monthVehicles.length === 2794, `All 2,794 vehicle counter events retrieved via pagination (no 1,000-row cutoff)`);
+  assert(monthTotalVisitors === 21234, `Full month visitors sum is exactly 21,234 (previously truncated to 4,083)`);
+  assert(monthTotalVehicles === 2794, `Full month vehicles sum is exactly 2,794`);
   assert(monthTotalVisitors >= sep30TotalVisitors, `Month visitors (${monthTotalVisitors}) >= Sep 30 (${sep30TotalVisitors})`);
   assert(monthTotalVehicles >= sep30TotalVehicles, `Month vehicles (${monthTotalVehicles}) >= Sep 30 (${sep30TotalVehicles})`);
+
+  // Verify Dine-In Conversion Metric Integrity
+  const monthDineIn = (monthOrders || []).filter((o) => isDineInOrder(o) && o.status === 'Success');
+  const monthDineInPax = monthDineIn.reduce((sum, o) => sum + (Number(o.covers_pax) || 0), 0);
+  const dinerConversion = (monthDineInPax / monthTotalVisitors) * 100;
+  assert(monthDineInPax === 7199, `Month Dine-In PAX is exactly 7,199`);
+  assert(dinerConversion > 0 && dinerConversion <= 100, `Month Diner Conversion is realistic and <= 100% (${dinerConversion.toFixed(1)}%)`);
+  assert(Math.round(dinerConversion * 10) / 10 === 33.9, `Month Diner Conversion is exactly 33.9%`);
 
   // Test 24-hourly buckets aggregation across full month
   const hourMap = new Map();

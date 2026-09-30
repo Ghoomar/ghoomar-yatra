@@ -58,6 +58,25 @@ function isWithinNightWindow(hour: number, start: number, end: number): boolean 
   return hour >= start && hour < end;
 }
 
+async function fetchAllRows<T = any>(
+  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  pageSize = 1000
+): Promise<T[]> {
+  const all: T[] = [];
+  let page = 0;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await queryFactory(from, to);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return all;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -89,33 +108,33 @@ export async function GET(request: NextRequest) {
     const nightStart = parseInt(searchParams.get('night_start') || '23', 10);
     const nightEnd = parseInt(searchParams.get('night_end') || '6', 10);
 
-    // 1. Query raw visitor events for date or range
-    let vQuery = supabase
-      .from('visitor_counter_events')
-      .select('increment, timestamp');
+    // 1. Query raw visitor events for date or range (paginated to retrieve all rows across date ranges)
+    const vEvents = await fetchAllRows((from, to) => {
+      let q = supabase
+        .from('visitor_counter_events')
+        .select('increment, timestamp');
 
-    if (isRange) {
-      vQuery = vQuery.gte('business_date', startDate).lte('business_date', endDate);
-    } else {
-      vQuery = vQuery.eq('business_date', startDate);
-    }
-    const { data: vEvents, error: vErr } = await vQuery;
+      if (isRange) {
+        q = q.gte('business_date', startDate).lte('business_date', endDate);
+      } else {
+        q = q.eq('business_date', startDate);
+      }
+      return q.range(from, to);
+    });
 
-    if (vErr) throw vErr;
+    // 2. Query raw vehicle events for date or range joined with location (paginated)
+    const cEvents = await fetchAllRows((from, to) => {
+      let q = supabase
+        .from('vehicle_counter_events')
+        .select('increment, timestamp, location:vehicle_origin_locations(id, name)');
 
-    // 2. Query raw vehicle events for date or range joined with location
-    let cQuery = supabase
-      .from('vehicle_counter_events')
-      .select('increment, timestamp, location:vehicle_origin_locations(id, name)');
-
-    if (isRange) {
-      cQuery = cQuery.gte('business_date', startDate).lte('business_date', endDate);
-    } else {
-      cQuery = cQuery.eq('business_date', startDate);
-    }
-    const { data: cEvents, error: cErr } = await cQuery;
-
-    if (cErr) throw cErr;
+      if (isRange) {
+        q = q.gte('business_date', startDate).lte('business_date', endDate);
+      } else {
+        q = q.eq('business_date', startDate);
+      }
+      return q.range(from, to);
+    });
 
     // 3. Initialize 24 hourly buckets (0..23)
     const hourlyMap = new Map<number, GateHourlyPoint>();
