@@ -53,7 +53,6 @@ const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
 export default function ReportsPage() {
   const { t, locale } = useI18n();
   const supabase = createClient();
-  const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
   const [activeTab, setActiveTab] = useState<'sales' | 'inventory' | 'vendors'>('sales');
 
   // Synchronized period state for Sales Line Graph & Sales Analytics (Single Source of Truth)
@@ -71,6 +70,20 @@ export default function ReportsPage() {
     return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   });
   const [salesSelectedDate, setSalesSelectedDate] = useState<string | null>(null);
+
+  // Derived effective reporting period (Single Source of Truth)
+  const effectiveStartDate = salesSelectedDate || salesPeriodStart;
+  const effectiveEndDate = salesSelectedDate || salesPeriodEnd;
+  const isSingleDay = Boolean(salesSelectedDate);
+
+  // Authoritative display label for headers, cards & drilldowns
+  const periodDisplayLabel = useMemo(() => {
+    if (isSingleDay) {
+      return formatDisplayDate(effectiveStartDate, 'short');
+    }
+    return `${formatDisplayDate(effectiveStartDate, 'short')} – ${formatDisplayDate(effectiveEndDate, 'short')}`;
+  }, [isSingleDay, effectiveStartDate, effectiveEndDate]);
+
   // Active drilldown card
   const [activeDrilldown, setActiveDrilldown] = useState<DrilldownType>(null);
 
@@ -94,7 +107,6 @@ export default function ReportsPage() {
     (date: string | null) => {
       setSalesSelectedDate(date);
       if (date) {
-        setBusinessDate(date);
         setActiveDrilldown('restaurant');
       }
     },
@@ -118,7 +130,7 @@ export default function ReportsPage() {
   const [directExpenses, setDirectExpenses] = useState<number>(0);
   const [electricityCost, setElectricityCost] = useState<number>(0);
 
-  // Historical comparative data (DoD and WoW)
+  // Historical comparative data (DoD and WoW for single-day drilldown only)
   const [prevDaySummary, setPrevDaySummary] = useState<any>(null);
   const [prevWeekSummary, setPrevWeekSummary] = useState<any>(null);
   const [prevDayGate, setPrevDayGate] = useState<any>(null);
@@ -137,33 +149,59 @@ export default function ReportsPage() {
     return `${ry}-${rm}-${rd}`;
   };
 
-  const prevDayDate = useMemo(() => getRelativeDate(businessDate, -1), [businessDate]);
-  const prevWeekDate = useMemo(() => getRelativeDate(businessDate, -7), [businessDate]);
+  const prevDayDate = useMemo(() => (isSingleDay ? getRelativeDate(effectiveStartDate, -1) : ''), [isSingleDay, effectiveStartDate]);
+  const prevWeekDate = useMemo(() => (isSingleDay ? getRelativeDate(effectiveStartDate, -7) : ''), [isSingleDay, effectiveStartDate]);
+
+async function fetchPagedRows<T = any>(
+  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
+  pageSize = 1000
+): Promise<T[]> {
+  const all: T[] = [];
+  let page = 0;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await queryFactory(from, to);
+    if (error) {
+      console.error('Error fetching paged rows:', error);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return all;
+}
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [
-        dFinRes,
-        sSumRes,
-        execRes,
-        ordersRes,
-        hourlyRes,
-        vSumRes,
-        movsRes,
-        gateRes,
-        prevDaySumRes,
-        prevWeekSumRes,
-        prevDayGateRes,
-        prevWeekGateRes,
-        expRes,
-        elecRes,
-      ] = await Promise.all([
-        supabase.from('daily_financial_summary').select('*').eq('business_date', businessDate).maybeSingle(),
-        supabase.from('daily_sales_summary').select('*').eq('business_date', businessDate).maybeSingle(),
-        supabase.from('sales_executive_summaries').select('*').eq('business_date', businessDate).maybeSingle(),
-        supabase.from('sales_orders').select('*').eq('business_date', businessDate).order('order_timestamp', { ascending: true }),
-        supabase.from('sales_hourly_items').select('*').eq('business_date', businessDate),
+      const gateUrl = isSingleDay
+        ? `/api/operations/gate/analytics?date=${effectiveStartDate}`
+        : `/api/operations/gate/analytics?start_date=${effectiveStartDate}&end_date=${effectiveEndDate}`;
+
+      const promises: PromiseLike<any>[] = [
+        supabase.from('daily_financial_summary').select('*').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+        supabase.from('daily_sales_summary').select('*').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+        supabase.from('sales_executive_summaries').select('*').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+        fetchPagedRows((from, to) =>
+          supabase
+            .from('sales_orders')
+            .select('id, business_date, order_type, area, payment_type, status, covers_pax, net_sales, grand_total, order_timestamp, hour_of_day')
+            .gte('business_date', effectiveStartDate)
+            .lte('business_date', effectiveEndDate)
+            .order('order_timestamp', { ascending: true })
+            .range(from, to)
+        ),
+        fetchPagedRows((from, to) =>
+          supabase
+            .from('sales_hourly_items')
+            .select('business_date, hour_of_day, item_name, quantity, total_sales, net_sales')
+            .gte('business_date', effectiveStartDate)
+            .lte('business_date', effectiveEndDate)
+            .range(from, to)
+        ),
         supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
         supabase
           .from('stock_movements')
@@ -173,22 +211,41 @@ export default function ReportsPage() {
             department:departments(name, name_hi),
             responsible_person:employees(name)
           `)
-          .eq('business_date', businessDate)
+          .gte('business_date', effectiveStartDate)
+          .lte('business_date', effectiveEndDate)
           .order('created_at', { ascending: false }),
-        fetch(`/api/operations/gate/analytics?date=${businessDate}`),
-        supabase.from('daily_sales_summary').select('*').eq('business_date', prevDayDate).maybeSingle(),
-        supabase.from('daily_sales_summary').select('*').eq('business_date', prevWeekDate).maybeSingle(),
-        fetch(`/api/operations/gate/analytics?date=${prevDayDate}`),
-        fetch(`/api/operations/gate/analytics?date=${prevWeekDate}`),
-        supabase.from('expenses').select('amount').eq('business_date', businessDate),
-        supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
-      ]);
+        fetch(gateUrl),
+        supabase.from('expenses').select('amount').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+        supabase.from('meter_readings_ledger').select('delta_consumption').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+      ];
 
-      setDailyData(dFinRes.data || null);
-      setSalesSummary(sSumRes.data || null);
-      setExecSummary(execRes.data || null);
-      setOrders(ordersRes.data || []);
-      setHourlyItems(hourlyRes.data || []);
+      if (isSingleDay) {
+        promises.push(
+          supabase.from('daily_sales_summary').select('*').eq('business_date', prevDayDate).maybeSingle(),
+          supabase.from('daily_sales_summary').select('*').eq('business_date', prevWeekDate).maybeSingle(),
+          fetch(`/api/operations/gate/analytics?date=${prevDayDate}`),
+          fetch(`/api/operations/gate/analytics?date=${prevWeekDate}`)
+        );
+      }
+
+      const results = await Promise.all(promises);
+
+      const dFinRes = results[0];
+      const sSumRes = results[1];
+      const execRes = results[2];
+      const ordersRes = results[3];
+      const hourlyRes = results[4];
+      const vSumRes = results[5];
+      const movsRes = results[6];
+      const gateRes = results[7];
+      const expRes = results[8];
+      const elecRes = results[9];
+
+      setDailyData(dFinRes.data || []);
+      setSalesSummary(sSumRes.data || []);
+      setExecSummary(execRes.data || []);
+      setOrders(Array.isArray(ordersRes) ? ordersRes : ordersRes.data || []);
+      setHourlyItems(Array.isArray(hourlyRes) ? hourlyRes : hourlyRes.data || []);
       setVendors(vSumRes.data || []);
       setInventoryMovements(movsRes.data || []);
 
@@ -205,20 +262,32 @@ export default function ReportsPage() {
         setGateSummary(null);
       }
 
-      setPrevDaySummary(prevDaySumRes.data || null);
-      setPrevWeekSummary(prevWeekSumRes.data || null);
+      if (isSingleDay && results.length >= 14) {
+        const prevDaySumRes = results[10];
+        const prevWeekSumRes = results[11];
+        const prevDayGateRes = results[12];
+        const prevWeekGateRes = results[13];
 
-      if (prevDayGateRes.ok) {
-        const pdg = await prevDayGateRes.json();
-        setPrevDayGate(pdg.summary || null);
+        setPrevDaySummary(prevDaySumRes?.data || null);
+        setPrevWeekSummary(prevWeekSumRes?.data || null);
+
+        if (prevDayGateRes && prevDayGateRes.ok) {
+          const pdg = await prevDayGateRes.json();
+          setPrevDayGate(pdg.summary || null);
+        } else {
+          setPrevDayGate(null);
+        }
+
+        if (prevWeekGateRes && prevWeekGateRes.ok) {
+          const pwg = await prevWeekGateRes.json();
+          setPrevWeekGate(pwg.summary || null);
+        } else {
+          setPrevWeekGate(null);
+        }
       } else {
+        setPrevDaySummary(null);
+        setPrevWeekSummary(null);
         setPrevDayGate(null);
-      }
-
-      if (prevWeekGateRes.ok) {
-        const pwg = await prevWeekGateRes.json();
-        setPrevWeekGate(pwg.summary || null);
-      } else {
         setPrevWeekGate(null);
       }
     } catch (err: any) {
@@ -230,7 +299,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadData();
-  }, [businessDate]);
+  }, [effectiveStartDate, effectiveEndDate, isSingleDay]);
 
   const exportCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) {
@@ -247,7 +316,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${filename}-${businessDate}.csv`);
+    link.setAttribute('download', `${filename}-${isSingleDay ? effectiveStartDate : `${effectiveStartDate}_to_${effectiveEndDate}`}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -258,15 +327,41 @@ export default function ReportsPage() {
   // ==========================================
 
   // 1. Consolidated Gross Sales (Authoritative standard of truth)
-  const consolidatedGross = Number(
-    execSummary?.grand_total ?? salesSummary?.gross_sales ?? 0
-  );
-  const consolidatedNet = Number(
-    execSummary?.net_sales ?? salesSummary?.net_sales ?? 0
-  );
-  const totalBillsCount = Number(
-    execSummary?.successful_bills_count ?? salesSummary?.bill_count ?? orders.filter((o) => o.status === 'Success').length ?? 0
-  );
+  const consolidatedGross = useMemo(() => {
+    const execRows = Array.isArray(execSummary) ? execSummary : execSummary ? [execSummary] : [];
+    if (execRows.length > 0) {
+      return execRows.reduce((sum: number, r: any) => sum + (Number(r.grand_total) || 0), 0);
+    }
+    const salesRows = Array.isArray(salesSummary) ? salesSummary : salesSummary ? [salesSummary] : [];
+    if (salesRows.length > 0) {
+      return salesRows.reduce((sum: number, r: any) => sum + (Number(r.gross_sales) || 0), 0);
+    }
+    return orders.filter((o) => o.status === 'Success').reduce((sum, o) => sum + (Number(o.grand_total) || 0), 0);
+  }, [execSummary, salesSummary, orders]);
+
+  const consolidatedNet = useMemo(() => {
+    const execRows = Array.isArray(execSummary) ? execSummary : execSummary ? [execSummary] : [];
+    if (execRows.length > 0) {
+      return execRows.reduce((sum: number, r: any) => sum + (Number(r.net_sales) || 0), 0);
+    }
+    const salesRows = Array.isArray(salesSummary) ? salesSummary : salesSummary ? [salesSummary] : [];
+    if (salesRows.length > 0) {
+      return salesRows.reduce((sum: number, r: any) => sum + (Number(r.net_sales) || 0), 0);
+    }
+    return orders.filter((o) => o.status === 'Success').reduce((sum, o) => sum + (Number(o.net_sales) || 0), 0);
+  }, [execSummary, salesSummary, orders]);
+
+  const totalBillsCount = useMemo(() => {
+    const execRows = Array.isArray(execSummary) ? execSummary : execSummary ? [execSummary] : [];
+    if (execRows.length > 0) {
+      return execRows.reduce((sum: number, r: any) => sum + (Number(r.successful_bills_count) || 0), 0);
+    }
+    const salesRows = Array.isArray(salesSummary) ? salesSummary : salesSummary ? [salesSummary] : [];
+    if (salesRows.length > 0) {
+      return salesRows.reduce((sum: number, r: any) => sum + (Number(r.bill_count) || 0), 0);
+    }
+    return orders.filter((o) => o.status === 'Success').length;
+  }, [execSummary, salesSummary, orders]);
 
   // 2. Restaurant Dine-In (STRICTLY Dine-In, excludes Takeaway, Snacks Stall, and Lancho)
   const dineInOrders = useMemo(() => {
@@ -453,14 +548,16 @@ export default function ReportsPage() {
     const isHindi = locale === 'hi';
     const lines: string[] = [];
 
-    // Date formatting (prominent long format: e.g. 20 September 2026)
-    const formattedDate = formatDisplayDate(businessDate, 'long');
+    // Date formatting (prominent long format for single-day; period format for multi-day)
+    const formattedDate = isSingleDay
+      ? formatDisplayDate(effectiveStartDate, 'long')
+      : `${formatDisplayDate(effectiveStartDate, 'short')} – ${formatDisplayDate(effectiveEndDate, 'short')}`;
 
     // Zero-data case: neither gate nor sales logged
     if (gateFootfall === 0 && consolidatedGross === 0) {
       return isHindi
-        ? `${formattedDate} को, सिस्टम में कोई रिज़ॉर्ट गेट विज़िटर्स या रेस्टोरेंट बिक्री दर्ज नहीं की गई थी।`
-        : `On ${formattedDate}, no resort gate footfall or restaurant sales were logged in the system.`;
+        ? `${formattedDate} ${isSingleDay ? 'को' : 'की अवधि में'}, सिस्टम में कोई रिज़ॉर्ट गेट विज़िटर्स या रेस्टोरेंट बिक्री दर्ज नहीं की गई थी।`
+        : `${isSingleDay ? `On ${formattedDate}` : `During the period ${formattedDate}`}, no resort gate footfall or restaurant sales were logged in the system.`;
     }
 
     // Gate & Traffic sentence
@@ -471,7 +568,7 @@ export default function ReportsPage() {
           vehicleStr += `, जिसमें मुख्य रूप से प्रीफ़िक्स ${topVehiclePrefix.name} (${topVehiclePrefix.count} वाहन) शामिल थे`;
         }
         lines.push(
-          `${formattedDate} को, रिज़ॉर्ट गेट पर कुल ${formatNumber(gateFootfall)} आने वाले लोग दर्ज किए गए। सबसे अधिक भीड़ ${
+          `${formattedDate} ${isSingleDay ? 'को' : 'की अवधि में'}, रिज़ॉर्ट गेट पर कुल ${formatNumber(gateFootfall)} आने वाले लोग दर्ज किए गए। सबसे अधिक भीड़ ${
             peakVisitorHour?.label || 'शाम के समय'
           } (${peakVisitorHour?.count || 0} लोग) रही। वाहन यातायात में ${vehicleStr}।`
         );
@@ -481,13 +578,13 @@ export default function ReportsPage() {
           vehicleStr += `, led by prefix ${topVehiclePrefix.name} (${topVehiclePrefix.count} vehicles)`;
         }
         lines.push(
-          `On ${formattedDate}, resort gate arrivals recorded ${formatNumber(gateFootfall)} persons. Peak visitor flow occurred between ${
+          `${isSingleDay ? `On ${formattedDate}` : `During the period ${formattedDate}`}, resort gate arrivals recorded ${formatNumber(gateFootfall)} persons. Peak visitor flow occurred between ${
             peakVisitorHour?.label || 'evening hours'
           } (${peakVisitorHour?.count || 0} entries). Vehicle traffic comprised ${vehicleStr}.`
         );
       }
     } else {
-      lines.push(isHindi ? `${formattedDate} को कोई गेट फ़ुटफ़ॉल दर्ज नहीं किया गया।` : `On ${formattedDate}, no gate footfall was logged.`);
+      lines.push(isHindi ? `${formattedDate} ${isSingleDay ? 'को' : 'की अवधि में'} कोई गेट फ़ुटफ़ॉल दर्ज नहीं किया गया।` : `${isSingleDay ? `On ${formattedDate}` : `During the period ${formattedDate}`}, no gate footfall was logged.`);
     }
 
     // Dining Performance & Conversion sentence
@@ -606,8 +703,8 @@ export default function ReportsPage() {
         : `Consolidated estate Gross Sales totaled ${formatINR(consolidatedGross)} across ${totalBillsCount} successful bills.`
     );
 
-    // Factual DoD and WoW comparison
-    if (prevDaySummary && Number(prevDaySummary.gross_sales) > 0) {
+    // Factual DoD and WoW comparison (strictly for single-day drilldown)
+    if (isSingleDay && prevDaySummary && Number(prevDaySummary.gross_sales) > 0) {
       const prevGross = Number(prevDaySummary.gross_sales);
       const dodGrossPct = (((consolidatedGross - prevGross) / prevGross) * 100).toFixed(1);
       const dodGrossDir = Number(dodGrossPct) >= 0 ? `+${dodGrossPct}%` : `${dodGrossPct}%`;
@@ -626,7 +723,7 @@ export default function ReportsPage() {
       lines.push(compStr);
     }
 
-    if (prevWeekSummary && Number(prevWeekSummary.gross_sales) > 0) {
+    if (isSingleDay && prevWeekSummary && Number(prevWeekSummary.gross_sales) > 0) {
       const pwGross = Number(prevWeekSummary.gross_sales);
       const wowGrossPct = (((consolidatedGross - pwGross) / pwGross) * 100).toFixed(1);
       const wowGrossDir = Number(wowGrossPct) >= 0 ? `+${wowGrossPct}%` : `${wowGrossPct}%`;
@@ -639,7 +736,9 @@ export default function ReportsPage() {
 
     return lines.join(' ');
   }, [
-    businessDate,
+    effectiveStartDate,
+    effectiveEndDate,
+    isSingleDay,
     locale,
     gateFootfall,
     totalVehicles,
@@ -775,10 +874,22 @@ export default function ReportsPage() {
             <span className="text-stone-500">{t('reports.dateLabel')}</span>
             <input
               type="date"
-              value={businessDate}
-              onChange={(e) => setBusinessDate(e.target.value)}
+              data-testid="header-date-input"
+              value={salesSelectedDate || ''}
+              onChange={(e) => handleSalesSelectDate(e.target.value ? e.target.value : null)}
               className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
             />
+            {salesSelectedDate && (
+              <button
+                type="button"
+                data-testid="clear-drilldown-btn"
+                onClick={() => handleSalesSelectDate(null)}
+                className="text-stone-400 hover:text-stone-700 ml-1 text-xs font-bold px-1"
+                title={locale === 'hi' ? 'तारीख फ़िल्टर हटाएं' : 'Clear single day filter'}
+              >
+                ×
+              </button>
+            )}
           </div>
           <Button variant="outline" size="sm" onClick={loadData} title={t('reports.salesLineGraph.refreshTitle')} className="rounded-xl border-[#E7E2D8]">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-[#6B162E]' : 'text-stone-600'}`} />
@@ -848,7 +959,7 @@ export default function ReportsPage() {
                   <strong className="font-semibold">{t('reports.reconciliation.reconciledTitle')}</strong>{' '}
                   {t('reports.reconciliation.reconciledText', {
                     amount: formatINR(consolidatedGross),
-                    date: formatDisplayDate(businessDate, 'short'),
+                    date: periodDisplayLabel,
                   })}
                 </span>
               </div>
@@ -878,7 +989,7 @@ export default function ReportsPage() {
                   {t('reports.operationsSummary.title')}
                 </CardTitle>
                 <Badge variant="outline" className="text-[10px] font-medium border-[#E7E2D8]">
-                  {formatDisplayDate(businessDate, 'short')}
+                  {periodDisplayLabel}
                 </Badge>
               </div>
               <CardDescription className="text-xs text-stone-500">
@@ -936,7 +1047,7 @@ export default function ReportsPage() {
                   {t('reports.footfallConversion.title')}
                 </CardTitle>
                 <CardDescription className="text-xs text-stone-500">
-                  {t('reports.footfallConversion.subtitle', { date: formatDisplayDate(businessDate, 'short') })}
+                  {t('reports.footfallConversion.subtitle', { date: periodDisplayLabel })}
                 </CardDescription>
               </div>
               <Button
@@ -954,7 +1065,7 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
                 <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
                   <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.gateFootfall')}</div>
-                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
+                  <div data-testid="gate-footfall-value" className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
                   <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? t('reports.footfallConversion.totalPersonsEntered') : t('reports.footfallConversion.noGateData')}</div>
                 </div>
 
@@ -1001,8 +1112,10 @@ export default function ReportsPage() {
               {showGateDetails && (
                 <div className="mt-4 pt-4 border-t border-[#E7E2D8]">
                   <GateTimeAnalyticsChart
-                    selectedDate={businessDate}
-                    onDateChange={(date) => setBusinessDate(date)}
+                    selectedDate={salesSelectedDate}
+                    startDate={salesPeriodStart}
+                    endDate={salesPeriodEnd}
+                    onDateChange={(date) => handleSalesSelectDate(date)}
                   />
                 </div>
               )}
@@ -1014,7 +1127,7 @@ export default function ReportsPage() {
             <div className="mb-2.5 flex items-center justify-between">
               <h2 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
                 <Receipt className="h-4 w-4 text-[#6B162E]" />
-                {t('reports.revenueStreams.title', { date: formatDisplayDate(businessDate, 'short') })}
+                {t('reports.revenueStreams.title', { date: periodDisplayLabel })}
               </h2>
               <span className="text-[11px] text-stone-500">
                 {t('reports.revenueStreams.clickCard')}
@@ -1081,13 +1194,13 @@ export default function ReportsPage() {
                 </div>
                 <div className="mt-2">
                   <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
-                  <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                  <div data-testid="snacks-stall-gross" className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                     {formatINR(snacksGross)}
                   </div>
                 </div>
                 <div className="text-[11px] text-stone-600 mt-2 flex justify-between items-center border-t border-[#F0ECE3] pt-1.5">
                   <span>{t('reports.revenueStreams.netSales')} {formatINR(snacksNet)}</span>
-                  <span className="font-medium text-stone-700">{t('reports.revenueStreams.ordersCount', { count: snacksBillCount })}</span>
+                  <span data-testid="snacks-stall-orders" className="font-medium text-stone-700">{t('reports.revenueStreams.ordersCount', { count: snacksBillCount })}</span>
                 </div>
                 <div className="text-[10px] text-stone-500 mt-0.5">
                   {t('reports.revenueStreams.abvPeak', { abv: snacksAbv !== null ? formatINR(snacksAbv) : '—' })}
@@ -1119,7 +1232,7 @@ export default function ReportsPage() {
                   <>
                     <div className="mt-2">
                       <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
-                      <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                      <div data-testid="camel-gross-value" className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                         {formatINR(camelData.totalGross)}
                       </div>
                     </div>
@@ -1174,7 +1287,7 @@ export default function ReportsPage() {
                   <>
                     <div className="mt-2">
                       <div className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">{t('reports.revenueStreams.grossSales')}</div>
-                      <div className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
+                      <div data-testid="games-gross-value" className="text-xl font-bold tracking-tight text-stone-900 tabular-nums mt-0.5">
                         {formatINR(gamesData.totalGross)}
                       </div>
                     </div>
@@ -1316,7 +1429,7 @@ export default function ReportsPage() {
 
               {/* Card 7: Total Expenses (Daily P&L) */}
               <Link
-                href={`/finance/profitability?date=${businessDate}`}
+                href={isSingleDay ? `/finance/profitability?date=${effectiveStartDate}` : `/finance/profitability?start_date=${effectiveStartDate}&end_date=${effectiveEndDate}`}
                 className="relative p-3.5 rounded-xl border border-[#E7E2D8] bg-white hover:border-amber-400/80 hover:bg-[#FAF8F5]/50 transition-all cursor-pointer shadow-xs block"
               >
                 <div className="flex items-center justify-between gap-1">
@@ -1364,11 +1477,7 @@ export default function ReportsPage() {
                     {activeDrilldown === 'champi' && t('reports.drilldown.champiTitle')}
                   </span>
                   <Badge variant="outline" className="text-[10px] border-[#E7E2D8]">
-                    {activeDrilldown === 'restaurant'
-                      ? salesSelectedDate
-                        ? formatDisplayDate(salesSelectedDate, 'short')
-                        : `${formatDisplayDate(salesPeriodStart, 'short')} – ${formatDisplayDate(salesPeriodEnd, 'short')}`
-                      : formatDisplayDate(businessDate, 'short')}
+                    {periodDisplayLabel}
                   </Badge>
                 </div>
                 <Button
@@ -1590,7 +1699,7 @@ export default function ReportsPage() {
 
                       {!hasActivity || act.hourlyData.length === 0 ? (
                         <div className="py-8 text-center text-stone-400 text-xs">
-                          {t('reports.drilldown.noActivityDate', { date: formatDisplayDate(businessDate, 'short') })}
+                          {t('reports.drilldown.noActivityDate', { date: periodDisplayLabel })}
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -1647,13 +1756,13 @@ export default function ReportsPage() {
                   {t('reports.operatingSurplus.title')}
                 </CardTitle>
                 <CardDescription className="text-xs text-stone-500">
-                  {t('reports.operatingSurplus.subtitle', { date: formatDisplayDate(businessDate, 'short') })}
+                  {t('reports.operatingSurplus.subtitle', { date: periodDisplayLabel })}
                 </CardDescription>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportCSV([dailyData || {}], 'daily-operations-report')}
+                onClick={() => exportCSV(Array.isArray(dailyData) && dailyData.length > 0 ? dailyData : [dailyData || {}], 'daily-operations-report')}
                 className="gap-1.5 text-xs rounded-xl border-[#E7E2D8]"
               >
                 <Download className="h-3.5 w-3.5" /> {t('reports.operatingSurplus.exportCsv')}
@@ -1668,7 +1777,7 @@ export default function ReportsPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                   <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E7E2D8]">
                     <div className="text-[11px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.operatingSurplus.netSalesPos')}</div>
-                    <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
+                    <div data-testid="surplus-net-sales" className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
                       {formatINR(consolidatedNet)}
                     </div>
                   </div>
@@ -1686,7 +1795,7 @@ export default function ReportsPage() {
                   </div>
                   <div className="p-3.5 bg-emerald-50/80 rounded-xl border border-emerald-200/80">
                     <div className="text-[11px] text-emerald-900 font-bold uppercase tracking-wider">{t('reports.operatingSurplus.grossSurplus')}</div>
-                    <div className="text-xl font-bold text-emerald-800 tabular-nums mt-0.5">
+                    <div data-testid="surplus-gross-value" className="text-xl font-bold text-emerald-800 tabular-nums mt-0.5">
                       {hasExpensesLogged || consolidatedNet > 0
                         ? formatINR(consolidatedNet - totalOperationalExpenses)
                         : '—'}
@@ -1706,7 +1815,7 @@ export default function ReportsPage() {
         <Card className="border-[#E7E2D8] shadow-xs bg-white rounded-xl">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>{t('reports.inventoryLedger.title', { date: formatDisplayDate(businessDate, 'short') })}</CardTitle>
+              <CardTitle>{t('reports.inventoryLedger.title', { date: periodDisplayLabel })}</CardTitle>
               <CardDescription className="text-stone-500">{t('reports.inventoryLedger.subtitle')}</CardDescription>
             </div>
             <Button
@@ -1724,7 +1833,7 @@ export default function ReportsPage() {
                 <RefreshCw className="h-4 w-4 animate-spin text-[#6B162E]" /> {t('reports.inventoryLedger.loading')}
               </div>
             ) : inventoryMovements.length === 0 ? (
-              <div className="py-12 text-center text-stone-400 text-xs">{t('reports.inventoryLedger.noMovements', { date: formatDisplayDate(businessDate, 'short') })}</div>
+              <div className="py-12 text-center text-stone-400 text-xs">{t('reports.inventoryLedger.noMovements', { date: periodDisplayLabel })}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">

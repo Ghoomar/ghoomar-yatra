@@ -15,6 +15,9 @@ export interface GateHourlyPoint {
 
 export interface GateAnalyticsResponse {
   business_date: string;
+  start_date?: string;
+  end_date?: string;
+  is_range?: boolean;
   night_window: {
     start_hour: number;
     end_hour: number;
@@ -60,23 +63,57 @@ export async function GET(request: NextRequest) {
     const supabase = await createServerSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
 
-    const date = searchParams.get('date') || new Date().toISOString().substring(0, 10);
+    const startDateParam = searchParams.get('start_date');
+    const endDateParam = searchParams.get('end_date');
+    const dateParam = searchParams.get('date');
+
+    let startDate: string;
+    let endDate: string;
+    let isRange = false;
+
+    if (startDateParam && endDateParam) {
+      startDate = startDateParam;
+      endDate = endDateParam;
+      isRange = startDate !== endDate;
+    } else if (dateParam) {
+      startDate = dateParam;
+      endDate = dateParam;
+      isRange = false;
+    } else {
+      const today = new Date().toISOString().substring(0, 10);
+      startDate = today;
+      endDate = today;
+      isRange = false;
+    }
+
     const nightStart = parseInt(searchParams.get('night_start') || '23', 10);
     const nightEnd = parseInt(searchParams.get('night_end') || '6', 10);
 
-    // 1. Query raw visitor events for date
-    const { data: vEvents, error: vErr } = await supabase
+    // 1. Query raw visitor events for date or range
+    let vQuery = supabase
       .from('visitor_counter_events')
-      .select('increment, timestamp')
-      .eq('business_date', date);
+      .select('increment, timestamp');
+
+    if (isRange) {
+      vQuery = vQuery.gte('business_date', startDate).lte('business_date', endDate);
+    } else {
+      vQuery = vQuery.eq('business_date', startDate);
+    }
+    const { data: vEvents, error: vErr } = await vQuery;
 
     if (vErr) throw vErr;
 
-    // 2. Query raw vehicle events for date joined with location
-    const { data: cEvents, error: cErr } = await supabase
+    // 2. Query raw vehicle events for date or range joined with location
+    let cQuery = supabase
       .from('vehicle_counter_events')
-      .select('increment, timestamp, location:vehicle_origin_locations(id, name)')
-      .eq('business_date', date);
+      .select('increment, timestamp, location:vehicle_origin_locations(id, name)');
+
+    if (isRange) {
+      cQuery = cQuery.gte('business_date', startDate).lte('business_date', endDate);
+    } else {
+      cQuery = cQuery.eq('business_date', startDate);
+    }
+    const { data: cEvents, error: cErr } = await cQuery;
 
     if (cErr) throw cErr;
 
@@ -186,7 +223,10 @@ export async function GET(request: NextRequest) {
     const endFmt = `${String(nightEnd).padStart(2, '0')}:00`;
 
     const responsePayload: GateAnalyticsResponse = {
-      business_date: date,
+      business_date: isRange ? `${startDate} to ${endDate}` : startDate,
+      start_date: startDate,
+      end_date: endDate,
+      is_range: isRange,
       night_window: {
         start_hour: nightStart,
         end_hour: nightEnd,

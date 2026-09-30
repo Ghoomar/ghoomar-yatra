@@ -23,12 +23,19 @@ import {
 import { useI18n } from '@/lib/i18n/context';
 
 interface GateTimeAnalyticsChartProps {
-  selectedDate: string;
+  selectedDate?: string | null;
+  startDate?: string;
+  endDate?: string;
   onDateChange?: (date: string) => void;
 }
 
-export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeAnalyticsChartProps) {
-  const { t } = useI18n();
+export function GateTimeAnalyticsChart({
+  selectedDate,
+  startDate,
+  endDate,
+  onDateChange,
+}: GateTimeAnalyticsChartProps) {
+  const { t, locale } = useI18n();
   const [data, setData] = useState<GateAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [nightStart, setNightStart] = useState<number>(23);
@@ -37,12 +44,18 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
   const [hoveredPoint, setHoveredPoint] = useState<GateHourlyPoint | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  const isRange = Boolean(!selectedDate && startDate && endDate && startDate !== endDate);
+  const effectiveStart = selectedDate || startDate || '';
+  const effectiveEnd = selectedDate || endDate || '';
+
   const loadData = async () => {
+    if (!effectiveStart) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/operations/gate/analytics?date=${selectedDate}&night_start=${nightStart}&night_end=${nightEnd}`
-      );
+      const url = isRange
+        ? `/api/operations/gate/analytics?start_date=${effectiveStart}&end_date=${effectiveEnd}&night_start=${nightStart}&night_end=${nightEnd}`
+        : `/api/operations/gate/analytics?date=${effectiveStart}&night_start=${nightStart}&night_end=${nightEnd}`;
+      const res = await fetch(url);
       const json = await res.json();
       if (res.ok) {
         setData(json);
@@ -56,7 +69,7 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
 
   useEffect(() => {
     loadData();
-  }, [selectedDate, nightStart, nightEnd]);
+  }, [selectedDate, startDate, endDate, nightStart, nightEnd]);
 
   const hourlyData = data?.hourly_data || [];
   const summary = data?.summary;
@@ -93,7 +106,11 @@ export function GateTimeAnalyticsChart({ selectedDate, onDateChange }: GateTimeA
               {t('reports.gateTimeChart.title')}
             </CardTitle>
             <CardDescription className="text-xs text-stone-500">
-              {t('reports.gateTimeChart.subtitle')}
+              {isRange
+                ? (locale === 'hi'
+                    ? `चुनी गई अवधि (${effectiveStart} से ${effectiveEnd}) में संचयी 24-घंटे का प्रवेश प्रवाह`
+                    : `Cumulative 24-hour entry velocity across selected period (${effectiveStart} to ${effectiveEnd})`)
+                : t('reports.gateTimeChart.subtitle')}
             </CardDescription>
           </div>
 
