@@ -125,7 +125,7 @@ function LoginForm() {
 
         // Precache the gate counter shell in Service Worker Cache
         if (typeof window !== 'undefined' && 'caches' in window) {
-          caches.open('ghoomar-gate-v1').then((cache) => {
+          caches.open('ghoomar-gate-v2').then((cache) => {
             fetch('/operations/gate').then((res) => {
               if (res.status === 200) cache.put('/operations/gate', res);
             }).catch(() => {});

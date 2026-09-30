@@ -11,7 +11,7 @@ export function ServiceWorkerRegister() {
       .then((reg) => {
         // Pre-warm the cache for /operations/gate if online
         if (navigator.onLine && window.caches) {
-          window.caches.open('ghoomar-gate-v1').then((cache) => {
+          window.caches.open('ghoomar-gate-v2').then((cache) => {
             fetch('/operations/gate', { credentials: 'same-origin' })
               .then((res) => {
                 if (res.status === 200) {

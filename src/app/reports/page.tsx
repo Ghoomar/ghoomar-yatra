@@ -71,9 +71,16 @@ export default function ReportsPage() {
     return `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   });
   const [salesSelectedDate, setSalesSelectedDate] = useState<string | null>(null);
+  // Active drilldown card
+  const [activeDrilldown, setActiveDrilldown] = useState<DrilldownType>(null);
 
   const handleSalesPeriodChange = useCallback(
-    (start: string, end: string, mode: 'month' | 'custom', month: string) => {
+    (
+      start: string,
+      end: string,
+      mode: 'month' | 'custom',
+      month: string
+    ) => {
       setSalesPeriodStart(start);
       setSalesPeriodEnd(end);
       setSalesFilterMode(mode);
@@ -83,15 +90,17 @@ export default function ReportsPage() {
     []
   );
 
-  const handleSalesSelectDate = useCallback((date: string | null) => {
-    setSalesSelectedDate(date);
-    if (date) {
-      setBusinessDate(date);
-    }
-  }, []);
+  const handleSalesSelectDate = useCallback(
+    (date: string | null) => {
+      setSalesSelectedDate(date);
+      if (date) {
+        setBusinessDate(date);
+        setActiveDrilldown('restaurant');
+      }
+    },
+    []
+  );
 
-  // Active drilldown card
-  const [activeDrilldown, setActiveDrilldown] = useState<DrilldownType>(null);
   // Expand Gate detailed analytics in Tab 1
   const [showGateDetails, setShowGateDetails] = useState(false);
   // Expand full executive narrative in Daily Operations Summary

@@ -39,7 +39,12 @@ export interface SalesAnalyticsDashboardProps {
   selectedDate?: string | null;
   filterMode?: 'month' | 'custom';
   selectedMonth?: string;
-  onPeriodChange?: (start: string, end: string, mode: 'month' | 'custom', month: string) => void;
+  onPeriodChange?: (
+    start: string,
+    end: string,
+    mode: 'month' | 'custom',
+    month: string
+  ) => void;
   onSelectDate?: (date: string | null) => void;
 }
 

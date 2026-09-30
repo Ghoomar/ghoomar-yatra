@@ -35,7 +35,12 @@ interface DailySalesLineGraphProps {
   selectedDate?: string | null;
   startDate?: string;
   endDate?: string;
-  onPeriodChange?: (start: string, end: string, mode: 'month' | 'custom', month: string) => void;
+  onPeriodChange?: (
+    start: string,
+    end: string,
+    mode: 'month' | 'custom',
+    month: string
+  ) => void;
   filterMode?: 'month' | 'custom';
   selectedMonth?: string;
 }
@@ -308,6 +313,18 @@ export function DailySalesLineGraph({
     setHoveredPoint(closest);
   };
 
+  const handleSelectDatePoint = useCallback(
+    (targetDate: string) => {
+      if (!onSelectDate) return;
+      if (selectedDate === targetDate) {
+        onSelectDate(null);
+      } else {
+        onSelectDate(targetDate);
+      }
+    },
+    [onSelectDate, selectedDate]
+  );
+
   return (
     <Card className="overflow-hidden border-[#E7E2D8] shadow-xs bg-white rounded-xl">
       <CardHeader className="pb-3 border-b border-[#E7E2D8] bg-[#FAF8F5]/60">
@@ -551,17 +568,31 @@ export function DailySalesLineGraph({
             <svg
               viewBox={`0 0 ${svgWidth} ${svgHeight}`}
               className="w-full h-auto select-none overflow-visible"
-              style={{ minWidth: `${svgWidth}px`, height: `${svgHeight}px` }}
-              onPointerDown={(e) => handlePointerInteraction(e.clientX)}
+              style={{ minWidth: `${svgWidth}px`, height: `${svgHeight}px`, cursor: 'pointer' }}
               onPointerMove={(e) => {
-                if (e.buttons === 1) {
-                  handlePointerInteraction(e.clientX);
-                }
+                handlePointerInteraction(e.clientX);
               }}
               onTouchMove={(e) => {
                 if (e.touches.length > 0) {
                   handlePointerInteraction(e.touches[0].clientX);
                 }
+              }}
+              onClick={(e) => {
+                if (!onSelectDate || pointCoords.length === 0 || !containerRef.current) return;
+                const rect = containerRef.current.getBoundingClientRect();
+                const scrollLeft = containerRef.current.scrollLeft;
+                const relX = e.clientX - rect.left + scrollLeft;
+
+                let closest = pointCoords[0];
+                let minDist = Infinity;
+                for (const pt of pointCoords) {
+                  const dist = Math.abs(pt.x - relX);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    closest = pt;
+                  }
+                }
+                handleSelectDatePoint(closest.date);
               }}
             >
               <defs>
@@ -697,11 +728,16 @@ export function DailySalesLineGraph({
                     <circle
                       cx={pt.x}
                       cy={pt.grossY}
-                      r={isSelected ? 6 : isHovered ? 5.5 : hasSales ? 3.5 : 2}
+                      r={isSelected ? 6.5 : isHovered ? 5.5 : hasSales ? 3.5 : 2}
                       fill={hasSales ? (isSelected ? '#b45309' : '#d97706') : '#d6d3d1'}
                       stroke="#ffffff"
                       strokeWidth={isSelected || isHovered ? 2.5 : 1.5}
-                      className="transition-all duration-150"
+                      className="transition-all duration-150 cursor-pointer"
+                      style={{ pointerEvents: 'all' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectDatePoint(pt.date);
+                      }}
                     />
 
                     {/* Full-Height Touch / Click Slice Hitbox */}
@@ -710,17 +746,14 @@ export function DailySalesLineGraph({
                       y={0}
                       width={colWidth}
                       height={svgHeight}
-                      fill="transparent"
-                      className="cursor-pointer"
+                      fill="#000000"
+                      fillOpacity={0}
+                      style={{ pointerEvents: 'all', cursor: 'pointer' }}
                       onPointerEnter={() => setHoveredPoint(pt)}
                       onPointerLeave={() => setHoveredPoint(null)}
-                      onClick={() => {
-                        if (!onSelectDate) return;
-                        if (selectedDate === pt.date) {
-                          onSelectDate(null);
-                        } else {
-                          onSelectDate(pt.date);
-                        }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectDatePoint(pt.date);
                       }}
                     />
                   </g>
