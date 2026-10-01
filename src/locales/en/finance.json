@@ -18,7 +18,7 @@
       "historyTitle": "Import History ({count})",
       "historyDescription": "Audit log of previously imported Petpooja reports",
       "calendarTitle": "Petpooja Report Status",
-      "calendarSubtitle": "Completeness tracking for daily Petpooja sales reports across the month",
+      "calendarSubtitle": "Track which Petpooja reports are uploaded for each day.",
       "prevMonth": "Previous Month",
       "nextMonth": "Next Month",
       "summaryReports": "{imported} / {total} reports imported",
