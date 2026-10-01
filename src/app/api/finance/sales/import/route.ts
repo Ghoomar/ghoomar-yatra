@@ -397,13 +397,27 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
-    const limit = parseInt(searchParams.get('limit') || '30', 10);
+    const month = searchParams.get('month');
 
-    const { data: batches, error } = await supabase
-      .from('sales_import_batches')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    let query = supabase.from('sales_import_batches').select('*');
+
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [yearStr, monthStr] = month.split('-');
+      const y = parseInt(yearStr, 10);
+      const m = parseInt(monthStr, 10);
+      const startDate = `${yearStr}-${monthStr}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      const endDate = `${yearStr}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+      query = query
+        .gte('business_date', startDate)
+        .lte('business_date', endDate)
+        .order('business_date', { ascending: false });
+    } else {
+      const limit = parseInt(searchParams.get('limit') || '50', 10);
+      query = query.order('created_at', { ascending: false }).limit(limit);
+    }
+
+    const { data: batches, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

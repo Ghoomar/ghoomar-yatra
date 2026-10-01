@@ -17,7 +17,10 @@ import {
   X,
   History,
   Trash2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { MonthlyReportCalendar } from '@/components/sales/MonthlyReportCalendar';
 
 interface SalesImportSectionProps {
   onImportSuccess?: () => void;
@@ -38,13 +41,15 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
   const [deleting, setDeleting] = useState(false);
 
   const [batches, setBatches] = useState<SalesImportBatch[]>([]);
-  const [loadingBatches, setLoadingBatches] = useState(true);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadBatches = async () => {
     setLoadingBatches(true);
     try {
-      const res = await fetch('/api/finance/sales/import');
+      const res = await fetch('/api/finance/sales/import?limit=100');
       const data = await res.json();
       if (res.ok) {
         setBatches(data.batches || []);
@@ -57,8 +62,10 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
   };
 
   useEffect(() => {
-    loadBatches();
-  }, []);
+    if (showHistory) {
+      loadBatches();
+    }
+  }, [showHistory]);
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -139,8 +146,11 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
         fileInputRef.current.value = '';
       }
 
-      // Refresh list
-      loadBatches();
+      // Refresh list & calendar
+      if (showHistory) {
+        loadBatches();
+      }
+      setCalendarRefreshKey((k) => k + 1);
 
       // Notify parent to refresh analytics/reconciliation
       if (onImportSuccess) {
@@ -171,6 +181,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
       });
       setBatchToDelete(null);
       await loadBatches();
+      setCalendarRefreshKey((k) => k + 1);
       if (onImportSuccess) {
         onImportSuccess();
       }
@@ -294,111 +305,131 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
         </CardContent>
       </Card>
 
-      {/* Import History Table */}
-      <Card className="border-stone-200 shadow-xs">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between border-b border-stone-100">
-          <div>
-            <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
-              <History className="h-4 w-4 text-stone-500" />
-              {t('finance.sales.import.historyTitle', { count: batches.length })}
-            </CardTitle>
-            <CardDescription className="text-xs text-stone-500">
-              {t('finance.sales.import.historyDescription')}
-            </CardDescription>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadBatches}
-            disabled={loadingBatches}
-            className="h-7 text-xs"
-          >
-            <RefreshCw className={`h-3 w-3 mr-1 ${loadingBatches ? 'animate-spin' : ''}`} />
-            {t('finance.sales.import.refresh')}
-          </Button>
-        </CardHeader>
+      {/* 2. Primary Monthly Petpooja Report Status Calendar */}
+      <MonthlyReportCalendar refreshKey={calendarRefreshKey} />
 
-        <CardContent className="p-0">
-          {loadingBatches ? (
-            <div className="py-12 text-center text-xs text-stone-400">
-              <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2 text-amber-500" />
-              {t('finance.sales.import.loadingHistory')}
+      {/* 3. Secondary Action: View Import History */}
+      <div className="flex items-center justify-between pt-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowHistory(!showHistory)}
+          className="text-xs text-stone-600 hover:text-stone-900 border-stone-300 gap-1.5 h-8 font-medium cursor-pointer"
+        >
+          <History className="h-3.5 w-3.5 text-stone-500" />
+          <span>{showHistory ? t('finance.sales.import.hideHistory') : t('finance.sales.import.viewHistory')}</span>
+          {showHistory ? <ChevronUp className="h-3.5 w-3.5 text-stone-400" /> : <ChevronDown className="h-3.5 w-3.5 text-stone-400" />}
+        </Button>
+      </div>
+
+      {/* 4. Collapsible Detailed Import History Table */}
+      {showHistory && (
+        <Card className="border-stone-200 shadow-xs animate-in fade-in duration-200">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between border-b border-stone-100">
+            <div>
+              <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                <History className="h-4 w-4 text-stone-500" />
+                {t('finance.sales.import.historyAuditTitle')}
+              </CardTitle>
+              <CardDescription className="text-xs text-stone-500">
+                {t('finance.sales.import.historyAuditDescription')}
+              </CardDescription>
             </div>
-          ) : batches.length === 0 ? (
-            <div className="py-12 text-center text-xs text-stone-400">
-              {t('finance.sales.import.noHistory')}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
-                  <tr>
-                    <th className="p-3">{t('finance.sales.import.colDate')}</th>
-                    <th className="p-3">{t('finance.sales.import.colType')}</th>
-                    <th className="p-3">{t('finance.sales.import.colFile')}</th>
-                    <th className="p-3 text-center">{t('finance.sales.import.colRecords')}</th>
-                    <th className="p-3 text-right">{t('finance.sales.import.colNetSales')}</th>
-                    <th className="p-3 text-right">{t('finance.sales.import.colImportedAt')}</th>
-                    <th className="p-3 text-center w-16">{t('finance.sales.import.colAction')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {batches.map((b) => (
-                    <tr key={b.id} className="hover:bg-stone-50/50">
-                      <td className="p-3 font-semibold text-stone-900 whitespace-nowrap">
-                        {b.business_date || '—'}
-                      </td>
-                      <td className="p-3 whitespace-nowrap">
-                        <Badge
-                          variant={
-                            b.report_type === 'EXECUTIVE_SUMMARY'
-                              ? 'default'
-                              : b.report_type === 'ORDERS_MASTER'
-                              ? 'info'
-                              : b.report_type === 'HOURLY_ITEM_SALES'
-                              ? 'warning'
-                              : 'outline'
-                          }
-                          className="text-[10px]"
-                        >
-                          {formatReportTypeLabel(b.report_type)}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-stone-600 font-mono text-[11px] truncate max-w-[200px]" title={b.file_name}>
-                        {b.file_name}
-                      </td>
-                      <td className="p-3 text-center font-medium text-stone-700 whitespace-nowrap">
-                        {b.record_count}
-                      </td>
-                      <td className="p-3 text-right font-bold text-stone-900 whitespace-nowrap">
-                        {b.total_net_sales > 0 ? formatINR(b.total_net_sales) : '—'}
-                      </td>
-                      <td className="p-3 text-right text-stone-400 whitespace-nowrap">
-                        {new Date(b.created_at).toLocaleString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="p-3 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setBatchToDelete(b)}
-                          className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title={t('finance.sales.import.deleteTitle')}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadBatches}
+              disabled={loadingBatches}
+              className="h-7 text-xs cursor-pointer"
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${loadingBatches ? 'animate-spin' : ''}`} />
+              {t('finance.sales.import.refresh')}
+            </Button>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {loadingBatches ? (
+              <div className="py-12 text-center text-xs text-stone-400">
+                <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-2 text-amber-500" />
+                {t('finance.sales.import.loadingHistory')}
+              </div>
+            ) : batches.length === 0 ? (
+              <div className="py-12 text-center text-xs text-stone-400">
+                {t('finance.sales.import.noHistory')}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
+                    <tr>
+                      <th className="p-3">{t('finance.sales.import.colDate')}</th>
+                      <th className="p-3">{t('finance.sales.import.colType')}</th>
+                      <th className="p-3">{t('finance.sales.import.colFile')}</th>
+                      <th className="p-3 text-center">{t('finance.sales.import.colRecords')}</th>
+                      <th className="p-3 text-right">{t('finance.sales.import.colNetSales')}</th>
+                      <th className="p-3 text-right">{t('finance.sales.import.colImportedAt')}</th>
+                      <th className="p-3 text-center w-16">{t('finance.sales.import.colAction')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {batches.map((b) => (
+                      <tr key={b.id} className="hover:bg-stone-50/50">
+                        <td className="p-3 font-semibold text-stone-900 whitespace-nowrap">
+                          {b.business_date || '—'}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          <Badge
+                            variant={
+                              b.report_type === 'EXECUTIVE_SUMMARY'
+                                ? 'default'
+                                : b.report_type === 'ORDERS_MASTER'
+                                ? 'info'
+                                : b.report_type === 'HOURLY_ITEM_SALES'
+                                ? 'warning'
+                                : 'outline'
+                            }
+                            className="text-[10px]"
+                          >
+                            {formatReportTypeLabel(b.report_type)}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-stone-600 font-mono text-[11px] truncate max-w-[200px]" title={b.file_name}>
+                          {b.file_name}
+                        </td>
+                        <td className="p-3 text-center font-medium text-stone-700 whitespace-nowrap">
+                          {b.record_count}
+                        </td>
+                        <td className="p-3 text-right font-bold text-stone-900 whitespace-nowrap">
+                          {b.total_net_sales > 0 ? formatINR(b.total_net_sales) : '—'}
+                        </td>
+                        <td className="p-3 text-right text-stone-400 whitespace-nowrap">
+                          {new Date(b.created_at).toLocaleString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="p-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setBatchToDelete(b)}
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title={t('finance.sales.import.deleteTitle')}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Duplicate Warning Modal */}
       {duplicateModal.isOpen && (
