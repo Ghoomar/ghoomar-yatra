@@ -283,7 +283,7 @@ export default function DashboardPage() {
       title: t('dashboard.actionFlags.pendingClosing'),
       description: t('dashboard.actionFlags.pendingClosingDesc'),
       linkText: t('dashboard.actionFlags.closingConsole'),
-      href: '/operations/closing',
+      href: '/operations/daily',
     });
   }
 

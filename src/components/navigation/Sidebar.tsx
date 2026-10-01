@@ -55,13 +55,11 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       items: [
         { href: '/operations/daily', labelKey: 'navigation.items.dailyOperations', icon: ClipboardList, permission: 'operations.closing' },
         { href: '/operations/gate', labelKey: 'navigation.items.gateCounter', icon: Car, permission: 'operations.gate' },
-        { href: '/operations/closing', labelKey: 'navigation.items.dailyClosing', icon: Lock, permission: 'operations.closing' },
       ]
     },
     {
       titleKey: 'navigation.sections.finance',
       items: [
-        { href: '/finance/sales', labelKey: 'navigation.items.dailySales', icon: Receipt, permission: 'finance.sales' },
         { href: '/finance/purchases', labelKey: 'navigation.items.purchases', icon: ShoppingBag, permission: 'finance.purchases' },
         { href: '/finance/vendors', labelKey: 'navigation.items.vendors', icon: Building2, permission: 'finance.vendors' },
         { href: '/finance/expenses', labelKey: 'navigation.items.expenses', icon: IndianRupee, permission: 'finance.expenses' },
