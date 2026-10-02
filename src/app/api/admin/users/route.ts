@@ -303,8 +303,6 @@ async function checkUserDependencies(
     expApproved,
     expRecorded,
     salApproved,
-    bdayClosed,
-    bdayReopened,
     attMarked,
     stockCreated,
     consCreated,
@@ -329,8 +327,6 @@ async function checkUserDependencies(
     adminClient.from('expenses').select('id', { count: 'exact', head: true }).eq('approved_by_id', targetUserId),
     adminClient.from('expenses').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
     adminClient.from('employee_salary_payments').select('id', { count: 'exact', head: true }).eq('recorded_by', targetUserId),
-    adminClient.from('business_days').select('business_date', { count: 'exact', head: true }).eq('closed_by', targetUserId),
-    adminClient.from('business_days').select('business_date', { count: 'exact', head: true }).eq('reopened_by', targetUserId),
     adminClient.from('attendance').select('id', { count: 'exact', head: true }).eq('marked_by', targetUserId),
     adminClient.from('stock_movements').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
     adminClient.from('consumption_issues').select('id', { count: 'exact', head: true }).eq('created_by', targetUserId),
@@ -359,9 +355,6 @@ async function checkUserDependencies(
   if (expTotal > 0) dependencies.push({ table: 'expenses', label: 'Expenses (Approved / Recorded)', count: expTotal });
 
   if ((salApproved.count || 0) > 0) dependencies.push({ table: 'employee_salary_payments', label: 'Salary Payments Recorded', count: salApproved.count! });
-
-  const bdayTotal = (bdayClosed.count || 0) + (bdayReopened.count || 0);
-  if (bdayTotal > 0) dependencies.push({ table: 'business_days', label: 'Business Day Closing / Reopenings', count: bdayTotal });
 
   if ((attMarked.count || 0) > 0) dependencies.push({ table: 'attendance', label: 'Staff Attendance Records', count: attMarked.count! });
 

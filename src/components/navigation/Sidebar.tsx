@@ -53,7 +53,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
     {
       titleKey: 'navigation.sections.operations',
       items: [
-        { href: '/operations/daily', labelKey: 'navigation.items.dailyOperations', icon: ClipboardList, permission: 'operations.closing' },
+        { href: '/operations/daily', labelKey: 'navigation.items.dailyOperations', icon: ClipboardList, permission: 'operations.daily' },
         { href: '/operations/gate', labelKey: 'navigation.items.gateCounter', icon: Car, permission: 'operations.gate' },
       ]
     },

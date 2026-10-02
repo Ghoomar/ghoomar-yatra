@@ -7,8 +7,6 @@ export interface AuditLogPayload {
     | 'UPDATE'
     | 'DELETE'
     | 'STATUS_CHANGE'
-    | 'DAY_LOCK'
-    | 'DAY_REOPEN'
     | 'SALARY_PAYOUT'
     | 'STOCK_ADJUSTMENT'
     | string;

@@ -4,9 +4,8 @@
 
 export const ROUTE_PERMISSIONS: Record<string, string> = {
   '/dashboard': 'dashboard.view',
-  '/operations/daily': 'operations.closing',
+  '/operations/daily': 'operations.daily',
   '/operations/gate': 'operations.gate',
-  '/operations/closing': 'operations.closing',
   '/finance/sales': 'finance.sales',
   '/finance/purchases': 'finance.purchases',
   '/finance/vendors': 'finance.vendors',

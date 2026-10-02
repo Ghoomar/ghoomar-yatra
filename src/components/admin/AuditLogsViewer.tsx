@@ -126,7 +126,7 @@ export function AuditLogsViewer() {
               Central System Audit Trail
             </CardTitle>
             <CardDescription>
-              Immutable chronological record of administrative actions, master data mutations, and day status locks
+              Immutable chronological record of administrative actions, master data mutations, and operational events
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={loadAuditLogs} className="gap-1 text-xs">

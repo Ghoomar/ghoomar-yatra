@@ -1,4 +1,4 @@
-﻿import { RoleName } from '../types/database';
+import { RoleName } from '../types/database';
 
 export type AppPermission = 
   | 'sales:view' | 'sales:create' | 'sales:edit' | 'sales:delete'
@@ -6,7 +6,7 @@ export type AppPermission =
   | 'expenses:view' | 'expenses:create' | 'expenses:edit' | 'expenses:delete' | 'expenses:approve'
   | 'purchases:view' | 'purchases:create' | 'purchases:edit' | 'purchases:delete'
   | 'people:view' | 'people:create' | 'people:edit'
-  | 'operations:view' | 'operations:gate' | 'operations:closing' | 'operations:reopen'
+  | 'operations:view' | 'operations:gate' | 'operations:daily'
   | 'admin:manage';
 
 export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, AppPermission[]> = {
@@ -16,7 +16,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, AppPermission[]> = {
     'expenses:view', 'expenses:create', 'expenses:edit', 'expenses:delete', 'expenses:approve',
     'purchases:view', 'purchases:create', 'purchases:edit', 'purchases:delete',
     'people:view', 'people:create', 'people:edit',
-    'operations:view', 'operations:gate', 'operations:closing', 'operations:reopen',
+    'operations:view', 'operations:gate', 'operations:daily',
     'admin:manage'
   ],
   'Owner': [
@@ -25,7 +25,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, AppPermission[]> = {
     'expenses:view', 'expenses:create', 'expenses:approve',
     'purchases:view',
     'people:view',
-    'operations:view', 'operations:gate', 'operations:closing'
+    'operations:view', 'operations:gate', 'operations:daily'
   ],
   'General Manager': [
     'sales:view', 'sales:create',
@@ -33,7 +33,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, AppPermission[]> = {
     'expenses:view', 'expenses:create', 'expenses:approve',
     'purchases:view',
     'people:view', 'people:create', 'people:edit',
-    'operations:view', 'operations:gate', 'operations:closing'
+    'operations:view', 'operations:gate', 'operations:daily'
   ],
   'Accountant': [
     'sales:view', 'sales:create', 'sales:edit',
@@ -41,11 +41,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, AppPermission[]> = {
     'expenses:view', 'expenses:create', 'expenses:edit',
     'purchases:view', 'purchases:create', 'purchases:edit',
     'people:view',
-    'operations:view', 'operations:closing'
+    'operations:view', 'operations:daily'
   ],
   'Cashier': [
     'sales:view', 'sales:create',
-    'operations:view'
+    'operations:view', 'operations:daily'
   ],
   'Storekeeper': [
     'inventory:view', 'inventory:create', 'inventory:edit',

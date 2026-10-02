@@ -79,12 +79,16 @@ it('Sidebar contains only Daily Operations and Gate Counter under Operations', (
 
   // Verify /finance/sales is NOT in sidebar navigation items
   assert.ok(!sidebarContent.includes("href: '/finance/sales'"), 'Must NOT contain /finance/sales');
+
+  // Verify /operations/daily uses operations.daily permission
+  assert.ok(sidebarContent.includes("permission: 'operations.daily'"), 'Daily Operations must use operations.daily permission');
+  assert.ok(!sidebarContent.includes("permission: 'operations.closing'"), 'Sidebar must not reference operations.closing');
 });
 
-it('Dashboard quicklink points to /operations/daily instead of /operations/closing', () => {
+it('Dashboard must not point to obsolete /operations/closing or reference day_closing_open', () => {
   const dashContent = fs.readFileSync('src/app/dashboard/page.tsx', 'utf8');
   assert.ok(!dashContent.includes("href: '/operations/closing'"), 'Dashboard must not point to /operations/closing');
-  assert.ok(dashContent.includes("href: '/operations/daily'"), 'Dashboard must link to /operations/daily');
+  assert.ok(!dashContent.includes('day_closing_open'), 'Dashboard must not reference obsolete day_closing_open');
 });
 
 // -------------------------------------------------------------

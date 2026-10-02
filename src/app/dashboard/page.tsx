@@ -40,7 +40,6 @@ export default function DashboardPage() {
   const [vehicleEvents, setVehicleEvents] = useState<any[]>([]);
   const [activeStaffCount, setActiveStaffCount] = useState<number>(0);
   const [absentStaffCount, setAbsentStaffCount] = useState<number>(0);
-  const [isDayClosed, setIsDayClosed] = useState<boolean>(false);
 
   // Hardened Dynamic Financial States
   const [mtdSummary, setMtdSummary] = useState<MTDFinancialSummary | null>(null);
@@ -87,10 +86,9 @@ export default function DashboardPage() {
       setLowStockItems(low);
 
       // 6. Fetch attendance for date and active employee salaries
-      const [{ data: activeEmps }, { data: attRecords }, { data: bDay }] = await Promise.all([
+      const [{ data: activeEmps }, { data: attRecords }] = await Promise.all([
         supabase.from('employees').select('id, monthly_salary').eq('employment_status', 'Active'),
         supabase.from('attendance').select('status').eq('business_date', businessDate),
-        supabase.from('business_days').select('status').eq('business_date', businessDate).maybeSingle(),
       ]);
 
       const activeList = activeEmps || [];
@@ -98,7 +96,6 @@ export default function DashboardPage() {
       const totalSal = activeList.reduce((acc: number, emp: any) => acc + (Number(emp.monthly_salary) || 0), 0);
       setMonthlySalaries(totalSal > 0 ? totalSal : activeList.length * 18000);
       setAbsentStaffCount((attRecords || []).filter((a) => a.status === 'Absent').length);
-      setIsDayClosed(bDay?.status === 'closed');
 
       // 7. Authoritative MTD Financial RPC, Fixed Cost Rules, Electricity & Fuel
       const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecReadings }, { data: fuelMovs }] = await Promise.all([
@@ -274,16 +271,6 @@ export default function DashboardPage() {
       description: t('dashboard.actionFlags.absentStaffDesc'),
       linkText: t('dashboard.actionFlags.checkMuster'),
       href: '/people/attendance',
-    });
-  }
-  if (!isDayClosed) {
-    flags.push({
-      id: 'day_closing_open',
-      severity: 'info',
-      title: t('dashboard.actionFlags.pendingClosing'),
-      description: t('dashboard.actionFlags.pendingClosingDesc'),
-      linkText: t('dashboard.actionFlags.closingConsole'),
-      href: '/operations/daily',
     });
   }
 
