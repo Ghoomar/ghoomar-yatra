@@ -189,6 +189,22 @@ it('Future business date shows Upcoming / Not applicable', () => {
   assert.equal(upcoming.status, 'upcoming');
 });
 
+it('Daily Operations page delegates Petpooja completeness strictly to shared helper', () => {
+  const pageContent = fs.readFileSync('src/app/operations/daily/page.tsx', 'utf8');
+  assert.ok(
+    pageContent.includes('evaluatePetpoojaReportStatus'),
+    'Daily Operations must import evaluatePetpoojaReportStatus'
+  );
+  assert.ok(
+    pageContent.includes('evaluatePetpoojaReportStatus(previousDate, uploadedReportTypes, today)'),
+    'Daily Operations must evaluate previousDate via shared helper'
+  );
+  assert.ok(
+    !pageContent.includes('const REQUIRED_DAILY_REPORTS'),
+    'Daily Operations must NOT declare local duplicate REQUIRED_DAILY_REPORTS'
+  );
+});
+
 // -------------------------------------------------------------
 // Test Group 4: Gate Counter Aggregation & Absence of View Gate Button
 // -------------------------------------------------------------

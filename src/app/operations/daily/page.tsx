@@ -11,6 +11,11 @@ import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import { MonthlyReportCalendar } from '@/components/sales/MonthlyReportCalendar';
 import {
+  evaluatePetpoojaReportStatus,
+  getPreviousPetpoojaReportDate,
+  DAILY_REPORT_CONFIG,
+} from '@/lib/sales/petpooja-completeness';
+import {
   ClipboardList,
   RefreshCw,
   CheckCircle2,
@@ -71,14 +76,6 @@ interface KeyConsumptionItem {
   totalValue: number;
 }
 
-// 4 Authoritative Petpooja daily reports required for completeness
-const REQUIRED_DAILY_REPORTS = [
-  { key: 'EXECUTIVE_SUMMARY', labelKey: 'finance.sales.import.reportTypes.executiveSummary' },
-  { key: 'ORDERS_MASTER', labelKey: 'finance.sales.import.reportTypes.ordersMaster' },
-  { key: 'ITEM_ORDER_DETAILS', labelKey: 'finance.sales.import.reportTypes.itemOrderDetails' },
-  { key: 'HOURLY_ITEM_SALES', labelKey: 'finance.sales.import.reportTypes.hourlyItemSales' },
-] as const;
-
 // Non-consumption stock movement types (to be excluded from consumption valuation)
 const NON_CONSUMPTION_MOVEMENTS = new Set([
   'transfer',
@@ -135,7 +132,7 @@ export default function DailyOperationsPage() {
 
   // Section 3: Petpooja Reporting (Previous Day Status + Collapsible Calendar)
   const [petpoojaReporting, setPetpoojaReporting] = useState<PetpoojaReportingState>({
-    previousDate: getPreviousDate(getTodayBusinessDate()),
+    previousDate: getPreviousPetpoojaReportDate(getTodayBusinessDate()),
     uploadedCount: 0,
     missingTypes: [],
     isFullyUploaded: false,
@@ -158,7 +155,7 @@ export default function DailyOperationsPage() {
     setLoading(true);
     setMessage(null);
 
-    const previousDate = getPreviousDate(businessDate);
+    const previousDate = getPreviousPetpoojaReportDate(businessDate);
     const today = getTodayBusinessDate();
 
     try {
@@ -294,27 +291,16 @@ export default function DailyOperationsPage() {
         origins: sortedOrigins,
       });
 
-      // --- SECTION 3: PETPOOJA REPORTING (PREVIOUS-DAY LOGIC) ---
+      // --- SECTION 3: PETPOOJA REPORTING (PREVIOUS-DAY LOGIC VIA SHARED HELPER) ---
       const batches = petpoojaBatchesRes.data || [];
-      const uploadedReportTypes = new Set(batches.map((b: any) => b.report_type));
+      const uploadedReportTypes = batches.map((b: any) => b.report_type);
 
-      const missingTypes = REQUIRED_DAILY_REPORTS.filter((r) => !uploadedReportTypes.has(r.key)).map(
-        (r) => t(r.labelKey as any)
-      );
+      const evaluation = evaluatePetpoojaReportStatus(previousDate, uploadedReportTypes, today);
 
-      const uploadedCount = REQUIRED_DAILY_REPORTS.filter((r) => uploadedReportTypes.has(r.key)).length;
-      const isFullyUploaded = uploadedCount === REQUIRED_DAILY_REPORTS.length;
-
-      let status: 'uploaded' | 'dueToday' | 'overdue' | 'upcoming' = 'upcoming';
-      if (businessDate > today) {
-        status = 'upcoming';
-      } else if (isFullyUploaded) {
-        status = 'uploaded';
-      } else if (businessDate === today) {
-        status = 'dueToday';
-      } else {
-        status = 'overdue';
-      }
+      const missingTypes = evaluation.missingReportTypes.map((key) => {
+        const cfg = DAILY_REPORT_CONFIG.find((c) => c.key === key);
+        return cfg ? t(`finance.sales.import.${cfg.fullTitleKey}` as any) : key;
+      });
 
       const netSales =
         Number(petpoojaSummaryRes.data?.net_sales) ||
@@ -322,10 +308,10 @@ export default function DailyOperationsPage() {
 
       setPetpoojaReporting({
         previousDate,
-        uploadedCount,
+        uploadedCount: evaluation.importedCount,
         missingTypes,
-        isFullyUploaded,
-        status,
+        isFullyUploaded: evaluation.isComplete,
+        status: evaluation.status,
         netSales,
       });
 

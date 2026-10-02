@@ -18,33 +18,15 @@ import {
   X,
   FileSpreadsheet,
 } from 'lucide-react';
+import {
+  DAILY_REPORT_CONFIG,
+  DailyReportTypeKey,
+  ReportStatus,
+  evaluatePetpoojaReportStatus,
+} from '@/lib/sales/petpooja-completeness';
 
-export const DAILY_REPORT_CONFIG = [
-  {
-    key: 'ITEM_ORDER_DETAILS',
-    labelKey: 'shortReportLabels.details',
-    fullTitleKey: 'reportTypes.itemOrderDetails',
-  },
-  {
-    key: 'HOURLY_ITEM_SALES',
-    labelKey: 'shortReportLabels.hourly',
-    fullTitleKey: 'reportTypes.hourlyItemSales',
-  },
-  {
-    key: 'ORDERS_MASTER',
-    labelKey: 'shortReportLabels.orders',
-    fullTitleKey: 'reportTypes.ordersMaster',
-  },
-  {
-    key: 'EXECUTIVE_SUMMARY',
-    labelKey: 'shortReportLabels.executive',
-    fullTitleKey: 'reportTypes.executiveSummary',
-  },
-] as const;
-
-export type DailyReportTypeKey = typeof DAILY_REPORT_CONFIG[number]['key'];
-
-export type ReportStatus = 'imported' | 'pending' | 'future';
+export { DAILY_REPORT_CONFIG };
+export type { DailyReportTypeKey, ReportStatus };
 
 export interface DayReportStatus {
   key: DailyReportTypeKey;
@@ -164,44 +146,36 @@ export function MonthlyReportCalendar({ refreshKey = 0 }: MonthlyReportCalendarP
 
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(monthNumber).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const isFuture = dateStr > todayStr;
       const isToday = dateStr === todayStr;
 
-      if (!isFuture) {
+      // Extract imported report types for this date from the batchMap
+      const importedTypes = DAILY_REPORT_CONFIG
+        .map((c) => c.key)
+        .filter((key) => batchMap.has(`${dateStr}|${key}`));
+
+      // Authoritative evaluation via shared helper
+      const evaluation = evaluatePetpoojaReportStatus(dateStr, importedTypes, todayStr);
+
+      if (!evaluation.isFuture) {
         expectedDays += 1;
       }
 
-      let dayImportedCount = 0;
+      importedTotal += evaluation.importedCount;
 
       const reportStatuses: DayReportStatus[] = DAILY_REPORT_CONFIG.map((cfg) => {
         const batch = batchMap.get(`${dateStr}|${cfg.key}`);
-        const isImported = Boolean(batch);
-
-        if (isImported) {
-          dayImportedCount += 1;
-          importedTotal += 1;
-        }
-
-        let status: ReportStatus = 'pending';
-        if (isFuture) {
-          status = 'future';
-        } else if (isImported) {
-          status = 'imported';
-        } else {
-          status = 'pending';
-        }
+        const reportEval = evaluation.reports[cfg.key];
 
         return {
           key: cfg.key,
           labelKey: cfg.labelKey,
           fullTitleKey: cfg.fullTitleKey,
-          status,
+          status: reportEval.status,
           batch,
         };
       });
 
-      const isComplete = dayImportedCount === 4;
-      if (isComplete && !isFuture) {
+      if (evaluation.isComplete && !evaluation.isFuture) {
         completeTotal += 1;
       }
 
@@ -209,9 +183,9 @@ export function MonthlyReportCalendar({ refreshKey = 0 }: MonthlyReportCalendarP
         dayNumber: d,
         dateStr,
         isToday,
-        isFuture,
-        isComplete,
-        importedCount: dayImportedCount,
+        isFuture: evaluation.isFuture,
+        isComplete: evaluation.isComplete,
+        importedCount: evaluation.importedCount,
         reports: reportStatuses,
       });
     }

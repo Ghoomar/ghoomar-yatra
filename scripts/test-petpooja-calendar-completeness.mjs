@@ -279,6 +279,18 @@ test('Future month has 0 expected reports and 0 expected days', () => {
   assert.equal(matrix.completeDays, 0);
 });
 
+test('MonthlyReportCalendar component delegates day evaluation strictly to shared helper', () => {
+  const calContent = fs.readFileSync('src/components/sales/MonthlyReportCalendar.tsx', 'utf8');
+  assert.ok(
+    calContent.includes('evaluatePetpoojaReportStatus'),
+    'MonthlyReportCalendar must import evaluatePetpoojaReportStatus'
+  );
+  assert.ok(
+    calContent.includes('evaluatePetpoojaReportStatus(dateStr, importedTypes, todayStr)'),
+    'MonthlyReportCalendar must evaluate days using evaluatePetpoojaReportStatus'
+  );
+});
+
 // -----------------------------------------------------------------------------
 // 3. LIVE DATABASE AUDIT FOR SEPTEMBER 2026
 // -----------------------------------------------------------------------------
