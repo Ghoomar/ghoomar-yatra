@@ -49,14 +49,15 @@ interface VehicleLocation {
 const BIKE_LOCATION_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
 
 const DEFAULT_LOCATIONS: VehicleLocation[] = [
-  { id: 'd343fa14-72f7-49c1-bfbc-e8bffdd2ddd9', name: 'DL', count: 0, display_order: 1, is_quick_prefix: true },
-  { id: 'c59f0429-9ed0-47f4-8cbb-8542ca4ec5d7', name: 'UP16', count: 0, display_order: 2, is_quick_prefix: true },
-  { id: 'b1c52c0e-2d4c-4d3b-b3fd-0b62c1fa6c15', name: 'UP22', count: 0, display_order: 3, is_quick_prefix: true },
-  { id: 'eec2b68d-7725-42a9-a0b8-91321a53b803', name: 'UP23', count: 0, display_order: 4, is_quick_prefix: true },
-  { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'HR', count: 0, display_order: 5, is_quick_prefix: false },
-  { id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', name: 'UK', count: 0, display_order: 6, is_quick_prefix: false },
-  { id: 'ef6e8d6b-a68b-409f-a2e0-5794c6205833', name: 'Others', count: 0, display_order: 7, is_quick_prefix: false },
-  { id: BIKE_LOCATION_ID, name: 'Bike', count: 0, display_order: 8, is_quick_prefix: false },
+  { id: '4e0ba533-ce62-4285-847d-dd34c0d58495', name: 'UP21', count: 0, display_order: 1, is_quick_prefix: true },
+  { id: 'b1c52c0e-2d4c-4d3b-b3fd-0b62c1fa6c15', name: 'UP22', count: 0, display_order: 2, is_quick_prefix: true },
+  { id: 'eec2b68d-7725-42a9-a0b8-91321a53b803', name: 'UP23', count: 0, display_order: 3, is_quick_prefix: true },
+  { id: 'c59f0429-9ed0-47f4-8cbb-8542ca4ec5d7', name: 'UP16', count: 0, display_order: 4, is_quick_prefix: true },
+  { id: 'd343fa14-72f7-49c1-bfbc-e8bffdd2ddd9', name: 'DL', count: 0, display_order: 5, is_quick_prefix: false },
+  { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'HR', count: 0, display_order: 6, is_quick_prefix: false },
+  { id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', name: 'UK', count: 0, display_order: 7, is_quick_prefix: false },
+  { id: 'ef6e8d6b-a68b-409f-a2e0-5794c6205833', name: 'Others', count: 0, display_order: 8, is_quick_prefix: false },
+  { id: BIKE_LOCATION_ID, name: 'Bike', count: 0, display_order: 9, is_quick_prefix: false },
 ];
 
 export default function GateCounterPage() {

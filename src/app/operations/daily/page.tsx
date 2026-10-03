@@ -15,6 +15,7 @@ import {
   getPreviousPetpoojaReportDate,
   DAILY_REPORT_CONFIG,
 } from '@/lib/sales/petpooja-completeness';
+import { resolveCarOrigins, ResolvedCarOrigin } from '@/lib/gate/prefix-resolver';
 import {
   ClipboardList,
   RefreshCw,
@@ -46,17 +47,12 @@ interface EntryStatusState {
   handover: boolean;
 }
 
-interface CarOriginItem {
-  prefix: string;
-  count: number;
-}
-
 interface GateTrafficState {
   visitors: number;
   cars: number;
   bikes: number;
   totalVehicles: number;
-  origins: CarOriginItem[];
+  origins: ResolvedCarOrigin[];
 }
 
 interface PetpoojaReportingState {
@@ -170,6 +166,7 @@ export default function DailyOperationsPage() {
         petpoojaSummaryRes,
         stockMovementsRes,
         handoverNotesRes,
+        prefixMasterRes,
       ] = await Promise.all([
         // 1. Attendance check for businessDate
         supabase
@@ -232,6 +229,12 @@ export default function DailyOperationsPage() {
           .select('*')
           .eq('business_date', businessDate)
           .maybeSingle(),
+
+        // 10. Vehicle registration prefix master
+        supabase
+          .from('vehicle_registration_prefixes')
+          .select('*')
+          .eq('is_active', true),
       ]);
 
       // --- SECTION 1: ENTRY STATUS DERIVATION ---
@@ -262,33 +265,33 @@ export default function DailyOperationsPage() {
 
       let cars = 0;
       let bikes = 0;
-      const originCounts: Record<string, number> = {};
 
       (vehicleEventsRes.data || []).forEach((ev: any) => {
         const inc = Number(ev.increment) || 1;
+        const locObj = Array.isArray(ev.location) ? ev.location[0] : ev.location;
         const isBike =
-          (ev.location?.name || '').toLowerCase() === 'bike' ||
+          (locObj?.name || '').toLowerCase() === 'bike' ||
           (ev.vehicle_prefix || '').toLowerCase() === 'bike';
 
         if (isBike) {
           bikes += inc;
         } else {
           cars += inc;
-          const originName = ev.vehicle_prefix || ev.location?.name || 'Others';
-          originCounts[originName] = (originCounts[originName] || 0) + inc;
         }
       });
 
-      const sortedOrigins: CarOriginItem[] = Object.entries(originCounts)
-        .map(([prefix, count]) => ({ prefix, count }))
-        .sort((a, b) => b.count - a.count);
+      const resolvedOrigins = resolveCarOrigins(
+        vehicleEventsRes.data || [],
+        prefixMasterRes.data || [],
+        locale
+      );
 
       setGateTraffic({
         visitors,
         cars,
         bikes,
         totalVehicles: cars + bikes,
-        origins: sortedOrigins,
+        origins: resolvedOrigins,
       });
 
       // --- SECTION 3: PETPOOJA REPORTING (PREVIOUS-DAY LOGIC VIA SHARED HELPER) ---
@@ -653,14 +656,23 @@ export default function DailyOperationsPage() {
               </div>
             ) : (
               <div className="flex items-center gap-2 flex-wrap">
-                {gateTraffic.origins.map(({ prefix, count }) => (
+                {gateTraffic.origins.map(({ locationName, count, isUnmapped }) => (
                   <div
-                    key={prefix}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-50 border border-stone-200/90 shadow-2xs hover:border-amber-300 transition-colors"
+                    key={locationName}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border shadow-2xs transition-colors ${
+                      isUnmapped
+                        ? 'bg-amber-50/70 border-amber-300/80 hover:border-amber-400'
+                        : 'bg-stone-50 border-stone-200/90 hover:border-amber-300'
+                    }`}
                   >
                     <span className="font-bold text-stone-950 text-xs tracking-tight">
-                      {prefix}
+                      {locationName}
                     </span>
+                    {isUnmapped && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-amber-200/60 text-amber-800">
+                        {locale === 'hi' ? 'अवर्गीकृत' : 'Unmapped'}
+                      </span>
+                    )}
                     <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-md bg-white border border-stone-200 text-xs font-black text-amber-700 min-w-[20px]">
                       {count}
                     </span>

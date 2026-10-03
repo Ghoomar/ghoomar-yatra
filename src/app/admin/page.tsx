@@ -19,6 +19,7 @@ import { AuditLogsViewer } from '@/components/admin/AuditLogsViewer';
 import { EditCostRuleModal } from '@/components/admin/EditCostRuleModal';
 import { MenuMasterView } from '@/components/admin/menu/MenuMasterView';
 import { PaymentMethodModal } from '@/components/admin/PaymentMethodModal';
+import { VehiclePrefixMasterModal } from '@/components/admin/VehiclePrefixMasterModal';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
@@ -42,6 +43,7 @@ import {
   Trash2,
   ShieldAlert,
   Save,
+  Car,
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -60,6 +62,7 @@ export default function AdminSettingsPage() {
   const [targets, setTargets] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const [vehiclePrefixes, setVehiclePrefixes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [healthBufferInput, setHealthBufferInput] = useState<string>('10');
   const [savingBuffer, setSavingBuffer] = useState(false);
@@ -79,6 +82,7 @@ export default function AdminSettingsPage() {
   const [costRuleModalOpen, setCostRuleModalOpen] = useState(false);
   const [editingCostRule, setEditingCostRule] = useState<any | null>(null);
   const [paymentMethodModalOpen, setPaymentMethodModalOpen] = useState(false);
+  const [prefixModalOpen, setPrefixModalOpen] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -95,6 +99,7 @@ export default function AdminSettingsPage() {
         { data: rData },
         { data: icData },
         { data: pData },
+        { data: vpData },
       ] = await Promise.all([
         supabase.from('departments').select('*').order('name'),
         supabase.from('teams').select('*').order('name'),
@@ -107,6 +112,7 @@ export default function AdminSettingsPage() {
         supabase.from('roles').select('*').order('name'),
         supabase.from('inventory_categories').select('*').order('name'),
         supabase.from('profiles').select('*, role:roles(id, name, name_hi)').order('full_name'),
+        supabase.from('vehicle_registration_prefixes').select('*').order('prefix'),
       ]);
 
       setDepartments(dData || []);
@@ -122,6 +128,7 @@ export default function AdminSettingsPage() {
       setRoles(rData || []);
       setInventoryCategories(icData || []);
       setProfiles(pData || []);
+      setVehiclePrefixes(vpData || []);
     } catch (err: any) {
       console.error('Error loading admin masters:', err);
     } finally {
@@ -336,6 +343,17 @@ export default function AdminSettingsPage() {
               <Layers className="h-4 w-4 text-amber-600" />{' '}
               {locale === 'hi' ? 'डिपार्टमेंट ↔ श्रेणी मैपिंग' : 'Dept ↔ Category Mapping'}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPrefixModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <Car className="h-4 w-4 text-amber-600" />{' '}
+              {locale === 'hi'
+                ? `कार ऑरिजिन प्रीफिक्स (${vehiclePrefixes.length})`
+                : `Car Origins & Prefixes (${vehiclePrefixes.length})`}
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -543,6 +561,61 @@ export default function AdminSettingsPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Vehicle Registration Prefixes */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Car className="h-4 w-4 text-amber-600" />
+                    {locale === 'hi' ? 'कार ऑरिजिन व रजिस्ट्रेशन प्रीफिक्स' : 'Car Origins & Vehicle Prefixes'}
+                  </CardTitle>
+                  <CardDescription>
+                    {locale === 'hi'
+                      ? '4-अक्षर नंबर-प्लेट कोड और भौगोलिक स्थान मैपिंग'
+                      : '4-char vehicle prefix to geographic origin mapping and gate entry correction'}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPrefixModalOpen(true)}
+                  className="h-7 text-xs font-semibold"
+                >
+                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs">
+                {vehiclePrefixes.length === 0 ? (
+                  <div className="py-6 text-center text-stone-400">
+                    {locale === 'hi' ? 'कोई प्रीफिक्स दर्ज नहीं है।' : 'No prefixes registered.'}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
+                    {vehiclePrefixes.slice(0, 24).map((vp) => (
+                      <div
+                        key={vp.id}
+                        className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                          vp.is_active !== false
+                            ? 'bg-amber-50/60 border-amber-200/80 text-stone-800'
+                            : 'bg-stone-100/50 border-stone-200/50 text-stone-400 line-through'
+                        }`}
+                      >
+                        <span className="font-mono font-bold text-stone-900">{vp.prefix}</span>
+                        <span className="text-[11px] text-stone-600">
+                          {locale === 'hi' && vp.name_hi ? vp.name_hi : vp.location_name}
+                        </span>
+                      </div>
+                    ))}
+                    {vehiclePrefixes.length > 24 && (
+                      <span className="text-[11px] text-stone-400 self-center px-1 font-medium">
+                        +{vehiclePrefixes.length - 24} {locale === 'hi' ? 'अन्य...' : 'more...'}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* Master Modals */}
@@ -568,6 +641,12 @@ export default function AdminSettingsPage() {
           <PaymentMethodModal
             isOpen={paymentMethodModalOpen}
             onClose={() => setPaymentMethodModalOpen(false)}
+            onUpdated={loadData}
+          />
+
+          <VehiclePrefixMasterModal
+            isOpen={prefixModalOpen}
+            onClose={() => setPrefixModalOpen(false)}
             onUpdated={loadData}
           />
         </div>

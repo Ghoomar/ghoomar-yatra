@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { buildPrefixLookupMap, resolveSinglePrefix } from '@/lib/gate/prefix-resolver';
 
 export interface GateHourlyPoint {
   hour: number;
@@ -85,6 +86,7 @@ export async function GET(request: NextRequest) {
     const startDateParam = searchParams.get('start_date');
     const endDateParam = searchParams.get('end_date');
     const dateParam = searchParams.get('date');
+    const localeParam = searchParams.get('locale') || 'en';
 
     let startDate: string;
     let endDate: string;
@@ -136,7 +138,15 @@ export async function GET(request: NextRequest) {
       return q.range(from, to);
     });
 
-    // 3. Initialize 24 hourly buckets (0..23)
+    // 3. Query registration prefix master for location resolution
+    const { data: prefixMasterData } = await supabase
+      .from('vehicle_registration_prefixes')
+      .select('*')
+      .eq('is_active', true);
+
+    const prefixMap = buildPrefixLookupMap(prefixMasterData || []);
+
+    // 4. Initialize 24 hourly buckets (0..23)
     const hourlyMap = new Map<number, GateHourlyPoint>();
     for (let h = 0; h < 24; h++) {
       hourlyMap.set(h, {
@@ -152,7 +162,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 4. Populate Visitor Hourly Buckets using ORIGINAL tap timestamp in IST
+    // 5. Populate Visitor Hourly Buckets using ORIGINAL tap timestamp in IST
     let totalVisitors = 0;
     (vEvents || []).forEach((ev: any) => {
       if (!ev.timestamp) return;
@@ -172,7 +182,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 5. Populate Vehicle Hourly Buckets using ORIGINAL tap timestamp in IST
+    // 6. Populate Vehicle Hourly Buckets using ORIGINAL tap timestamp in IST
     let totalCars = 0;
     let totalBikes = 0;
     const prefixCountMap: Record<string, number> = {};
@@ -193,12 +203,13 @@ export async function GET(request: NextRequest) {
           point.bikes += inc;
           totalBikes += inc;
         } else {
-          // Priority: actual vehicle_prefix if recorded, fallback to location name, fallback to 'Others'
-          const originName = ev.vehicle_prefix || ev.location?.name || 'Others';
+          // Resolve canonical origin location
+          const rawKey = ev.vehicle_prefix || ev.location?.name || 'Others';
+          const { locationName } = resolveSinglePrefix(rawKey, prefixMap, localeParam);
           point.cars += inc;
           totalCars += inc;
-          point.prefixes[originName] = (point.prefixes[originName] || 0) + inc;
-          prefixCountMap[originName] = (prefixCountMap[originName] || 0) + inc;
+          point.prefixes[locationName] = (point.prefixes[locationName] || 0) + inc;
+          prefixCountMap[locationName] = (prefixCountMap[locationName] || 0) + inc;
         }
         point.total_vehicles = point.cars + point.bikes;
       }
@@ -231,16 +242,13 @@ export async function GET(request: NextRequest) {
     const totalVehicles = totalCars + totalBikes;
     const nightTotalVehicles = nightCars + nightBikes;
 
-    // Format prefixes summary: preserve standard prefixes and dynamically include any newly entered prefixes
-    const standardPrefixes = ['DL', 'UP16', 'UP22', 'UP23', 'HR', 'UK', 'Others'];
-    const allPrefixKeys = Array.from(new Set([...standardPrefixes, ...Object.keys(prefixCountMap)]));
-    const prefixSummary = allPrefixKeys
-      .map((pref) => {
-        const count = prefixCountMap[pref] || 0;
+    // Format origins summary sorted descending by count
+    const prefixSummary = Object.entries(prefixCountMap)
+      .map(([name, count]) => {
         const percent = totalCars > 0 ? Math.round((count / totalCars) * 1000) / 10 : 0;
-        return { name: pref, count, percent };
+        return { name, count, percent };
       })
-      .filter((p) => p.count > 0 || standardPrefixes.includes(p.name));
+      .sort((a, b) => b.count - a.count);
 
     const startFmt = `${String(nightStart).padStart(2, '0')}:00`;
     const endFmt = `${String(nightEnd).padStart(2, '0')}:00`;

@@ -25,7 +25,7 @@
     "gate": {
       "title": "गेट ट्रैफिक",
       "subtitle": "{date} को आने वाले लोग और वाहन",
-      "carOrigins": "कार का राज्य",
+      "carOrigins": "Car Origins",
       "visitors": "आने वाले लोग",
       "cars": "कारें",
       "bikes": "बाइक",

@@ -406,3 +406,17 @@ export interface MeterReadingLedger {
   };
 }
 
+export interface VehicleRegistrationPrefix {
+  id: string;
+  prefix: string;
+  location_name: string;
+  name_hi?: string | null;
+  state: string;
+  district?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
