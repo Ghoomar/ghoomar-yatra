@@ -38,22 +38,21 @@ function LoginForm() {
     setError(null);
 
     try {
-      // 1. Resolve email if user entered 10-digit phone number
+      // 1. Resolve email if user entered phone number
       let emailToAuth = identifier.trim();
-      if (!emailToAuth.includes('@') && /^\d{10}$/.test(emailToAuth)) {
-        if (emailToAuth === '9760372337') {
-          emailToAuth = 'jayveer9760372337@gmail.com';
-        } else {
-          // Look up email in profiles table by phone
-          const { data: profByPhone } = await supabase
-            .from('profiles')
-            .select('email')
-            .eq('phone', emailToAuth)
-            .maybeSingle();
-          if (profByPhone?.email) {
-            emailToAuth = profByPhone.email;
-          }
+      if (!emailToAuth.includes('@')) {
+        const resolveRes = await fetch('/api/auth/resolve-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: emailToAuth }),
+        });
+
+        const resolveData = await resolveRes.json().catch(() => null);
+        if (!resolveRes.ok || !resolveData?.email) {
+          throw new Error(resolveData?.error || 'No account registered with this phone number.');
         }
+
+        emailToAuth = resolveData.email;
       }
 
       // 2. Authenticate against Supabase Auth
