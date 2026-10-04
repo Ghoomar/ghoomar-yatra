@@ -30,6 +30,9 @@ interface VehiclePrefixMasterModalProps {
   onUpdated?: () => void;
 }
 
+const PAGE_SIZE = 50;
+const BIKE_LOCATION_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
+
 interface GateVehicleEventRow {
   id: string;
   business_date: string;
@@ -74,13 +77,41 @@ export function VehiclePrefixMasterModal({
   // Gate Events Corrections state
   const [events, setEvents] = useState<GateVehicleEventRow[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'unmapped'>('all');
   const [filterDate, setFilterDate] = useState<string>('');
   const [filterQuery, setFilterQuery] = useState('');
+  const [page, setPage] = useState<number>(1);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [unmappedTotalCount, setUnmappedTotalCount] = useState<number | null>(null);
   const [eventToCorrect, setEventToCorrect] = useState<GateVehicleEventRow | null>(null);
   const [newPrefixInput, setNewPrefixInput] = useState('');
   const [savingCorrection, setSavingCorrection] = useState(false);
   const [correctionSuccessMsg, setCorrectionSuccessMsg] = useState<string | null>(null);
   const [correctionError, setCorrectionError] = useState<string | null>(null);
+
+  // Count unmapped cars across all dates
+  const countUnmapped = async (prefixList?: VehicleRegistrationPrefix[]) => {
+    try {
+      const list = prefixList || prefixes;
+      const activeList = list
+        .filter((p) => p.is_active !== false)
+        .map((p) => p.prefix.trim().toUpperCase());
+      if (activeList.length === 0) return;
+
+      const { count, error } = await supabase
+        .from('vehicle_counter_events')
+        .select('*', { count: 'exact', head: true })
+        .not('vehicle_prefix', 'is', null)
+        .neq('location_id', BIKE_LOCATION_ID)
+        .not('vehicle_prefix', 'in', `(${activeList.join(',')})`);
+
+      if (!error && count !== null) {
+        setUnmappedTotalCount(count);
+      }
+    } catch (err) {
+      console.error('Failed to count unmapped cars:', err);
+    }
+  };
 
   // Load Prefixes
   const loadPrefixes = async () => {
@@ -93,7 +124,9 @@ export function VehiclePrefixMasterModal({
         .order('prefix', { ascending: true });
 
       if (error) throw error;
-      setPrefixes(data || []);
+      const loaded = data || [];
+      setPrefixes(loaded);
+      countUnmapped(loaded);
     } catch (err: any) {
       setPrefixError(err.message || 'Failed to load registration prefixes.');
     } finally {
@@ -107,27 +140,84 @@ export function VehiclePrefixMasterModal({
   }, [prefixes]);
 
   // Load Gate Events for Correction
-  const loadEvents = async () => {
+  const loadEvents = async (
+    targetPage: number = page,
+    mode: 'all' | 'unmapped' = filterMode,
+    searchQuery: string = filterQuery,
+    dateFilter: string = filterDate,
+    overridePrefixes?: VehicleRegistrationPrefix[]
+  ) => {
     setLoadingEvents(true);
     setCorrectionError(null);
     try {
+      let currentPrefixes = overridePrefixes || prefixes;
+      if (currentPrefixes.length === 0) {
+        const { data: pData } = await supabase
+          .from('vehicle_registration_prefixes')
+          .select('*')
+          .order('prefix', { ascending: true });
+        if (pData) {
+          currentPrefixes = pData;
+          setPrefixes(pData);
+        }
+      }
+
+      const activeMappedPrefixes = currentPrefixes
+        .filter((p) => p.is_active !== false)
+        .map((p) => p.prefix.trim().toUpperCase());
+
       let query = supabase
         .from('vehicle_counter_events')
-        .select('id, business_date, timestamp, increment, vehicle_prefix, location:vehicle_origin_locations(id, name)')
-        .order('timestamp', { ascending: false })
-        .limit(50);
+        .select(
+          'id, business_date, timestamp, increment, vehicle_prefix, location:vehicle_origin_locations(id, name)',
+          { count: 'exact' }
+        );
 
-      if (filterDate) {
-        query = query.eq('business_date', filterDate);
+      if (mode === 'unmapped') {
+        // Query unmapped CAR gate events across ALL dates:
+        // - Recorded registration prefix is present (not null)
+        // - Non-Bike vehicle event (exclude bike by location_id)
+        // - Prefix has no geographic mapping in active prefix master
+        query = query
+          .not('vehicle_prefix', 'is', null)
+          .neq('location_id', BIKE_LOCATION_ID);
+
+        if (activeMappedPrefixes.length > 0) {
+          query = query.not('vehicle_prefix', 'in', `(${activeMappedPrefixes.join(',')})`);
+        }
+
+        // Search prefix box remains usable
+        if (searchQuery.trim()) {
+          query = query.ilike('vehicle_prefix', `%${searchQuery.trim()}%`);
+        }
+        // Note: date picker is neutralized/ignored for unmapped cars across all dates!
+      } else {
+        // All entries mode: apply date filter and prefix search
+        if (dateFilter) {
+          query = query.eq('business_date', dateFilter);
+        }
+
+        if (searchQuery.trim()) {
+          query = query.ilike('vehicle_prefix', `%${searchQuery.trim()}%`);
+        }
       }
 
-      if (filterQuery.trim()) {
-        query = query.ilike('vehicle_prefix', `%${filterQuery.trim()}%`);
-      }
+      query = query.order('timestamp', { ascending: false });
 
-      const { data, error } = await query;
+      // Pagination in batches of 50
+      const from = (targetPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      query = query.range(from, to);
+
+      const { data, count, error } = await query;
       if (error) throw error;
-      setEvents((data as any) || []);
+
+      const eventList = (data as any) || [];
+      setEvents(eventList);
+      setTotalCount(count ?? eventList.length);
+      if (mode === 'unmapped' && !searchQuery.trim()) {
+        setUnmappedTotalCount(count ?? eventList.length);
+      }
     } catch (err: any) {
       setCorrectionError(err.message || 'Failed to load gate events.');
     } finally {
@@ -138,7 +228,7 @@ export function VehiclePrefixMasterModal({
   useEffect(() => {
     if (isOpen) {
       loadPrefixes();
-      loadEvents();
+      loadEvents(1, 'all', '', '');
       resetPrefixForm();
     }
   }, [isOpen]);
@@ -307,7 +397,8 @@ export function VehiclePrefixMasterModal({
 
       setEventToCorrect(null);
       setNewPrefixInput('');
-      loadEvents();
+      loadEvents(page, filterMode);
+      countUnmapped();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       setCorrectionError(err.message || 'Failed to correct gate event.');
@@ -329,6 +420,32 @@ export function VehiclePrefixMasterModal({
         p.state.toLowerCase().includes(q)
     );
   }, [prefixes, prefixSearch]);
+
+  const handleFilterModeChange = (newMode: 'all' | 'unmapped') => {
+    setFilterMode(newMode);
+    setPage(1);
+    loadEvents(1, newMode, filterQuery, filterDate);
+  };
+
+  const handleDateChange = (newDate: string) => {
+    setFilterDate(newDate);
+    setPage(1);
+    loadEvents(1, filterMode, filterQuery, newDate);
+  };
+
+  const handleClearDate = () => {
+    setFilterDate('');
+    setPage(1);
+    loadEvents(1, filterMode, filterQuery, '');
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setPage(1);
+      loadEvents(1, filterMode, filterQuery, filterDate);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -814,45 +931,110 @@ export function VehiclePrefixMasterModal({
               )}
 
               {/* Event Search Filters */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex items-center gap-1.5 text-xs">
-                  <Calendar className="h-3.5 w-3.5 text-stone-400" />
-                  <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="px-2.5 py-1.5 rounded-xl border border-stone-200 text-xs bg-white focus:ring-1 focus:ring-amber-500"
-                  />
-                  {filterDate && (
-                    <button
-                      onClick={() => setFilterDate('')}
-                      className="text-[11px] text-stone-400 hover:text-stone-600"
-                    >
-                      Clear
-                    </button>
-                  )}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* 1. Date Picker or All Dates indicator */}
+                {filterMode === 'unmapped' ? (
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-stone-200 bg-stone-100 text-stone-600 text-xs select-none"
+                    title={
+                      locale === 'hi'
+                        ? 'अनमैप्ड कारों के लिए सभी तारीखें खोजी जा रही हैं'
+                        : 'Searching all dates for unmapped cars'
+                    }
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-stone-400" />
+                    <span className="font-medium">
+                      {locale === 'hi' ? 'सभी तारीखें' : 'All dates'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Calendar className="h-3.5 w-3.5 text-stone-400" />
+                    <input
+                      type="date"
+                      value={filterDate}
+                      onChange={(e) => handleDateChange(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-xl border border-stone-200 text-xs bg-white focus:ring-1 focus:ring-amber-500"
+                    />
+                    {filterDate && (
+                      <button
+                        onClick={handleClearDate}
+                        className="text-[11px] text-stone-400 hover:text-stone-600 cursor-pointer"
+                      >
+                        {locale === 'hi' ? 'हटाएं' : 'Clear'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Show Filter: All entries / Unmapped cars */}
+                <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleFilterModeChange('all')}
+                    className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                      filterMode === 'all'
+                        ? 'bg-white text-stone-900 shadow-xs'
+                        : 'text-stone-500 hover:text-stone-800'
+                    }`}
+                  >
+                    {locale === 'hi' ? 'सभी एंट्रीज' : 'All entries'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleFilterModeChange('unmapped')}
+                    className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                      filterMode === 'unmapped'
+                        ? 'bg-amber-600 text-white shadow-xs font-semibold'
+                        : 'text-stone-600 hover:text-stone-900'
+                    }`}
+                  >
+                    <span>{locale === 'hi' ? 'अनमैप्ड कारें' : 'Unmapped cars'}</span>
+                    {unmappedTotalCount !== null && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          filterMode === 'unmapped'
+                            ? 'bg-amber-700 text-amber-100'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {unmappedTotalCount}
+                      </span>
+                    )}
+                  </button>
                 </div>
 
-                <div className="relative flex-1 max-w-sm">
+                {/* 3. Search prefix */}
+                <div className="relative flex-1 max-w-xs min-w-[160px]">
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-stone-400" />
                   <input
                     type="text"
                     value={filterQuery}
                     onChange={(e) => setFilterQuery(e.target.value)}
-                    placeholder="Search prefix (e.g. IP21, DL80)..."
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-stone-200 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder={
+                      filterMode === 'unmapped'
+                        ? locale === 'hi'
+                          ? 'अनमैप्ड प्रीफिक्स खोजें...'
+                          : 'Search unmapped prefix...'
+                        : locale === 'hi'
+                        ? 'प्रीफिक्स खोजें (उदा. IP21)...'
+                        : 'Search prefix (e.g. IP21)...'
+                    }
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-stone-200 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-hidden bg-white"
                   />
                 </div>
 
+                {/* 4. Refresh Button */}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={loadEvents}
+                  onClick={() => loadEvents(page, filterMode, filterQuery, filterDate)}
                   disabled={loadingEvents}
-                  className="gap-1.5 text-xs h-8"
+                  className="gap-1.5 text-xs h-8 ml-auto sm:ml-0"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${loadingEvents ? 'animate-spin' : ''}`} />
-                  Refresh
+                  {locale === 'hi' ? 'ताज़ा करें' : 'Refresh'}
                 </Button>
               </div>
 
@@ -874,20 +1056,34 @@ export function VehiclePrefixMasterModal({
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-stone-400">
                           <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-1.5 text-amber-600" />
-                          Searching gate vehicle events...
+                          {locale === 'hi'
+                            ? 'गेट वाहन इवेंट्स लोड हो रहे हैं...'
+                            : 'Searching gate vehicle events...'}
                         </td>
                       </tr>
                     ) : events.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-stone-400">
-                          No vehicle events found matching criteria.
+                          {filterMode === 'unmapped'
+                            ? locale === 'hi'
+                              ? 'कोई अनमैप्ड कार नहीं मिली।'
+                              : 'No unmapped cars found matching criteria.'
+                            : locale === 'hi'
+                            ? 'कोई वाहन इवेंट नहीं मिला।'
+                            : 'No vehicle events found matching criteria.'}
                         </td>
                       </tr>
                     ) : (
                       events.map((ev) => {
+                        const isBike =
+                          ev.location?.name?.toLowerCase() === 'bike' ||
+                          (ev.vehicle_prefix || '').toLowerCase() === 'bike' ||
+                          ev.location?.id === BIKE_LOCATION_ID;
+
                         const rawKey = ev.vehicle_prefix || ev.location?.name || 'Others';
                         const resolved = resolveSinglePrefix(rawKey, prefixMap, locale);
                         const isMistypedLikely =
+                          !isBike &&
                           ev.vehicle_prefix &&
                           (resolved.isUnmapped ||
                             ev.vehicle_prefix.startsWith('IP') ||
@@ -917,7 +1113,8 @@ export function VehiclePrefixMasterModal({
                               +{ev.increment}
                             </td>
                             <td className="py-2.5 px-3 text-stone-600">
-                              {ev.location?.name || 'Car'}
+                              {ev.location?.name ||
+                                (isBike ? (locale === 'hi' ? 'बाइक' : 'Bike') : 'Car')}
                             </td>
                             <td className="py-2.5 px-3 font-mono font-bold text-stone-900">
                               {ev.vehicle_prefix ? (
@@ -935,20 +1132,22 @@ export function VehiclePrefixMasterModal({
                               )}
                             </td>
                             <td className="py-2.5 px-3">
-                              <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
-                                  resolved.isUnmapped
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                }`}
-                              >
-                                {resolved.locationName}
-                                {resolved.isUnmapped && (
-                                  <span className="text-[9px] uppercase tracking-wider font-bold text-amber-900">
-                                    (Unmapped)
+                              {isBike ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-50 text-sky-800 border border-sky-200">
+                                  {locale === 'hi' ? 'बाइक' : 'BIKE'}
+                                </span>
+                              ) : resolved.isUnmapped ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <span>{resolved.locationName}</span>
+                                  <span className="text-[9px] uppercase tracking-wider font-extrabold text-amber-800 bg-amber-200/90 px-1 py-0.2 rounded">
+                                    {locale === 'hi' ? 'अनमैप्ड' : 'UNMAPPED'}
                                   </span>
-                                )}
-                              </span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  {resolved.locationName}
+                                </span>
+                              )}
                             </td>
                             <td className="py-2.5 px-3 text-right">
                               <Button
@@ -961,7 +1160,7 @@ export function VehiclePrefixMasterModal({
                                 className="h-6 text-[11px] px-2 text-stone-700 hover:text-amber-700"
                               >
                                 <Edit2 className="h-3 w-3 mr-1" />
-                                Correct
+                                {locale === 'hi' ? 'सुधारें' : 'Correct'}
                               </Button>
                             </td>
                           </tr>
@@ -970,6 +1169,72 @@ export function VehiclePrefixMasterModal({
                     )}
                   </tbody>
                 </table>
+
+                {/* Pagination Bar */}
+                {totalCount !== null && totalCount > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between px-3 py-2 bg-stone-50 border-t border-stone-200 text-xs text-stone-600 gap-2">
+                    <div>
+                      {filterMode === 'unmapped' ? (
+                        <span>
+                          {locale === 'hi'
+                            ? `कुल ${totalCount} अनमैप्ड कारें (दिखा रहे हैं ${Math.min(
+                                (page - 1) * PAGE_SIZE + 1,
+                                totalCount
+                              )}–${Math.min(page * PAGE_SIZE, totalCount)})`
+                            : `Showing ${Math.min(
+                                (page - 1) * PAGE_SIZE + 1,
+                                totalCount
+                              )}–${Math.min(page * PAGE_SIZE, totalCount)} of ${totalCount} unmapped cars`}
+                        </span>
+                      ) : (
+                        <span>
+                          {locale === 'hi'
+                            ? `कुल ${totalCount} इवेंट्स (दिखा रहे हैं ${Math.min(
+                                (page - 1) * PAGE_SIZE + 1,
+                                totalCount
+                              )}–${Math.min(page * PAGE_SIZE, totalCount)})`
+                            : `Showing ${Math.min(
+                                (page - 1) * PAGE_SIZE + 1,
+                                totalCount
+                              )}–${Math.min(page * PAGE_SIZE, totalCount)} of ${totalCount} events`}
+                        </span>
+                      )}
+                    </div>
+                    {totalCount > PAGE_SIZE && (
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newPage = Math.max(1, page - 1);
+                            setPage(newPage);
+                            loadEvents(newPage, filterMode, filterQuery, filterDate);
+                          }}
+                          disabled={page <= 1 || loadingEvents}
+                          className="h-7 text-xs px-2.5"
+                        >
+                          {locale === 'hi' ? 'पिछला' : 'Previous'}
+                        </Button>
+                        <span className="text-[11px] font-semibold text-stone-700 px-1">
+                          {page} / {Math.ceil(totalCount / PAGE_SIZE)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const newPage = page + 1;
+                            setPage(newPage);
+                            loadEvents(newPage, filterMode, filterQuery, filterDate);
+                          }}
+                          disabled={page >= Math.ceil(totalCount / PAGE_SIZE) || loadingEvents}
+                          className="h-7 text-xs px-2.5"
+                        >
+                          {locale === 'hi' ? 'अगला' : 'Next'}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

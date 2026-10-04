@@ -64,6 +64,14 @@ export function resolveSinglePrefix(
     };
   }
 
+  // Handle BIKE: Bikes have no registration prefix and are never unmapped data
+  if (clean === 'BIKE') {
+    return {
+      locationName: locale === 'hi' ? 'बाइक' : 'Bike',
+      isUnmapped: false,
+    };
+  }
+
   // Lookup in registration prefix master
   const mapping = prefixMap.get(clean);
   if (mapping) {
