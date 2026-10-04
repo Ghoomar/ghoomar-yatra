@@ -205,3 +205,68 @@ export function resolveCarOrigins(
       return a.locationName.localeCompare(b.locationName);
     });
 }
+
+export interface PendingUnmappedPrefix {
+  prefix: string;
+  count: number;
+}
+
+export const BIKE_LOCATION_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f';
+
+/**
+ * Extracts and aggregates unique unmapped vehicle prefixes from gate events.
+ *
+ * Rules:
+ * - Excludes Bike events (both location_id = BIKE_LOCATION_ID and literal 'BIKE')
+ * - Excludes null/empty prefixes
+ * - Excludes literal 'OTHERS'
+ * - Excludes prefixes that resolve to an active mapping in vehicle_registration_prefixes
+ * - Aggregates occurrence counts per prefix
+ * - Sorted by count descending, then prefix ascending (alphabetical)
+ */
+export function extractPendingUnmappedPrefixes(
+  events: Array<{
+    vehicle_prefix?: string | null;
+    location_id?: string | null;
+    location?: { id?: string; name?: string } | { id?: string; name?: string }[] | null;
+  }>,
+  prefixes: VehicleRegistrationPrefix[]
+): PendingUnmappedPrefix[] {
+  const activeSet = new Set<string>();
+  for (const p of prefixes) {
+    if (p.is_active !== false) {
+      activeSet.add(p.prefix.trim().toUpperCase());
+    }
+  }
+
+  const countMap = new Map<string, number>();
+
+  for (const ev of events) {
+    // Exclude Bikes by location_id
+    if (ev.location_id === BIKE_LOCATION_ID) continue;
+    if (ev.location) {
+      if (Array.isArray(ev.location)) {
+        if (ev.location.some((loc) => loc.id === BIKE_LOCATION_ID || loc.name?.toUpperCase() === 'BIKE')) {
+          continue;
+        }
+      } else if (ev.location.id === BIKE_LOCATION_ID || ev.location.name?.toUpperCase() === 'BIKE') {
+        continue;
+      }
+    }
+
+    const raw = (ev.vehicle_prefix || '').trim().toUpperCase();
+    if (!raw || raw === 'BIKE' || raw === 'OTHERS') continue;
+
+    // Exclude if already mapped in active registration prefixes
+    if (!activeSet.has(raw)) {
+      countMap.set(raw, (countMap.get(raw) || 0) + 1);
+    }
+  }
+
+  return Array.from(countMap.entries())
+    .map(([prefix, count]) => ({ prefix, count }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.prefix.localeCompare(b.prefix);
+    });
+}

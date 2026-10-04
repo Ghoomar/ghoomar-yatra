@@ -1,11 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { VehicleRegistrationPrefix } from '@/lib/types/database';
-import { buildPrefixLookupMap, resolveSinglePrefix } from '@/lib/gate/prefix-resolver';
+import {
+  buildPrefixLookupMap,
+  resolveSinglePrefix,
+  extractPendingUnmappedPrefixes,
+  PendingUnmappedPrefix,
+} from '@/lib/gate/prefix-resolver';
+import { lookupRtoPrefix } from '@/lib/gate/rto-directory';
+import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
 import {
@@ -22,6 +29,11 @@ import {
   Calendar,
   History,
   ArrowRight,
+  ChevronDown,
+  Sparkles,
+  RotateCcw,
+  MapPin,
+  Loader2,
 } from 'lucide-react';
 
 interface VehiclePrefixMasterModalProps {
@@ -74,6 +86,29 @@ export function VehiclePrefixMasterModal({
   const [savingPrefix, setSavingPrefix] = useState(false);
   const [prefixError, setPrefixError] = useState<string | null>(null);
 
+  // Smart Prefix & Suggestion State
+  const [pendingPrefixes, setPendingPrefixes] = useState<PendingUnmappedPrefix[]>([]);
+  const [isPrefixDropdownOpen, setIsPrefixDropdownOpen] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestionNotice, setSuggestionNotice] = useState<string | null>(null);
+  const [isCustomHindi, setIsCustomHindi] = useState(false);
+  const prefixComboboxRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        prefixComboboxRef.current &&
+        !prefixComboboxRef.current.contains(e.target as Node)
+      ) {
+        setIsPrefixDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Gate Events Corrections state
   const [events, setEvents] = useState<GateVehicleEventRow[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -113,6 +148,25 @@ export function VehiclePrefixMasterModal({
     }
   };
 
+  // Load Pending Unmapped Prefixes from Gate Events
+  const loadPendingPrefixes = async (prefixList?: VehicleRegistrationPrefix[]) => {
+    try {
+      const list = prefixList || prefixes;
+      const { data: eventData, error } = await supabase
+        .from('vehicle_counter_events')
+        .select('vehicle_prefix, location_id')
+        .not('vehicle_prefix', 'is', null)
+        .neq('location_id', BIKE_LOCATION_ID);
+
+      if (!error && eventData) {
+        const pending = extractPendingUnmappedPrefixes(eventData, list);
+        setPendingPrefixes(pending);
+      }
+    } catch (err) {
+      console.error('Failed to load pending unmapped prefixes:', err);
+    }
+  };
+
   // Load Prefixes
   const loadPrefixes = async () => {
     setLoadingPrefixes(true);
@@ -127,6 +181,7 @@ export function VehiclePrefixMasterModal({
       const loaded = data || [];
       setPrefixes(loaded);
       countUnmapped(loaded);
+      loadPendingPrefixes(loaded);
     } catch (err: any) {
       setPrefixError(err.message || 'Failed to load registration prefixes.');
     } finally {
@@ -246,6 +301,11 @@ export function VehiclePrefixMasterModal({
     setFormLongitude('');
     setFormIsActive(true);
     setPrefixError(null);
+    setSuggestionNotice(null);
+    setIsPrefixDropdownOpen(false);
+    setIsCustomHindi(false);
+    setIsSuggesting(false);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
   };
 
   const handleStartEdit = (p: VehicleRegistrationPrefix) => {
@@ -260,6 +320,98 @@ export function VehiclePrefixMasterModal({
     setFormLongitude(p.longitude != null ? String(p.longitude) : '');
     setFormIsActive(p.is_active !== false);
     setPrefixError(null);
+    setSuggestionNotice(null);
+    setIsPrefixDropdownOpen(false);
+    setIsCustomHindi(Boolean(p.name_hi));
+    setIsSuggesting(false);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  };
+
+  // Suggestion Fetcher for selected / entered prefix
+  const fetchSuggestion = async (prefixCode: string) => {
+    const clean = prefixCode.trim().toUpperCase();
+    if (!clean || clean.length < 2) return;
+
+    setIsSuggesting(true);
+    setSuggestionNotice(null);
+
+    try {
+      // 1. Fast local client-side match from RTO directory + Hindi dictionary
+      const localMatch = lookupRtoPrefix(clean);
+      if (localMatch && localMatch.locationName) {
+        setFormLocationName(localMatch.locationName);
+        setFormDistrict(localMatch.district || localMatch.locationName);
+        setFormState(localMatch.state);
+        const hindiResult = suggestHindiName(localMatch.locationName, 'location');
+        setFormNameHi(localMatch.nameHi || hindiResult.suggestion || '');
+        setIsCustomHindi(false);
+        setSuggestionNotice(
+          locale === 'hi'
+            ? `सुझाव: ${localMatch.locationName}, ${localMatch.state}`
+            : `Suggested: ${localMatch.locationName}, ${localMatch.state}`
+        );
+      } else if (localMatch && localMatch.state) {
+        setFormState(localMatch.state);
+        setSuggestionNotice(
+          locale === 'hi'
+            ? `राज्य सुझाव: ${localMatch.state} (स्थान नाम स्वयं भरें)`
+            : `State suggested: ${localMatch.state} (enter location manually)`
+        );
+      }
+
+      // 2. Fetch server-side API for official geocoding
+      const res = await fetch(
+        `/api/admin/operations/gate/suggest-prefix?prefix=${encodeURIComponent(clean)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.locationName) {
+          setFormLocationName(data.locationName);
+          if (!isCustomHindi) {
+            setFormNameHi(data.nameHi || '');
+          }
+          setFormDistrict(data.district || '');
+          setFormState(data.state || '');
+          if (data.latitude != null) setFormLatitude(String(data.latitude));
+          if (data.longitude != null) setFormLongitude(String(data.longitude));
+          setSuggestionNotice(
+            locale === 'hi'
+              ? `सुझाव प्राप्त: ${data.locationName}, ${data.state}${data.latitude ? ' • निर्देशांक सहित' : ''}`
+              : `Suggested: ${data.locationName}, ${data.state}${data.latitude ? ' • with coordinates' : ''}`
+          );
+        } else if (data.state) {
+          setFormState(data.state);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching prefix suggestion:', err);
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
+
+  const handleLocationNameChange = (val: string) => {
+    setFormLocationName(val);
+    if (!isCustomHindi) {
+      if (!val.trim()) {
+        setFormNameHi('');
+      } else {
+        const res = suggestHindiName(val, 'location');
+        setFormNameHi(res.suggestion);
+      }
+    }
+  };
+
+  const handleForceSuggestHindi = () => {
+    if (!formLocationName.trim()) return;
+    const res = suggestHindiName(formLocationName, 'location');
+    setFormNameHi(res.suggestion);
+    setIsCustomHindi(false);
+  };
+
+  const handleHindiNameChange = (val: string) => {
+    setFormNameHi(val);
+    setIsCustomHindi(true);
   };
 
   const handleToggleActive = async (p: VehicleRegistrationPrefix) => {
@@ -421,6 +573,29 @@ export function VehiclePrefixMasterModal({
     );
   }, [prefixes, prefixSearch]);
 
+  // Filtered pending unmapped prefixes
+  const filteredPending = useMemo(() => {
+    if (!formPrefix.trim()) return pendingPrefixes;
+    const q = formPrefix.trim().toUpperCase();
+    return pendingPrefixes.filter((p) => {
+      const rto = lookupRtoPrefix(p.prefix);
+      return (
+        p.prefix.includes(q) ||
+        (rto?.locationName && rto.locationName.toUpperCase().includes(q)) ||
+        (rto?.state && rto.state.toUpperCase().includes(q))
+      );
+    });
+  }, [pendingPrefixes, formPrefix]);
+
+  // Check if current formPrefix is already mapped in Master
+  const mappedExisting = useMemo(() => {
+    if (editingPrefix || !formPrefix.trim()) return null;
+    return (
+      prefixes.find((p) => p.prefix.toUpperCase() === formPrefix.trim().toUpperCase()) ||
+      null
+    );
+  }, [prefixes, formPrefix, editingPrefix]);
+
   const handleFilterModeChange = (newMode: 'all' | 'unmapped') => {
     setFilterMode(newMode);
     setPage(1);
@@ -550,64 +725,274 @@ export function VehiclePrefixMasterModal({
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div>
-                      <label className="block font-semibold text-stone-700 mb-1">
-                        Prefix Code * (e.g. UP21, DL08)
+                  {/* Row 1: Prefix Code Combobox & Pending Dropdown */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-stone-700">
+                        {locale === 'hi'
+                          ? 'प्रीफिक्स कोड * (उदा. UP24, DL14)'
+                          : 'Prefix Code * (e.g. UP24, DL14)'}
                       </label>
-                      <input
-                        type="text"
-                        value={formPrefix}
-                        onChange={(e) => setFormPrefix(e.target.value.toUpperCase())}
-                        maxLength={6}
-                        placeholder="UP21"
-                        required
-                        className="w-full px-3 py-1.5 rounded-lg border border-stone-300 font-mono uppercase focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
-                      />
+                      {pendingPrefixes.length > 0 && !editingPrefix && (
+                        <span className="text-[11px] font-medium text-amber-700 flex items-center gap-1">
+                          <Car className="h-3 w-3" />
+                          {locale === 'hi'
+                            ? `गेट से ${pendingPrefixes.length} अनमैप्ड प्रीफिक्स लंबित`
+                            : `${pendingPrefixes.length} unmapped prefixes pending from Gate`}
+                        </span>
+                      )}
                     </div>
 
+                    <div className="relative" ref={prefixComboboxRef}>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={formPrefix}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase().slice(0, 6);
+                              setFormPrefix(val);
+                              setIsPrefixDropdownOpen(true);
+                              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                              if (!editingPrefix && val.trim().length >= 4) {
+                                typingTimeoutRef.current = setTimeout(() => {
+                                  fetchSuggestion(val.trim());
+                                }, 450);
+                              }
+                            }}
+                            onFocus={() => {
+                              if (!editingPrefix) setIsPrefixDropdownOpen(true);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setIsPrefixDropdownOpen(false);
+                            }}
+                            maxLength={6}
+                            placeholder="UP24"
+                            required
+                            disabled={Boolean(editingPrefix)}
+                            className="w-full px-3 py-1.5 pr-8 rounded-lg border border-stone-300 font-mono text-xs uppercase focus:ring-1 focus:ring-amber-500 focus:outline-hidden disabled:bg-stone-100 disabled:text-stone-500"
+                          />
+
+                          {!editingPrefix && (
+                            <button
+                              type="button"
+                              onClick={() => setIsPrefixDropdownOpen((prev) => !prev)}
+                              className="absolute right-2 top-2 text-stone-400 hover:text-stone-600 p-0.5 rounded transition-colors"
+                              title={locale === 'hi' ? 'लंबित प्रीफिक्स सूची' : 'Pending prefixes list'}
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isPrefixDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                          )}
+                        </div>
+
+                        {!editingPrefix && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fetchSuggestion(formPrefix)}
+                            disabled={isSuggesting || formPrefix.trim().length < 2}
+                            className="h-8 text-xs text-amber-800 border-amber-300 hover:bg-amber-100/70 shrink-0 flex items-center gap-1.5"
+                            title={locale === 'hi' ? 'स्थान व निर्देशांक सुझाव खोजें' : 'Suggest location & coordinates'}
+                          >
+                            {isSuggesting ? (
+                              <>
+                                <RefreshCw className="h-3 w-3 animate-spin text-amber-700" />
+                                <span>{locale === 'hi' ? 'खोज रहे...' : 'Suggesting...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-3 w-3 text-amber-700" />
+                                <span>{locale === 'hi' ? 'सुझाव खोजें' : 'Suggest'}</span>
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Dropdown Menu for Pending Unmapped Prefixes */}
+                      {isPrefixDropdownOpen && !editingPrefix && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-xl shadow-xl z-40 max-h-60 overflow-y-auto divide-y divide-stone-100">
+                          <div className="p-2.5 bg-stone-50/80 sticky top-0 z-10 border-b border-stone-100">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-stone-800 flex items-center gap-1.5">
+                                <Car className="h-3.5 w-3.5 text-amber-700" />
+                                {locale === 'hi'
+                                  ? 'गेट काउंटर से लंबित अनमैप्ड प्रीफिक्स'
+                                  : 'Pending unmapped prefixes from Gate Counter'}
+                              </span>
+                              <Badge variant="warning" className="text-[10px] py-0 px-1.5">
+                                {pendingPrefixes.length} {locale === 'hi' ? 'लंबित' : 'pending'}
+                              </Badge>
+                            </div>
+                            <p className="text-[10px] text-stone-500 mt-0.5">
+                              {locale === 'hi'
+                                ? 'गेट पर दर्ज कारें जो वर्तमान में किसी शहर से मैप नहीं हैं'
+                                : 'Cars recorded at gate currently awaiting geographical mapping'}
+                            </p>
+                          </div>
+
+                          {filteredPending.length > 0 ? (
+                            <div className="p-1 space-y-0.5">
+                              {filteredPending.map((p) => {
+                                const rto = lookupRtoPrefix(p.prefix);
+                                const isSelected = formPrefix === p.prefix;
+                                return (
+                                  <button
+                                    key={p.prefix}
+                                    type="button"
+                                    onClick={() => {
+                                      setFormPrefix(p.prefix);
+                                      setIsPrefixDropdownOpen(false);
+                                      fetchSuggestion(p.prefix);
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                                      isSelected
+                                        ? 'bg-amber-100/80 text-amber-950 font-semibold'
+                                        : 'hover:bg-amber-50 text-stone-800'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-bold tracking-wide text-amber-900 bg-amber-100/70 px-1.5 py-0.5 rounded text-[11px]">
+                                        {p.prefix}
+                                      </span>
+                                      {rto?.locationName && (
+                                        <span className="text-[11px] text-stone-600">
+                                          {rto.locationName}, {rto.state}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-medium text-amber-800 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-full">
+                                        {p.count} {locale === 'hi' ? (p.count === 1 ? 'इवेंट' : 'इवेंट्स') : (p.count === 1 ? 'occurrence' : 'occurrences')}
+                                      </span>
+                                      <ArrowRight className="h-3 w-3 text-stone-400" />
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center text-xs text-stone-500">
+                              {formPrefix.trim()
+                                ? locale === 'hi'
+                                  ? `"${formPrefix}" से मेल खाता कोई लंबित प्रीफिक्स नहीं मिला। मैन्युअल प्रविष्टि जारी रखें।`
+                                  : `No pending prefix matching "${formPrefix}". Manual entry active.`
+                                : locale === 'hi'
+                                ? 'गेट काउंटर से कोई लंबित अनमैप्ड प्रीफिक्स नहीं है।'
+                                : 'No pending unmapped prefixes from gate events.'}
+                            </div>
+                          )}
+
+                          <div className="p-2 bg-stone-50 text-[10px] text-stone-500 text-center">
+                            {locale === 'hi'
+                              ? 'आप ऊपर कोई भी नया प्रीफिक्स टाइप करके मैन्युअल रूप से जोड़ सकते हैं'
+                              : 'You can also type any custom prefix above for manual entry'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Warning if prefix is already mapped */}
+                    {mappedExisting && (
+                      <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px] flex items-center gap-2">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                        <span>
+                          {locale === 'hi'
+                            ? `प्रीफिक्स "${mappedExisting.prefix}" पहले से मास्टर में "${mappedExisting.location_name}" (${mappedExisting.state}) से मैप है।`
+                            : `Prefix "${mappedExisting.prefix}" is already mapped in Master to "${mappedExisting.location_name}" (${mappedExisting.state}).`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Suggestion Notice */}
+                  {suggestionNotice && (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200/80 rounded-lg text-xs text-emerald-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>{suggestionNotice}</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-700 font-medium shrink-0 ml-2">
+                        {locale === 'hi' ? 'सभी फ़ील्ड्स संपादन योग्य' : 'Editable autofill'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Row 2: Location Name (English) & स्थान नाम (हिंदी) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <label className="block font-semibold text-stone-700 mb-1">
-                        Location Name (English) *
+                        {locale === 'hi' ? 'स्थान नाम (अंग्रेज़ी) *' : 'Location Name (English) *'}
                       </label>
                       <input
                         type="text"
                         value={formLocationName}
-                        onChange={(e) => setFormLocationName(e.target.value)}
-                        placeholder="Moradabad"
+                        onChange={(e) => handleLocationNameChange(e.target.value)}
+                        placeholder="Budaun"
                         required
                         className="w-full px-3 py-1.5 rounded-lg border border-stone-300 focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
                       />
                     </div>
 
                     <div>
-                      <label className="block font-semibold text-stone-700 mb-1">
-                        स्थान नाम (हिंदी)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-semibold text-stone-700">
+                          स्थान नाम (हिंदी)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleForceSuggestHindi}
+                          disabled={!formLocationName.trim()}
+                          title={locale === 'hi' ? 'हिंदी सुझाव बनाएं' : 'Suggest Hindi display name'}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>{locale === 'hi' ? 'सुझाव बनाएं' : 'Suggest'}</span>
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={formNameHi}
-                        onChange={(e) => setFormNameHi(e.target.value)}
-                        placeholder="मुरादाबाद"
+                        onChange={(e) => handleHindiNameChange(e.target.value)}
+                        placeholder="बदायूं"
                         className="w-full px-3 py-1.5 rounded-lg border border-stone-300 focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
                       />
+                      {isCustomHindi && (
+                        <div className="flex items-center justify-between mt-1 text-[10px] text-stone-500">
+                          <span>{locale === 'hi' ? 'हाथ से बदला गया' : 'Manually edited'}</span>
+                          <button
+                            type="button"
+                            onClick={handleForceSuggestHindi}
+                            className="text-amber-700 hover:underline flex items-center gap-0.5"
+                          >
+                            <RotateCcw className="h-2.5 w-2.5" />
+                            <span>{locale === 'hi' ? 'सुझाव पर रीसेट करें' : 'Reset to suggestion'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
+                  </div>
 
+                  {/* Row 3: District & State */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <label className="block font-semibold text-stone-700 mb-1">
-                        District (जि़ला)
+                        {locale === 'hi' ? 'ज़िला (District)' : 'District (ज़िला)'}
                       </label>
                       <input
                         type="text"
                         value={formDistrict}
                         onChange={(e) => setFormDistrict(e.target.value)}
-                        placeholder="Moradabad"
+                        placeholder="Budaun"
                         className="w-full px-3 py-1.5 rounded-lg border border-stone-300 focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
                       />
                     </div>
 
                     <div>
-                      <label className="block font-semibold text-stone-700 mb-1">State *</label>
+                      <label className="block font-semibold text-stone-700 mb-1">
+                        {locale === 'hi' ? 'राज्य (State) *' : 'State *'}
+                      </label>
                       <input
                         type="text"
                         value={formState}
@@ -617,30 +1002,38 @@ export function VehiclePrefixMasterModal({
                         className="w-full px-3 py-1.5 rounded-lg border border-stone-300 focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
                       />
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <label className="block font-semibold text-stone-700 mb-1">Latitude</label>
-                        <input
-                          type="number"
-                          step="any"
-                          value={formLatitude}
-                          onChange={(e) => setFormLatitude(e.target.value)}
-                          placeholder="28.838"
-                          className="w-full px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-mono"
-                        />
+                  {/* Row 4: Latitude & Longitude */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-semibold text-stone-700">Latitude</label>
+                        <span className="text-[10px] text-stone-400 font-mono">28.xxxx</span>
                       </div>
-                      <div className="flex-1">
-                        <label className="block font-semibold text-stone-700 mb-1">Longitude</label>
-                        <input
-                          type="number"
-                          step="any"
-                          value={formLongitude}
-                          onChange={(e) => setFormLongitude(e.target.value)}
-                          placeholder="78.776"
-                          className="w-full px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-mono"
-                        />
+                      <input
+                        type="number"
+                        step="any"
+                        value={formLatitude}
+                        onChange={(e) => setFormLatitude(e.target.value)}
+                        placeholder="28.0367"
+                        className="w-full px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-semibold text-stone-700">Longitude</label>
+                        <span className="text-[10px] text-stone-400 font-mono">79.xxxx</span>
                       </div>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formLongitude}
+                        onChange={(e) => setFormLongitude(e.target.value)}
+                        placeholder="79.1234"
+                        className="w-full px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-mono"
+                      />
                     </div>
                   </div>
 
