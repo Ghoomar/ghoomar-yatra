@@ -1,7 +1,7 @@
 {
   "bills": {
-    "title": "Purchases & Inward Invoices",
-    "subtitle": "Inward stock purchase bills, GST invoices, vendor payment obligations, and inward logs.",
+    "title": "Purchases & Vendors",
+    "subtitle": "Supplier purchases, invoices, payments and outstanding balances",
     "recordBill": "Record Purchase Bill",
     "invoiceNo": "Invoice / Bill #",
     "billDate": "Bill Date",
@@ -73,6 +73,46 @@
       "contact": "Contact",
       "purchased": "Purchased"
     }
+  },
+  "tabs": {
+    "vendors": "Vendors",
+    "invoices": "Purchase Invoices"
+  },
+  "kpi": {
+    "totalPurchased": "Total Purchased",
+    "totalPaid": "Total Paid"
+  },
+  "invoices": {
+    "title": "Purchase Invoices",
+    "searchPlaceholder": "Search invoices by bill # or vendor...",
+    "allStatuses": "All Statuses",
+    "allVendors": "All Vendors",
+    "vendor": "Vendor:",
+    "status": {
+      "all": "All",
+      "unpaid": "Unpaid",
+      "partial": "Partially Paid",
+      "settled": "Settled"
+    },
+    "table": {
+      "invoice": "Invoice / PO #",
+      "billNo": "Bill #",
+      "vendor": "Vendor",
+      "date": "Date",
+      "items": "Items",
+      "netTotal": "Net Total",
+      "paid": "Paid",
+      "balance": "Balance Due",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "noInvoices": "No purchase invoices found matching your criteria.",
+    "viewLines": "View Line Items",
+    "hideLines": "Hide Line Items",
+    "unit": "Unit",
+    "qty": "Qty",
+    "rate": "Rate",
+    "lineTotal": "Total"
   },
   "vendors": {
     "title": "Vendors & Suppliers Directory",
@@ -173,6 +213,8 @@
     },
     "detail": {
       "title": "Vendor Account & Ledger",
+      "breadcrumbPurchases": "Purchases & Vendors",
+      "breadcrumbVendors": "Vendors",
       "ledger": "Running Balance Ledger",
       "paymentTerms": "Payment Terms:",
       "recordPayment": "Record Payment",

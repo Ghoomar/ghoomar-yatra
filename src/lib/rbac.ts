@@ -48,7 +48,10 @@ export function hasPermission(
   if (userRole === 'Admin') return true;
   if (!userPermissions || userPermissions.length === 0) return false;
   if (userPermissions.includes('admin.manage')) return true;
-  return userPermissions.includes(requiredCode);
+  if (userPermissions.includes(requiredCode)) return true;
+  if (requiredCode === 'finance.purchases' && userPermissions.includes('finance.vendors')) return true;
+  if (requiredCode === 'finance.vendors' && userPermissions.includes('finance.purchases')) return true;
+  return false;
 }
 
 /**

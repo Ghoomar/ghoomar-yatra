@@ -1,7 +1,7 @@
 {
   "bills": {
-    "title": "खरीद और बिल",
-    "subtitle": "स्टोर में आए सामान, वेंडर के बिल और पेमेंट का पूरा हिसाब।",
+    "title": "खरीद और वेंडर",
+    "subtitle": "सप्लायर से खरीद, इनवॉइस, पेमेंट और बकाया राशि का हिसाब",
     "recordBill": "खरीद बिल दर्ज करें",
     "invoiceNo": "बिल / इनवॉइस नंबर",
     "billDate": "बिल की तारीख",
@@ -73,6 +73,46 @@
       "contact": "संपर्क",
       "purchased": "कुल खरीद"
     }
+  },
+  "tabs": {
+    "vendors": "वेंडर",
+    "invoices": "खरीद इनवॉइस"
+  },
+  "kpi": {
+    "totalPurchased": "कुल खरीद",
+    "totalPaid": "कुल भुगतान"
+  },
+  "invoices": {
+    "title": "खरीद इनवॉइस",
+    "searchPlaceholder": "बिल नंबर या वेंडर के नाम से खोजें...",
+    "allStatuses": "सभी स्टेटस",
+    "allVendors": "सभी वेंडर",
+    "vendor": "वेंडर:",
+    "status": {
+      "all": "सभी",
+      "unpaid": "बाकी (Unpaid)",
+      "partial": "आंशिक (Partial)",
+      "settled": "चुका दिया (Settled)"
+    },
+    "table": {
+      "invoice": "इनवॉइस / PO #",
+      "billNo": "बिल #",
+      "vendor": "वेंडर",
+      "date": "तारीख",
+      "items": "आइटम्स",
+      "netTotal": "कुल रकम",
+      "paid": "चुकाया गया",
+      "balance": "बाकी रकम",
+      "status": "स्टेटस",
+      "actions": "एक्शन"
+    },
+    "noInvoices": "कोई खरीद इनवॉइस नहीं मिला।",
+    "viewLines": "आइटम लिस्ट देखें",
+    "hideLines": "आइटम लिस्ट छिपाएं",
+    "unit": "इकाई",
+    "qty": "मात्रा",
+    "rate": "रेट",
+    "lineTotal": "कुल"
   },
   "vendors": {
     "title": "वेंडर लिस्ट",
@@ -173,6 +213,8 @@
     },
     "detail": {
       "title": "वेंडर खाता और लेजर",
+      "breadcrumbPurchases": "खरीद और वेंडर",
+      "breadcrumbVendors": "वेंडर",
       "ledger": "खाता बही (लेजर)",
       "paymentTerms": "पेमेंट की शर्तें:",
       "recordPayment": "पेमेंट दर्ज करें",

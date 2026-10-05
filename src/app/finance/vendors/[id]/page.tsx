@@ -488,7 +488,7 @@ export default function VendorDetailPage({
     return (
       <div className="p-8 text-center space-y-4">
         <div className="text-stone-600 font-semibold text-base">{t('purchases.vendors.noVendors')}</div>
-        <Link href="/finance/vendors">
+        <Link href="/finance/purchases?view=vendors">
           <Button variant="secondary" size="sm" className="gap-1.5">
             <ArrowLeft className="h-4 w-4" /> {t('purchases.vendors.detail.backToVendors')}
           </Button>
@@ -502,12 +502,22 @@ export default function VendorDetailPage({
       {/* Top Breadcrumb & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1.5 min-w-0">
-          <Link
-            href="/finance/vendors"
-            className="text-xs text-stone-500 hover:text-amber-600 flex items-center gap-1 font-medium transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> {t('purchases.vendors.title')}
-          </Link>
+          <div className="flex items-center gap-1.5 text-xs text-stone-500 font-medium">
+            <Link
+              href="/finance/purchases?view=vendors"
+              className="hover:text-amber-600 flex items-center gap-1 transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>{t('purchases.vendors.detail.breadcrumbPurchases')}</span>
+            </Link>
+            <span className="text-stone-300">/</span>
+            <Link
+              href="/finance/purchases?view=vendors"
+              className="hover:text-amber-600 transition-colors"
+            >
+              <span>{t('purchases.vendors.detail.breadcrumbVendors')}</span>
+            </Link>
+          </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2 break-words">
               <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600 shrink-0" />
@@ -576,14 +586,14 @@ export default function VendorDetailPage({
         <Card className="min-w-0 overflow-hidden">
           <CardDescription className="truncate">{t('purchases.vendors.detail.kpi.totalPurchased')}</CardDescription>
           <div className="text-lg sm:text-xl font-bold text-stone-900 mt-1 truncate">
-            {formatINR(summaryMetrics.purchasedThisMonth)}
+            {formatINR(summaryMetrics.totalPurchasedAllTime)}
           </div>
         </Card>
 
         <Card className="min-w-0 overflow-hidden">
           <CardDescription className="truncate">{t('purchases.vendors.detail.kpi.totalPaid')}</CardDescription>
           <div className="text-lg sm:text-xl font-bold text-emerald-700 mt-1 truncate">
-            {formatINR(summaryMetrics.paidThisMonth)}
+            {formatINR(summaryMetrics.totalPaidAllTime)}
           </div>
         </Card>
 
@@ -808,7 +818,7 @@ export default function VendorDetailPage({
             <div>
               <CardTitle className="text-sm">{t('purchases.vendors.detail.tabs.purchases')}</CardTitle>
             </div>
-            <Link href="/finance/purchases" className="shrink-0">
+            <Link href="/finance/purchases?view=invoices" className="shrink-0">
               <Button variant="outline" size="sm" className="gap-1 text-xs w-full sm:w-auto">
                 <Plus className="h-3.5 w-3.5" /> {t('purchases.bills.newPurchaseInvoice')}
               </Button>
@@ -942,7 +952,7 @@ export default function VendorDetailPage({
             <div>
               <CardTitle className="text-sm">{t('purchases.vendors.detail.tabs.payments')}</CardTitle>
             </div>
-            <Link href="/finance/purchases" className="shrink-0">
+            <Link href="/finance/purchases?view=invoices" className="shrink-0">
               <Button variant="outline" size="sm" className="gap-1 text-xs w-full sm:w-auto">
                 <CreditCard className="h-3.5 w-3.5" /> {t('purchases.bills.recordPayment')}
               </Button>

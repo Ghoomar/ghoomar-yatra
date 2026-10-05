@@ -117,14 +117,14 @@ async function runSuite() {
       { vehicle_prefix: 'BIKE', location_id: 'some-id' },
       { vehicle_prefix: 'bike', location_id: 'some-id' },
       { vehicle_prefix: null, location_id: BIKE_LOCATION_ID },
-      { vehicle_prefix: 'UP24', location_id: 'c1d2-not-bike' },
+      { vehicle_prefix: 'ZZ99', location_id: 'c1d2-not-bike' },
     ];
 
     const pending = extractPendingUnmappedPrefixes(syntheticEvents, prefixes);
     assert.strictEqual(pending.some((p) => p.prefix === 'BIKE'), false);
     assert.strictEqual(pending.some((p) => p.prefix === 'bike'), false);
     assert.strictEqual(pending.length, 1);
-    assert.strictEqual(pending[0].prefix, 'UP24');
+    assert.strictEqual(pending[0].prefix, 'ZZ99');
   });
 
   test('extractPendingUnmappedPrefixes excludes literal OTHERS and nulls', () => {
@@ -133,13 +133,13 @@ async function runSuite() {
       { vehicle_prefix: 'others', location_id: 'some-id' },
       { vehicle_prefix: '', location_id: 'some-id' },
       { vehicle_prefix: null, location_id: 'some-id' },
-      { vehicle_prefix: 'DL14', location_id: 'some-id' },
+      { vehicle_prefix: 'YY88', location_id: 'some-id' },
     ];
 
     const pending = extractPendingUnmappedPrefixes(syntheticEvents, prefixes);
     assert.strictEqual(pending.some((p) => p.prefix.includes('OTHER')), false);
     assert.strictEqual(pending.length, 1);
-    assert.strictEqual(pending[0].prefix, 'DL14');
+    assert.strictEqual(pending[0].prefix, 'YY88');
   });
 
   test('Pending unmapped prefixes are sorted by count descending, then alphabetically', () => {

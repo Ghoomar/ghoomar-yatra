@@ -1,30 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Card, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
-import { calculateNewWAC } from '@/lib/inventory-engine';
+import { Vendor, VendorOutstandingSummary } from '@/lib/types/database';
 import { VendorModal } from '@/components/vendors/VendorModal';
-import { ShoppingBag, Plus, CreditCard, RefreshCw, CheckCircle, AlertCircle, Trash2, Building2, ExternalLink } from 'lucide-react';
+import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
+import { VendorsView } from '@/components/purchases/VendorsView';
+import { PurchaseInvoicesView, PurchaseInvoiceRecord } from '@/components/purchases/PurchaseInvoicesView';
+import {
+  ShoppingBag,
+  Building2,
+  FileText,
+  Plus,
+  CreditCard,
+  RefreshCw,
+  CheckCircle,
+  AlertCircle,
+  Trash2,
+  Tag
+} from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-
-interface VendorSummary {
-  vendor_id: string;
-  vendor_code: string;
-  vendor_name: string;
-  contact_person?: string;
-  phone?: string;
-  total_purchased: number;
-  total_paid: number;
-  outstanding_balance: number;
-  is_active?: boolean;
-}
 
 interface PurchaseLineForm {
   item_id: string;
@@ -40,17 +41,57 @@ interface PurchaseLineForm {
   previous_date?: string;
 }
 
-export default function PurchasesPage() {
+function PurchasesContent() {
   const { t, locale } = useI18n();
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Active view tab state (synchronized with URL query param `?view=vendors` / `?view=invoices`)
+  const urlView = searchParams.get('view');
+  const [activeView, setActiveView] = useState<'vendors' | 'invoices'>(
+    urlView === 'invoices' ? 'invoices' : 'vendors'
+  );
+
+  useEffect(() => {
+    if (urlView === 'invoices') {
+      setActiveView('invoices');
+    } else if (urlView === 'vendors') {
+      setActiveView('vendors');
+    }
+  }, [urlView]);
+
+  const handleViewChange = (view: 'vendors' | 'invoices') => {
+    setActiveView(view);
+    const params = new URLSearchParams(window.location.search);
+    params.set('view', view);
+    router.replace(`/finance/purchases?${params.toString()}`, { scroll: false });
+  };
+
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
-  const [vendors, setVendors] = useState<VendorSummary[]>([]);
+  const [vendors, setVendors] = useState<VendorOutstandingSummary[]>([]);
+  const [rawVendors, setRawVendors] = useState<Vendor[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [vendorItems, setVendorItems] = useState<any[]>([]);
+  const [vendorCategories, setVendorCategories] = useState<{ name: string; name_hi?: string | null }[]>([]);
+  const [invoices, setInvoices] = useState<PurchaseInvoiceRecord[]>([]);
 
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+
+  // Vendor Modals
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+
+  // Delete Safeguard State
+  const [deleteModalVendor, setDeleteModalVendor] = useState<VendorOutstandingSummary | null>(null);
+  const [deleteChecking, setDeleteChecking] = useState(false);
+  const [cannotDeleteReason, setCannotDeleteReason] = useState<string | null>(null);
+
+  // Purchase Bill Modal State
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showQuickVendorModal, setShowQuickVendorModal] = useState(false);
   const [selectedVendorId, setSelectedVendorId] = useState('');
@@ -59,6 +100,7 @@ export default function PurchasesPage() {
   const [purchaseSaving, setPurchaseSaving] = useState(false);
   const [vendorPriceMemory, setVendorPriceMemory] = useState<Record<string, { rate: number; date: string }>>({});
 
+  // Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentVendorId, setPaymentVendorId] = useState('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
@@ -99,38 +141,118 @@ export default function PurchasesPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const { data: vData } = await supabase
-        .from('vendor_outstanding_summary')
-        .select('*')
-        .order('vendor_name');
+      const [
+        { data: vData, error: vErr },
+        { data: vRaw, error: vRawErr },
+        { data: iData, error: iErr },
+        { data: locData },
+        { data: pmData },
+        { data: viData },
+        { data: vcData },
+        { data: pHeadersData, error: pErr },
+      ] = await Promise.all([
+        supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
+        supabase.from('vendors').select('*').order('name'),
+        supabase
+          .from('inventory_items')
+          .select(`
+            id, item_code, name, name_hi, unit_id, secondary_unit_id, conversion_factor, shelf_life_days, is_active, current_stock, current_weighted_average_cost,
+            unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+            sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
+          `)
+          .order('name'),
+        supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
+        supabase.from('payment_methods').select('*').order('name'),
+        supabase.from('vendor_items').select('id, vendor_id, inventory_item_id, last_purchase_rate, last_purchase_date'),
+        supabase.from('vendor_categories').select('name, name_hi'),
+        supabase
+          .from('purchase_headers')
+          .select(`
+            id,
+            purchase_number,
+            invoice_number,
+            purchase_date,
+            business_date,
+            net_amount,
+            total_amount,
+            vendor_id,
+            vendors (
+              id,
+              name,
+              vendor_code
+            ),
+            purchase_lines (
+              id,
+              item_id,
+              quantity,
+              rate,
+              total_amount,
+              inventory_items (
+                name,
+                name_hi,
+                item_code,
+                units!inventory_items_unit_id_fkey (symbol, symbol_hi)
+              )
+            ),
+            vendor_payment_allocations (
+              amount_allocated
+            )
+          `)
+          .order('purchase_date', { ascending: false }),
+      ]);
 
-      const { data: iData } = await supabase
-        .from('inventory_items')
-        .select(`
-          id, item_code, name, unit_id, secondary_unit_id, conversion_factor, shelf_life_days, is_active, current_stock, current_weighted_average_cost,
-          unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
-          sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
-        `)
-        .order('name');
-
-      const { data: locData } = await supabase
-        .from('inventory_locations')
-        .select('*')
-        .eq('is_active', true)
-        .order('code');
-
-      const { data: pmData } = await supabase
-        .from('payment_methods')
-        .select('*')
-        .order('name');
+      if (vErr) throw vErr;
+      if (vRawErr) throw vRawErr;
+      if (iErr) throw iErr;
+      if (pErr) throw pErr;
 
       setVendors(vData || []);
+      setRawVendors(vRaw || []);
       setItems(iData || []);
       setLocations(locData || []);
       setPaymentMethods(pmData || []);
+      setVendorItems(viData || []);
+      setVendorCategories(vcData || []);
+
+      // Parse invoices
+      const parsedInvoices: PurchaseInvoiceRecord[] = (pHeadersData || []).map((p: any) => {
+        const allocated = (p.vendor_payment_allocations || []).reduce(
+          (sum: number, a: any) => sum + (Number(a.amount_allocated) || 0),
+          0
+        );
+        const lines = (p.purchase_lines || []).map((l: any) => ({
+          id: l.id,
+          item_id: l.item_id,
+          item_name: (locale === 'hi' && l.inventory_items?.name_hi) ? l.inventory_items.name_hi : (l.inventory_items?.name || 'Unknown Item'),
+          item_code: l.inventory_items?.item_code || '',
+          quantity: Number(l.quantity) || 0,
+          rate: Number(l.rate) || 0,
+          total_amount: Number(l.total_amount) || 0,
+          unit_symbol: (locale === 'hi' && l.inventory_items?.units?.symbol_hi) ? l.inventory_items.units.symbol_hi : (l.inventory_items?.units?.symbol || ''),
+          batch_number: l.batch_number,
+          expiry_date: l.expiry_date,
+        }));
+
+        return {
+          id: p.id,
+          purchase_number: p.purchase_number,
+          invoice_number: p.invoice_number,
+          purchase_date: p.purchase_date,
+          business_date: p.business_date,
+          net_amount: Number(p.net_amount) || 0,
+          total_amount: Number(p.total_amount) || 0,
+          vendor_id: p.vendor_id,
+          vendor_name: p.vendors?.name || 'Unknown Vendor',
+          vendor_code: p.vendors?.vendor_code || '',
+          allocated_amount: allocated,
+          lines,
+        };
+      });
+
+      setInvoices(parsedInvoices);
     } catch (err: any) {
       console.error(err);
-      setMessage({ type: 'error', text: t('purchases.bills.errLoad') });
+      setMessage({ type: 'error', text: t('purchases.bills.errLoad') + ' ' + (err.message || '') });
     } finally {
       setLoading(false);
     }
@@ -140,11 +262,124 @@ export default function PurchasesPage() {
     loadData();
   }, []);
 
-  const totalOutstandingAllVendors = vendors.reduce(
-    (acc, v) => acc + (Number(v.outstanding_balance) || 0),
-    0
-  );
+  // Aggregate high-level summary KPIs
+  const totalOutstanding = useMemo(() => {
+    return vendors.reduce((acc, v) => acc + (Number(v.outstanding_balance) || 0), 0);
+  }, [vendors]);
 
+  const totalPurchasesAllTime = useMemo(() => {
+    return vendors.reduce((acc, v) => acc + (Number(v.total_purchased) || 0), 0);
+  }, [vendors]);
+
+  const totalPaidAllTime = useMemo(() => {
+    return vendors.reduce((acc, v) => acc + (Number(v.total_paid) || 0), 0);
+  }, [vendors]);
+
+  const activeVendorsCount = useMemo(() => {
+    return vendors.filter((v) => v.is_active !== false).length;
+  }, [vendors]);
+
+  // Vendor actions
+  const handleOpenEditModal = (vendorSummary: VendorOutstandingSummary) => {
+    const raw = rawVendors.find((v) => v.id === vendorSummary.vendor_id);
+    if (raw) {
+      setEditingVendor(raw);
+    } else {
+      setEditingVendor({
+        id: vendorSummary.vendor_id,
+        vendor_code: vendorSummary.vendor_code,
+        name: vendorSummary.vendor_name,
+        contact_person: vendorSummary.contact_person,
+        phone: vendorSummary.phone,
+        alternate_phone: vendorSummary.alternate_phone,
+        payment_terms: vendorSummary.payment_terms,
+        payment_frequency: vendorSummary.payment_frequency,
+        supplier_categories: vendorSummary.supplier_categories,
+        is_active: vendorSummary.is_active !== false,
+      });
+    }
+    setVendorModalOpen(true);
+  };
+
+  const handleToggleStatus = async (vendorSummary: VendorOutstandingSummary) => {
+    const currentStatus = vendorSummary.is_active !== false;
+    const newStatus = !currentStatus;
+
+    try {
+      const { error } = await supabase
+        .from('vendors')
+        .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', vendorSummary.vendor_id);
+
+      if (error) throw error;
+
+      setMessage({
+        type: 'success',
+        text: `Vendor "${vendorSummary.vendor_name}" has been marked as ${newStatus ? 'Active' : 'Inactive'}.`,
+      });
+      loadData();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: 'Failed to update status: ' + err.message });
+    }
+  };
+
+  const handleInitiateDelete = async (vendorSummary: VendorOutstandingSummary) => {
+    setDeleteChecking(true);
+    setCannotDeleteReason(null);
+    setDeleteModalVendor(vendorSummary);
+
+    try {
+      const { count: purchaseCount } = await supabase
+        .from('purchase_headers')
+        .select('*', { count: 'exact', head: true })
+        .eq('vendor_id', vendorSummary.vendor_id);
+
+      const { count: paymentCount } = await supabase
+        .from('vendor_payments')
+        .select('*', { count: 'exact', head: true })
+        .eq('vendor_id', vendorSummary.vendor_id);
+
+      if ((purchaseCount && purchaseCount > 0) || (paymentCount && paymentCount > 0)) {
+        setCannotDeleteReason(
+          t('purchases.vendors.deleteModal.hasTransactions', {
+            purchases: purchaseCount || 0,
+            payments: paymentCount || 0,
+          })
+        );
+      }
+    } catch (err: any) {
+      console.error(err);
+      setCannotDeleteReason('Unable to verify transaction history: ' + err.message);
+    } finally {
+      setDeleteChecking(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModalVendor) return;
+
+    try {
+      await supabase.from('vendor_items').delete().eq('vendor_id', deleteModalVendor.vendor_id);
+
+      const { error } = await supabase
+        .from('vendors')
+        .delete()
+        .eq('id', deleteModalVendor.vendor_id);
+
+      if (error) throw error;
+
+      setMessage({
+        type: 'success',
+        text: `Vendor "${deleteModalVendor.vendor_name}" was permanently removed.`,
+      });
+      setDeleteModalVendor(null);
+      loadData();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: 'Failed to delete vendor: ' + err.message });
+    }
+  };
+
+  // Purchase Bill line handlers
   const handleAddLine = () => {
     setLines([...lines, { item_id: '', quantity: 1, rate: 0 }]);
   };
@@ -316,6 +551,7 @@ export default function PurchasesPage() {
 
       if (pmtErr) throw pmtErr;
 
+      // FIFO Allocation against open purchase headers
       const { data: openPurchases } = await supabase
         .from('purchase_headers')
         .select('id, net_amount, purchase_date')
@@ -364,123 +600,282 @@ export default function PurchasesPage() {
 
   return (
     <div className="space-y-6 max-w-full overflow-hidden">
+      {/* Top Header & Contextual Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
-            <ShoppingBag className="h-6 w-6 text-amber-600" />
-            {t('purchases.bills.title')}
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
+            <ShoppingBag className="h-6 w-6 text-amber-600 shrink-0" />
+            <span>{t('purchases.bills.title')}</span>
           </h1>
+          <p className="text-xs text-stone-500 mt-0.5">
+            {t('purchases.bills.subtitle')}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/finance/vendors">
-            <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <Building2 className="h-4 w-4 text-amber-600" /> {t('purchases.bills.manageVendors')}
-            </Button>
-          </Link>
-          <Button variant="amber" size="sm" onClick={() => setShowPurchaseModal(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> {t('purchases.bills.newPurchaseInvoice')}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setShowPaymentModal(true)} className="gap-1.5">
-            <CreditCard className="h-4 w-4" /> {t('purchases.bills.recordPayment')}
-          </Button>
-          <Button variant="outline" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+        {/* Dynamic Contextual Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {activeView === 'vendors' ? (
+            <>
+              <Button
+                variant="amber"
+                size="sm"
+                onClick={() => {
+                  setEditingVendor(null);
+                  setVendorModalOpen(true);
+                }}
+                className="gap-1.5 text-xs shadow-xs"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{t('purchases.vendors.addVendor')}</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCategoryModalOpen(true)}
+                className="gap-1.5 text-xs text-stone-700 bg-white"
+              >
+                <Tag className="h-4 w-4 text-amber-600" />
+                <span>{t('purchases.vendors.categories')}</span>
+              </Button>
+
+              <Button variant="outline" size="sm" onClick={loadData} title="Refresh" className="bg-white">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="amber"
+                size="sm"
+                onClick={() => setShowPurchaseModal(true)}
+                className="gap-1.5 text-xs shadow-xs"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{t('purchases.bills.newPurchaseInvoice')}</span>
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setPaymentVendorId('');
+                  setShowPaymentModal(true);
+                }}
+                className="gap-1.5 text-xs"
+              >
+                <CreditCard className="h-4 w-4" />
+                <span>{t('purchases.bills.recordPayment')}</span>
+              </Button>
+
+              <Button variant="outline" size="sm" onClick={loadData} title="Refresh" className="bg-white">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardDescription>{t('purchases.bills.outstanding')}</CardDescription>
-          <div className="text-2xl font-bold text-rose-600 mt-1">
-            {formatINR(totalOutstandingAllVendors)}
+      {/* Top 4 KPI Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">{t('purchases.bills.outstanding')}</CardDescription>
+          <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-1 truncate">
+            {formatINR(totalOutstanding)}
           </div>
         </Card>
 
-        <Card>
-          <CardDescription>{t('purchases.bills.activeVendors')}</CardDescription>
-          <div className="text-2xl font-bold text-stone-900 mt-1">{vendors.length}</div>
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">{t('purchases.kpi.totalPurchased')}</CardDescription>
+          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
+            {formatINR(totalPurchasesAllTime)}
+          </div>
         </Card>
 
-        <Card>
-          <CardDescription>{t('purchases.bills.settlementModel')}</CardDescription>
-          <div className="text-lg font-bold text-stone-800 mt-1">{t('purchases.bills.fifoAllocation')}</div>
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">{t('purchases.kpi.totalPaid')}</CardDescription>
+          <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1 truncate">
+            {formatINR(totalPaidAllTime)}
+          </div>
+        </Card>
+
+        <Card className="min-w-0 overflow-hidden">
+          <CardDescription className="truncate">{t('purchases.bills.activeVendors')}</CardDescription>
+          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
+            {activeVendorsCount}
+          </div>
         </Card>
       </div>
 
+      {/* Alert Messages */}
       {message && (
-        <div className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 ${
-          message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
-        }`}>
-          {message.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-          {message.text}
+        <div
+          className={`p-3 rounded-lg text-xs font-medium flex items-center gap-2 border ${
+            message.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : message.type === 'warning'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          {message.type === 'success' ? (
+            <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+          ) : (
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+          )}
+          <span>{message.text}</span>
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('purchases.bills.vendorBalances')}</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-stone-200 text-stone-500 font-semibold">
-                  <th className="py-2.5 px-3">{t('purchases.bills.table.code')}</th>
-                  <th className="py-2.5 px-3">{t('purchases.bills.table.vendor')}</th>
-                  <th className="py-2.5 px-3">{t('purchases.bills.table.contact')}</th>
-                  <th className="py-2.5 px-3 text-right">{t('purchases.bills.table.purchased')}</th>
-                  <th className="py-2.5 px-3 text-right">{t('purchases.bills.table.paid')}</th>
-                  <th className="py-2.5 px-3 text-right">{t('purchases.bills.table.balance')}</th>
-                  <th className="py-2.5 px-3 text-center">{t('purchases.bills.table.status')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {vendors.map((v) => {
-                  const out = Number(v.outstanding_balance) || 0;
-                  return (
-                    <tr key={v.vendor_id} className="hover:bg-stone-50/80 transition-colors">
-                      <td className="py-3 px-3 font-mono text-stone-500">{v.vendor_code || 'VEND'}</td>
-                      <td className="py-3 px-3 font-semibold text-stone-900">
-                        <Link
-                          href={`/finance/vendors/${v.vendor_id}`}
-                          className="hover:text-amber-600 hover:underline flex items-center gap-1.5"
-                        >
-                          {v.vendor_name}
-                          <ExternalLink className="h-3 w-3 text-stone-400 opacity-60" />
-                        </Link>
-                      </td>
-                      <td className="py-3 px-3 text-stone-600">
-                        {v.contact_person} {v.phone && `(${v.phone})`}
-                      </td>
-                      <td className="py-3 px-3 text-right font-medium text-stone-800">
-                        {formatINR(Number(v.total_purchased))}
-                      </td>
-                      <td className="py-3 px-3 text-right font-medium text-emerald-700">
-                        {formatINR(Number(v.total_paid))}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-rose-600 text-sm">
-                        {formatINR(out)}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        {out <= 0 ? (
-                          <Badge variant="success">{t('purchases.bills.settled')}</Badge>
-                        ) : Number(v.total_paid) > 0 ? (
-                          <Badge variant="warning">{t('purchases.bills.partial')}</Badge>
-                        ) : (
-                          <Badge variant="danger">{t('purchases.bills.unpaid')}</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* View Switcher Tabs: [Vendors] [Purchase Invoices] */}
+      <div className="flex items-center gap-2 border-b border-stone-200 pb-1">
+        <button
+          type="button"
+          onClick={() => handleViewChange('vendors')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 -mb-[5px] ${
+            activeView === 'vendors'
+              ? 'border-amber-600 text-amber-900 bg-amber-50/60 shadow-xs'
+              : 'border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>{t('purchases.tabs.vendors')}</span>
+          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-stone-200/70 text-stone-700 font-normal">
+            {vendors.length}
+          </span>
+        </button>
 
+        <button
+          type="button"
+          onClick={() => handleViewChange('invoices')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 -mb-[5px] ${
+            activeView === 'invoices'
+              ? 'border-amber-600 text-amber-900 bg-amber-50/60 shadow-xs'
+              : 'border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          <span>{t('purchases.tabs.invoices')}</span>
+          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-stone-200/70 text-stone-700 font-normal">
+            {invoices.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Primary Views Content */}
+      {activeView === 'vendors' ? (
+        <VendorsView
+          vendors={vendors}
+          vendorItems={vendorItems}
+          catalogItems={items}
+          vendorCategories={vendorCategories}
+          loading={loading}
+          onRefresh={loadData}
+          onOpenAddVendor={() => {
+            setEditingVendor(null);
+            setVendorModalOpen(true);
+          }}
+          onOpenCategories={() => setCategoryModalOpen(true)}
+          onEditVendor={handleOpenEditModal}
+          onToggleStatus={handleToggleStatus}
+          onInitiateDelete={handleInitiateDelete}
+        />
+      ) : (
+        <PurchaseInvoicesView
+          invoices={invoices}
+          loading={loading}
+          onRefresh={loadData}
+          onNewInvoice={() => setShowPurchaseModal(true)}
+          onRecordPayment={(vendorId) => {
+            if (vendorId) setPaymentVendorId(vendorId);
+            setShowPaymentModal(true);
+          }}
+        />
+      )}
+
+      {/* Delete Vendor Confirmation Safeguard Modal */}
+      {deleteModalVendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <Trash2 className="h-4 w-4 text-rose-600" />
+                {cannotDeleteReason
+                  ? t('purchases.vendors.deleteModal.titleCannot')
+                  : t('purchases.vendors.deleteModal.titleConfirm')}
+              </h2>
+              <button
+                onClick={() => setDeleteModalVendor(null)}
+                className="text-stone-400 hover:text-stone-700 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {deleteChecking ? (
+              <div className="py-6 text-center text-stone-500">
+                {t('purchases.vendors.deleteModal.checking')}
+              </div>
+            ) : cannotDeleteReason ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 leading-relaxed">
+                  {cannotDeleteReason}
+                </div>
+                <p className="text-stone-600">
+                  {t('purchases.vendors.deleteModal.deactivateNotice')}
+                </p>
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setDeleteModalVendor(null)}
+                  >
+                    {t('purchases.vendors.deleteModal.close')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="amber"
+                    onClick={() => {
+                      const v = deleteModalVendor;
+                      setDeleteModalVendor(null);
+                      if (v) handleToggleStatus(v);
+                    }}
+                  >
+                    {t('purchases.vendors.deleteModal.deactivateAction')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-stone-700 leading-relaxed">
+                  {t('purchases.vendors.deleteModal.zeroTxNotice')}
+                </p>
+                <div className="font-semibold text-stone-900 bg-stone-50 p-2.5 rounded border border-stone-200">
+                  {deleteModalVendor.vendor_name} ({deleteModalVendor.vendor_code || 'VEND'})
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setDeleteModalVendor(null)}
+                  >
+                    {t('purchases.vendors.deleteModal.cancel')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={handleConfirmDelete}
+                  >
+                    {t('purchases.vendors.deleteModal.deleteAction')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* New Purchase Invoice Modal */}
       {showPurchaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl">
@@ -506,6 +901,7 @@ export default function PurchasesPage() {
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
                     required
+                    aria-label={t('purchases.bills.vendor')}
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   >
                     <option value="">{t('purchases.bills.selectVendor')}</option>
@@ -518,6 +914,7 @@ export default function PurchasesPage() {
                       ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.invoiceNo')}</label>
                   <input
@@ -581,7 +978,6 @@ export default function PurchasesPage() {
                               next[idx].previous_rate = undefined;
                               next[idx].previous_date = undefined;
                             }
-                            // Auto-set suggested expiry if shelf life exists
                             if (selItem?.shelf_life_days) {
                               const d = new Date();
                               d.setDate(d.getDate() + Number(selItem.shelf_life_days));
@@ -607,7 +1003,6 @@ export default function PurchasesPage() {
                           )}
                         />
 
-                        {/* Pack Toggle Button */}
                         {hasPack && (
                           <button
                             type="button"
@@ -632,7 +1027,6 @@ export default function PurchasesPage() {
                           </button>
                         )}
 
-                        {/* Quantity Input */}
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
@@ -657,7 +1051,6 @@ export default function PurchasesPage() {
                           </span>
                         </div>
 
-                        {/* Rate Input */}
                         <div className="relative">
                           <input
                             type="number"
@@ -681,7 +1074,6 @@ export default function PurchasesPage() {
                           />
                         </div>
 
-                        {/* Line Total */}
                         <div className="w-24 text-right font-semibold text-stone-800">
                           {formatINR(lineTotalVal)}
                         </div>
@@ -695,7 +1087,6 @@ export default function PurchasesPage() {
                         </button>
                       </div>
 
-                      {/* Pack Conversion Explanation Helper */}
                       {line.use_pack && hasPack && (
                         <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200 rounded px-2 py-1 font-mono flex items-center justify-between">
                           <span>
@@ -707,7 +1098,6 @@ export default function PurchasesPage() {
                         </div>
                       )}
 
-                      {/* Sub-row: Batch #, Expiry Date & Destination Location */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-stone-200/60 text-[11px]">
                         <div>
                           <input
@@ -761,6 +1151,7 @@ export default function PurchasesPage() {
                               next[idx].destination_location_id = e.target.value;
                               setLines(next);
                             }}
+                            aria-label={t('purchases.bills.centralStoreRoom')}
                             className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
                           >
                             <option value="">{t('purchases.bills.centralStoreRoom')}</option>
@@ -773,7 +1164,6 @@ export default function PurchasesPage() {
                         </div>
                       </div>
 
-                      {/* Price Memory Helper & Deviation Badge */}
                       {line.previous_rate !== undefined && line.previous_rate > 0 && (
                         <div className="flex items-center justify-between text-[11px] px-1 text-stone-500">
                           <span>
@@ -810,6 +1200,7 @@ export default function PurchasesPage() {
         </div>
       )}
 
+      {/* Record Payment Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
@@ -825,6 +1216,7 @@ export default function PurchasesPage() {
                   value={paymentVendorId}
                   onChange={(e) => setPaymentVendorId(e.target.value)}
                   required
+                  aria-label={t('purchases.bills.vendor')}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
                   <option value="">{t('purchases.bills.selectVendor')}</option>
@@ -856,6 +1248,7 @@ export default function PurchasesPage() {
                 <select
                   value={paymentMethodId}
                   onChange={(e) => setPaymentMethodId(e.target.value)}
+                  aria-label={t('purchases.bills.paymentMethod')}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none"
                 >
                   <option value="">{t('purchases.bills.selectMethod')}</option>
@@ -889,7 +1282,26 @@ export default function PurchasesPage() {
         </div>
       )}
 
-      {/* Quick Add Vendor Modal */}
+      {/* Vendor Add / Edit Modal */}
+      <VendorModal
+        isOpen={vendorModalOpen}
+        onClose={() => {
+          setVendorModalOpen(false);
+          setEditingVendor(null);
+        }}
+        vendor={editingVendor}
+        onSaved={(savedVendor) => {
+          loadData();
+          setMessage({
+            type: 'success',
+            text: editingVendor
+              ? `Vendor "${savedVendor.name}" updated successfully.`
+              : `Vendor "${savedVendor.name}" created successfully.`,
+          });
+        }}
+      />
+
+      {/* Quick Add Vendor Modal (inside purchase bill modal) */}
       <VendorModal
         isOpen={showQuickVendorModal}
         onClose={() => setShowQuickVendorModal(false)}
@@ -902,6 +1314,28 @@ export default function PurchasesPage() {
           });
         }}
       />
+
+      {/* Vendor Category Management Modal */}
+      <VendorCategoryModal
+        isOpen={categoryModalOpen}
+        onClose={() => setCategoryModalOpen(false)}
+        onUpdated={loadData}
+      />
     </div>
+  );
+}
+
+export default function PurchasesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-20 text-center text-xs text-stone-500 flex items-center justify-center gap-2">
+          <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
+          Loading Purchases & Vendors...
+        </div>
+      }
+    >
+      <PurchasesContent />
+    </Suspense>
   );
 }

@@ -61,7 +61,6 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       titleKey: 'navigation.sections.finance',
       items: [
         { href: '/finance/purchases', labelKey: 'navigation.items.purchases', icon: ShoppingBag, permission: 'finance.purchases' },
-        { href: '/finance/vendors', labelKey: 'navigation.items.vendors', icon: Building2, permission: 'finance.vendors' },
         { href: '/finance/expenses', labelKey: 'navigation.items.expenses', icon: IndianRupee, permission: 'finance.expenses' },
         { href: '/finance/utilities', labelKey: 'navigation.items.utilities', icon: Zap, permission: 'finance.utilities' },
         { href: '/finance/profitability', labelKey: 'navigation.items.profitability', icon: TrendingUp, permission: 'finance.profitability' },
