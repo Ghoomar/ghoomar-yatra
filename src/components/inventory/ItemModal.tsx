@@ -59,7 +59,6 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const [minimumStock, setMinimumStock] = useState<number>(0);
   const [preferredStock, setPreferredStock] = useState<number>(0);
   const [replenishmentFrequency, setReplenishmentFrequency] = useState('As Required');
-  const [shelfLifeDays, setShelfLifeDays] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
 
@@ -154,7 +153,6 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setMinimumStock(Number(item.minimum_stock) || 0);
       setPreferredStock(Number(item.preferred_stock) || 0);
       setReplenishmentFrequency(item.replenishment_frequency || 'As Required');
-      setShelfLifeDays(item.shelf_life_days ?? '');
       setNotes(item.notes || '');
       setIsActive(item.is_active !== false);
     } else {
@@ -170,7 +168,6 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setMinimumStock(0);
       setPreferredStock(0);
       setReplenishmentFrequency('As Required');
-      setShelfLifeDays('');
       setNotes('');
       setIsActive(true);
 
@@ -231,7 +228,6 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         minimum_stock: minimumStock,
         preferred_stock: preferredStock,
         replenishment_frequency: replenishmentFrequency,
-        shelf_life_days: isFood && shelfLifeDays !== '' ? Number(shelfLifeDays) : null,
         notes: notes.trim() || null,
         is_active: isActive,
         updated_at: new Date().toISOString(),
@@ -488,7 +484,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           {/* Storage & Replenishment */}
           <div className="space-y-3 pt-2 border-t border-stone-100">
             <h3 className="font-semibold text-stone-800">{t('inventory.modal.stockStorage')}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {inventoryClass === 'Food Raw Material' && (
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.storage')}</label>
@@ -529,19 +525,6 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                 />
               </div>
-
-              {inventoryClass === 'Food Raw Material' && (
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.shelfLifeDays')}</label>
-                  <input
-                    type="number"
-                    value={shelfLifeDays}
-                    onChange={(e) => setShelfLifeDays(e.target.value ? parseInt(e.target.value) : '')}
-                    placeholder={t('inventory.modal.shelfLifePlaceholder')}
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              )}
             </div>
 
             <div>

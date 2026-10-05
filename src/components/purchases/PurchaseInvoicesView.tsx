@@ -42,8 +42,6 @@ export interface PurchaseInvoiceRecord {
     rate: number;
     total_amount: number;
     unit_symbol?: string;
-    batch_number?: string | null;
-    expiry_date?: string | null;
   }[];
 }
 

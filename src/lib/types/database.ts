@@ -56,7 +56,6 @@ export interface InventoryItem {
   unit_id: string;
   secondary_unit_id?: string | null;
   conversion_factor?: number | null;
-  shelf_life_days?: number | null;
   minimum_stock: number;
   preferred_stock: number;
   replenishment_frequency: string;
@@ -141,7 +140,6 @@ export interface InventoryItemMaster {
   preferred_stock: number;
   replenishment_frequency?: string | null;
   storage_type?: string | null;
-  shelf_life_days?: number | null;
   current_stock: number;
   current_weighted_average_cost: number;
   is_active: boolean;

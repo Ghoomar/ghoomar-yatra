@@ -14,10 +14,7 @@
     "allCategories": "सभी कैटेगरी",
     "allLocations": "सभी जगह (लोकेशन)",
     "hideZeroStock": "शून्य स्टॉक वाला सामान छुपाएं",
-    "expiringBanner": "{count} {count, plural, one {सामग्री के बैच} other {सामग्रियों के बैच}} 30 दिनों में एक्सपायर होने वाले हैं या हो चुके हैं।",
-    "viewExpiring": "एक्सपायरी सामान देखें",
     "showAll": "सारा सामान देखें",
-    "expiringSoonActive": "जल्द एक्सपायर होने वाले",
     "locationLabel": "जगह (लोकेशन):",
     "itemLabel": "सामान:",
     "allItems": "सारा सामान",
@@ -29,7 +26,7 @@
     "newStockAudit": "नया गिनती चेक",
     "loadingMovements": "स्टॉक मूवमेंट लोड हो रहा है...",
     "noMovementsFound": "कोई स्टॉक रिकॉर्ड नहीं मिला।",
-    "searchMovementPlaceholder": "सामान, कारण या बैच खोजें...",
+    "searchMovementPlaceholder": "सामान या कारण खोजें...",
     "postings": "{count} {count, plural, one {एंट्री} other {एंट्रियां}}",
     "transferCount": "{count} {count, plural, one {ट्रांसफर} other {ट्रांसफर}}",
     "issueCount": "{count} {count, plural, one {निकासी} other {निकासी}}",
@@ -128,7 +125,7 @@
       "qty": "मात्रा",
       "rate": "रेट",
       "value": "कीमत",
-      "purposeBatch": "उद्देश्य / बैच",
+      "purpose": "उद्देश्य",
       "notesRef": "नोट्स / रिफरेंस"
     }
   },
@@ -154,8 +151,6 @@
     "storage": "कहाँ रखें",
     "minStock": "कम से कम स्टॉक",
     "preferredStock": "तय स्टॉक",
-    "shelfLifeDays": "कितने दिन चलेगा (दिन)",
-    "shelfLifePlaceholder": "उदा. 7",
     "replenishment": "मंगाने का समय",
     "currentStock": "शुरुआती स्टॉक",
     "cost": "खरीद रेट (₹)",
@@ -206,8 +201,8 @@
     "nameRequired": "कैटेगरी का नाम लिखना जरूरी है।"
   },
   "drawer": {
-    "title": "स्टॉक मूवमेंट और बैच",
-    "historyTitle": "मूवमेंट और बैच: {name}",
+    "title": "स्टॉक मूवमेंट",
+    "historyTitle": "मूवमेंट: {name}",
     "currentPosition": "मौजूदा स्टॉक स्थिति",
     "stockOnHand": "मौजूद स्टॉक",
     "wac": "औसत कीमत",

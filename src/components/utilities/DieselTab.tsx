@@ -138,8 +138,6 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         p_reference_id: null,
         p_reference_type: 'generator_refill',
         p_notes: finalNotes || null,
-        p_batch_number: null,
-        p_expiry_date: null,
         p_created_by: null,
       });
 
@@ -198,8 +196,6 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         p_reference_id: selectedVendorId || null,
         p_reference_type: 'vendor_purchase',
         p_notes: refNotes || null,
-        p_batch_number: invoiceNo.trim() || null,
-        p_expiry_date: null,
         p_created_by: null,
       });
 

@@ -128,7 +128,6 @@ function InventoryContent() {
   const [loading, setLoading] = useState(true);
   const [filterClass, setFilterClass] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
-  const [expiryFilter, setExpiryFilter] = useState<'ALL' | 'EXPIRING_SOON'>('ALL');
   const [hideZeroStock, setHideZeroStock] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -216,33 +215,6 @@ function InventoryContent() {
     return lookup;
   }, [locationStocks]);
 
-  // Movement expiry lookup (earliest active expiry per item)
-  const itemExpiryMap = useMemo(() => {
-    const expMap: Record<string, { batch_number?: string; expiry_date: string; daysLeft: number }> = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    movements.forEach((m) => {
-      if (m.expiry_date) {
-        const exp = new Date(m.expiry_date);
-        const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        if (!expMap[m.item_id] || exp < new Date(expMap[m.item_id].expiry_date)) {
-          expMap[m.item_id] = {
-            batch_number: m.batch_number,
-            expiry_date: m.expiry_date,
-            daysLeft: diffDays,
-          };
-        }
-      }
-    });
-    return expMap;
-  }, [movements]);
-
-  // Expiring items count (<= 30 days)
-  const expiringItemsCount = useMemo(() => {
-    return Object.values(itemExpiryMap).filter((e) => e.daysLeft <= 30).length;
-  }, [itemExpiryMap]);
-
   const handleToggleStatus = async (item: any) => {
     const current = item.is_active !== false;
     const next = !current;
@@ -270,12 +242,6 @@ function InventoryContent() {
         item.name?.toLowerCase().includes(search.toLowerCase()) ||
         item.item_code?.toLowerCase().includes(search.toLowerCase());
 
-      // Expiry filter
-      if (expiryFilter === 'EXPIRING_SOON') {
-        const exp = itemExpiryMap[item.item_id];
-        if (!exp || exp.daysLeft > 30) return false;
-      }
-
       // Location filter
       if (selectedLocationId !== 'ALL') {
         const locQty = itemLocQtyLookup[item.item_id]?.[selectedLocationId] || 0;
@@ -284,7 +250,7 @@ function InventoryContent() {
 
       return matchesClass && matchesStatus && matchesSearch;
     });
-  }, [items, filterClass, statusFilter, search, expiryFilter, selectedLocationId, hideZeroStock, itemLocQtyLookup, itemExpiryMap]);
+  }, [items, filterClass, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup]);
 
   const filteredMovements = useMemo(() => {
     return movements.filter((m) => {
@@ -305,8 +271,7 @@ function InventoryContent() {
         const itemCode = m.item?.item_code?.toLowerCase() || '';
         const purpose = m.purpose?.toLowerCase() || '';
         const notes = m.notes?.toLowerCase() || '';
-        const batch = m.batch_number?.toLowerCase() || '';
-        if (!itemName.includes(q) && !itemCode.includes(q) && !purpose.includes(q) && !notes.includes(q) && !batch.includes(q)) {
+        if (!itemName.includes(q) && !itemCode.includes(q) && !purpose.includes(q) && !notes.includes(q)) {
           return false;
         }
       }
@@ -392,26 +357,6 @@ function InventoryContent() {
           </Button>
         </div>
       </div>
-
-      {/* Expiry Alert Banner */}
-      {expiringItemsCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-900">
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-            <div>
-              <span className="font-bold">{t('inventory.stock.expiringBanner', { count: expiringItemsCount })}</span>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setExpiryFilter(expiryFilter === 'EXPIRING_SOON' ? 'ALL' : 'EXPIRING_SOON')}
-            className="text-xs h-7 border-amber-300 text-amber-900 bg-white hover:bg-amber-100"
-          >
-            {expiryFilter === 'EXPIRING_SOON' ? t('inventory.stock.showAll') : t('inventory.stock.viewExpiring')}
-          </Button>
-        </div>
-      )}
 
       {/* Primary Tab Navigation */}
       <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
@@ -544,12 +489,6 @@ function InventoryContent() {
                     </button>
                   ))}
                 </div>
-
-                {expiryFilter === 'EXPIRING_SOON' && (
-                  <Badge variant="warning" className="gap-1 text-[10px]">
-                    <Calendar className="h-3 w-3" /> {t('inventory.stock.expiringSoonActive')}
-                  </Badge>
-                )}
               </div>
             </div>
 
@@ -637,7 +576,6 @@ function InventoryContent() {
                         const isLow = totalQty <= Number(i.minimum_stock) && Number(i.minimum_stock) > 0;
                         const isActive = i.is_active !== false;
                         const locList = (itemLocationStockMap[i.item_id] || []).filter((l) => l.quantity > 0);
-                        const expInfo = itemExpiryMap[i.item_id];
                         const unitDisplay = i.unit_symbol_hi && locale === 'hi' ? i.unit_symbol_hi : (i.unit_symbol || (locale === 'hi' ? 'इकाई' : 'units'));
 
                         return (
@@ -666,12 +604,6 @@ function InventoryContent() {
                               >
                                 {getLocalizedMasterName(i, locale) || i.name}
                               </button>
-                              {expInfo && (
-                                <div className={`text-[10px] mt-0.5 flex items-center gap-1 ${expInfo.daysLeft <= 0 ? 'text-rose-600 font-bold' : expInfo.daysLeft <= 30 ? 'text-amber-600 font-medium' : 'text-stone-400'}`}>
-                                  <Calendar className="h-2.5 w-2.5" />
-                                  Exp: {expInfo.expiry_date} ({expInfo.daysLeft <= 0 ? 'EXPIRED' : `${expInfo.daysLeft}d left`})
-                                </div>
-                              )}
                             </td>
                             <td className="py-3 px-3 text-stone-600">
                               {(locale === 'hi' && i.category_name_hi) ? i.category_name_hi : (i.category_name || (locale === 'hi' ? 'सामान्य' : 'General'))} <span className="text-stone-400">({t(`inventory.stock.classes.${i.inventory_class}`, { defaultValue: i.inventory_class })})</span>
@@ -915,7 +847,7 @@ function InventoryContent() {
                         <th className="py-2.5 px-3 text-right">{t('inventory.stock.movementColumns.qty')}</th>
                         <th className="py-2.5 px-3 text-right">{t('inventory.stock.movementColumns.rate')}</th>
                         <th className="py-2.5 px-3 text-right">{t('inventory.stock.movementColumns.value')}</th>
-                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.purposeBatch')}</th>
+                        <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.purpose')}</th>
                         <th className="py-2.5 px-3">{t('inventory.stock.movementColumns.notesRef')}</th>
                       </tr>
                     </thead>
@@ -968,11 +900,6 @@ function InventoryContent() {
                             </td>
                             <td className="py-3 px-3 text-stone-700 max-w-[200px]">
                               <div className="font-medium truncate">{m.purpose || '—'}</div>
-                              {m.batch_number && (
-                                <div className="text-[10px] text-stone-500 font-mono flex items-center gap-1">
-                                  Batch: {m.batch_number} {m.expiry_date && `| Exp: ${m.expiry_date}`}
-                                </div>
-                              )}
                             </td>
                             <td className="py-3 px-3 text-stone-500 max-w-[220px]">
                               <div className="text-[11px] truncate" title={m.notes || ''}>

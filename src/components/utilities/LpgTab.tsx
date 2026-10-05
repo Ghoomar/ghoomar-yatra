@@ -135,8 +135,6 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         p_reference_id: null,
         p_reference_type: 'kitchen_issue',
         p_notes: issueNotes.trim() || 'Issued for kitchen cooking production',
-        p_batch_number: null,
-        p_expiry_date: null,
         p_created_by: null,
       });
 
@@ -194,8 +192,6 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         p_reference_id: selectedVendorId || null,
         p_reference_type: 'vendor_purchase',
         p_notes: refNotes || null,
-        p_batch_number: invoiceNo.trim() || null,
-        p_expiry_date: null,
         p_created_by: null,
       });
 

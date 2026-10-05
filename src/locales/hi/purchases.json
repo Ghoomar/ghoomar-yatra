@@ -27,8 +27,6 @@
     "rate": "रेट (₹)",
     "conversion": "बदलने की दर:",
     "derivedRate": "निकाला गया रेट:",
-    "batchLot": "बैच नंबर",
-    "expiryDate": "एक्सपायरी तारीख",
     "centralStoreRoom": "स्टोर: मेन स्टोर रूम",
     "storeAt": "{{location}} में रखें",
     "prevPurchase": "पिछली खरीद:",

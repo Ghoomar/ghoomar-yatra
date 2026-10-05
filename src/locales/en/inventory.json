@@ -14,10 +14,7 @@
     "allCategories": "All Categories",
     "allLocations": "All Locations",
     "hideZeroStock": "Hide items with 0 stock here",
-    "expiringBanner": "{count} {count, plural, one {item has} other {items have}} batches expiring within 30 days or already expired.",
-    "viewExpiring": "View Expiring Items",
     "showAll": "Show All Items",
-    "expiringSoonActive": "Expiring Soon Active",
     "locationLabel": "Location:",
     "itemLabel": "Item:",
     "allItems": "All Items",
@@ -29,7 +26,7 @@
     "newStockAudit": "New Stock Audit",
     "loadingMovements": "Loading movement transactions...",
     "noMovementsFound": "No stock movements found matching your filter criteria.",
-    "searchMovementPlaceholder": "Search item, reason, batch...",
+    "searchMovementPlaceholder": "Search item, reason...",
     "postings": "{count} {count, plural, one {posting} other {postings}}",
     "transferCount": "{count} {count, plural, one {transfer} other {transfers}}",
     "issueCount": "{count} {count, plural, one {issue} other {issues}}",
@@ -128,7 +125,7 @@
       "qty": "Qty",
       "rate": "Rate",
       "value": "Value",
-      "purposeBatch": "Purpose / Batch",
+      "purpose": "Purpose",
       "notesRef": "Notes / Ref"
     }
   },
@@ -154,8 +151,6 @@
     "storage": "Storage",
     "minStock": "Minimum Stock",
     "preferredStock": "Preferred Stock",
-    "shelfLifeDays": "Shelf Life (Days)",
-    "shelfLifePlaceholder": "e.g. 7",
     "replenishment": "Replenishment",
     "currentStock": "Initial / Opening Stock",
     "cost": "Standard / Purchase Cost (₹)",
@@ -206,8 +201,8 @@
     "nameRequired": "Category name is required."
   },
   "drawer": {
-    "title": "Item Movement History & Batches",
-    "historyTitle": "Movement History & Batches: {name}",
+    "title": "Item Movement History",
+    "historyTitle": "Movement History: {name}",
     "currentPosition": "Current Stock Position",
     "stockOnHand": "Stock on Hand",
     "wac": "Weighted Avg Cost (WAC)",

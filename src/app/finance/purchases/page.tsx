@@ -35,8 +35,6 @@ interface PurchaseLineForm {
   pack_quantity?: number;
   pack_rate?: number;
   destination_location_id?: string;
-  batch_number?: string;
-  expiry_date?: string;
   previous_rate?: number;
   previous_date?: string;
 }
@@ -156,7 +154,7 @@ function PurchasesContent() {
         supabase
           .from('inventory_items')
           .select(`
-            id, item_code, name, name_hi, unit_id, secondary_unit_id, conversion_factor, shelf_life_days, is_active, current_stock, current_weighted_average_cost,
+            id, item_code, name, name_hi, unit_id, secondary_unit_id, conversion_factor, is_active, current_stock, current_weighted_average_cost,
             unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
             sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
           `)
@@ -229,8 +227,6 @@ function PurchasesContent() {
           rate: Number(l.rate) || 0,
           total_amount: Number(l.total_amount) || 0,
           unit_symbol: (locale === 'hi' && l.inventory_items?.units?.symbol_hi) ? l.inventory_items.units.symbol_hi : (l.inventory_items?.units?.symbol || ''),
-          batch_number: l.batch_number,
-          expiry_date: l.expiry_date,
         }));
 
         return {
@@ -477,9 +473,7 @@ function PurchasesContent() {
           p_purpose: 'Vendor Inward Receipt',
           p_reference_id: header.id,
           p_reference_type: 'purchase_header',
-          p_notes: `PO ${purchaseNumber} - ${vSelected?.vendor_name || 'Vendor'}${line.batch_number ? ` (Batch: ${line.batch_number})` : ''}`,
-          p_batch_number: line.batch_number || null,
-          p_expiry_date: line.expiry_date || null,
+          p_notes: `PO ${purchaseNumber} - ${vSelected?.vendor_name || 'Vendor'}`,
         });
 
         if (txErr) throw txErr;
@@ -978,11 +972,6 @@ function PurchasesContent() {
                               next[idx].previous_rate = undefined;
                               next[idx].previous_date = undefined;
                             }
-                            if (selItem?.shelf_life_days) {
-                              const d = new Date();
-                              d.setDate(d.getDate() + Number(selItem.shelf_life_days));
-                              next[idx].expiry_date = d.toISOString().split('T')[0];
-                            }
                             setLines(next);
                           }}
                           labelKey={(i) => (i.name_hi && locale === 'hi' ? i.name_hi : i.name)}
@@ -1098,70 +1087,24 @@ function PurchasesContent() {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-stone-200/60 text-[11px]">
-                        <div>
-                          <input
-                            type="text"
-                            placeholder={t('purchases.bills.batchLot')}
-                            value={line.batch_number || ''}
-                            onChange={(e) => {
-                              const next = [...lines];
-                              next[idx].batch_number = e.target.value;
-                              setLines(next);
-                            }}
-                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="date"
-                            value={line.expiry_date || ''}
-                            onChange={(e) => {
-                              const next = [...lines];
-                              next[idx].expiry_date = e.target.value;
-                              setLines(next);
-                            }}
-                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
-                            title={t('purchases.bills.expiryDate')}
-                          />
-                          {currentItem?.shelf_life_days && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const d = new Date();
-                                d.setDate(d.getDate() + Number(currentItem.shelf_life_days));
-                                const next = [...lines];
-                                next[idx].expiry_date = d.toISOString().split('T')[0];
-                                setLines(next);
-                              }}
-                              className="px-1.5 py-1 rounded bg-stone-100 border border-stone-200 text-[10px] text-stone-600 hover:bg-stone-200 whitespace-nowrap"
-                              title={`Auto-fill +${currentItem.shelf_life_days} days shelf life`}
-                            >
-                              +{currentItem.shelf_life_days}d
-                            </button>
-                          )}
-                        </div>
-
-                        <div>
-                          <select
-                            value={line.destination_location_id || ''}
-                            onChange={(e) => {
-                              const next = [...lines];
-                              next[idx].destination_location_id = e.target.value;
-                              setLines(next);
-                            }}
-                            aria-label={t('purchases.bills.centralStoreRoom')}
-                            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
-                          >
-                            <option value="">{t('purchases.bills.centralStoreRoom')}</option>
-                            {locations.map((loc) => (
-                              <option key={loc.id} value={loc.id}>
-                                {t('purchases.bills.storeAt', { location: getLocalizedMasterName(loc, locale) || loc.name })} ({loc.code})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                      <div className="pt-1 border-t border-stone-200/60 text-[11px] max-w-xs">
+                        <select
+                          value={line.destination_location_id || ''}
+                          onChange={(e) => {
+                            const next = [...lines];
+                            next[idx].destination_location_id = e.target.value;
+                            setLines(next);
+                          }}
+                          aria-label={t('purchases.bills.centralStoreRoom')}
+                          className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
+                        >
+                          <option value="">{t('purchases.bills.centralStoreRoom')}</option>
+                          {locations.map((loc) => (
+                            <option key={loc.id} value={loc.id}>
+                              {t('purchases.bills.storeAt', { location: getLocalizedMasterName(loc, locale) || loc.name })} ({loc.code})
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {line.previous_rate !== undefined && line.previous_rate > 0 && (

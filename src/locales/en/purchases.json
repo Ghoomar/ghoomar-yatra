@@ -27,8 +27,6 @@
     "rate": "Rate (₹)",
     "conversion": "Conversion:",
     "derivedRate": "Derived Rate:",
-    "batchLot": "Batch / Lot #",
-    "expiryDate": "Expiry Date",
     "centralStoreRoom": "Store: Central Store Room",
     "storeAt": "Store at {{location}}",
     "prevPurchase": "Previous Base Purchase:",
