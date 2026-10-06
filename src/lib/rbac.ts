@@ -2,7 +2,7 @@
  * Role-Based Access Control (RBAC) Constants, Module Mapping, and Evaluators
  */
 
-export const ROUTE_PERMISSIONS: Record<string, string> = {
+export const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   '/dashboard': 'dashboard.view',
   '/operations/daily': 'operations.daily',
   '/operations/gate': 'operations.gate',
@@ -12,7 +12,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   '/finance/expenses': 'finance.expenses',
   '/finance/utilities': 'finance.utilities',
   '/finance/profitability': 'finance.profitability',
-  '/inventory': 'inventory.stock',
+  '/inventory': ['inventory.stock', 'inventory.assets'],
   '/inventory/issues': 'inventory.issues',
   '/inventory/assets': 'inventory.assets',
   '/inventory/count': 'inventory.count',
@@ -57,7 +57,7 @@ export function hasPermission(
 /**
  * Returns the required permission for a pathname, or null if unrestricted.
  */
-export function getRequiredPermissionForPath(pathname: string): string | null {
+export function getRequiredPermissionForPath(pathname: string): string | string[] | null {
   // Exact match first
   if (ROUTE_PERMISSIONS[pathname]) {
     return ROUTE_PERMISSIONS[pathname];

@@ -35,6 +35,15 @@
       "catalog": "सामान लिस्ट ({count})",
       "movements": "स्टॉक हलचल ({count})"
     },
+    "topTabs": {
+      "stock": "इन्वेंटरी",
+      "assets": "फिजिकल एसेट्स"
+    },
+    "secondaryKpi": {
+      "assetsValue": "एसेट्स: {val}",
+      "uniformsValue": "यूनिफॉर्म: {val}",
+      "consumableNote": "खाद्य और कंज्यूमेबल्स"
+    },
     "kpi": {
       "totalItems": "कुल सामान",
       "totalValuation": "स्टॉक की कीमत",
@@ -323,6 +332,7 @@
     "countedBy": "किसने गिना",
     "locationFilter": "लोकेशन:",
     "allClasses": "सभी सामान प्रकार",
+    "consumablesOnly": "कंज्यूमेबल्स और खाद्य सामग्री",
     "allLocations": "सभी जगहें",
     "classFilter": "प्रकार:",
     "searchPlaceholder": "सामान खोजें...",

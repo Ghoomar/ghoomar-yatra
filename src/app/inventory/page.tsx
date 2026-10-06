@@ -13,8 +13,11 @@ import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/mas
 import { ItemModal } from '@/components/inventory/ItemModal';
 import { UnitModal } from '@/components/admin/UnitModal';
 import { ItemMovementDrawer } from '@/components/inventory/ItemMovementDrawer';
+import { PhysicalAssetsView } from '@/components/inventory/PhysicalAssetsView';
+import { useAppRole } from '@/components/layout/AppShell';
 import {
   Package,
+  Layers,
   ArrowRightLeft,
   RefreshCw,
   AlertTriangle,
@@ -32,6 +35,8 @@ import {
   Truck,
   Flame,
   UtensilsCrossed,
+  ShieldAlert,
+  ArrowLeft,
 } from 'lucide-react';
 
 function getMovementBadge(type: string, t: (key: string, params?: any) => string) {
@@ -103,22 +108,46 @@ function getMovementBadge(type: string, t: (key: string, params?: any) => string
 
 function InventoryContent() {
   const { t, locale } = useI18n();
+  const { hasPermission, role: activeRole } = useAppRole();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  const canAccessStock = hasPermission('inventory.stock');
+  const canAccessAssets = hasPermission('inventory.assets');
+
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'catalog' | 'movements'>(
-    tabParam === 'movements' ? 'movements' : 'catalog'
+  const subtabParam = searchParams.get('subtab');
+
+  // Resolve effective top-level tab based on explicit granular permissions
+  let effectiveTopTab: 'stock' | 'assets' = 'stock';
+  if (tabParam === 'assets') {
+    effectiveTopTab = 'assets';
+  } else if (!canAccessStock && canAccessAssets) {
+    // User only has permission for assets, default to assets
+    effectiveTopTab = 'assets';
+  } else {
+    effectiveTopTab = 'stock';
+  }
+
+  const isTabAuthorized =
+    (effectiveTopTab === 'stock' && canAccessStock) ||
+    (effectiveTopTab === 'assets' && canAccessAssets);
+
+  const topTab = effectiveTopTab;
+
+  // Subordinate tab inside Inventory: 'catalog' (default) or 'movements'
+  const [subTab, setSubTab] = useState<'catalog' | 'movements'>(
+    tabParam === 'movements' || subtabParam === 'movements' ? 'movements' : 'catalog'
   );
 
   useEffect(() => {
-    if (tabParam === 'movements') {
-      setActiveTab('movements');
-    } else if (tabParam === 'catalog') {
-      setActiveTab('catalog');
+    if (tabParam === 'movements' || subtabParam === 'movements') {
+      setSubTab('movements');
+    } else {
+      setSubTab('catalog');
     }
-  }, [tabParam]);
+  }, [tabParam, subtabParam]);
 
   // Catalog State
   const [items, setItems] = useState<any[]>([]);
@@ -186,9 +215,11 @@ function InventoryContent() {
   };
 
   useEffect(() => {
-    loadData();
-    loadMovements();
-  }, []);
+    if (canAccessStock) {
+      loadData();
+      loadMovements();
+    }
+  }, [canAccessStock]);
 
   // Map of item_id -> array of { location_id, location_name, location_code, quantity }
   const itemLocationStockMap = useMemo(() => {
@@ -230,8 +261,51 @@ function InventoryContent() {
     }
   };
 
+  // Separate consumable items from durable assets and uniforms
+  const consumableItems = useMemo(() => {
+    return items.filter(
+      (i) => i.inventory_class === 'Food Raw Material' || i.inventory_class === 'Non-Food Consumable'
+    );
+  }, [items]);
+
+  const physicalAssetItems = useMemo(() => {
+    return items.filter((i) => i.inventory_class === 'Physical Asset');
+  }, [items]);
+
+  const uniformItems = useMemo(() => {
+    return items.filter((i) => i.inventory_class === 'Uniform');
+  }, [items]);
+
+  // Primary consumable stock value
+  const consumableStockValue = useMemo(() => {
+    return consumableItems.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
+  }, [consumableItems]);
+
+  // Secondary read-only indicators
+  const physicalAssetsValue = useMemo(() => {
+    return physicalAssetItems.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
+  }, [physicalAssetItems]);
+
+  const uniformsStockValue = useMemo(() => {
+    return uniformItems.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
+  }, [uniformItems]);
+
+  const lowStockCount = useMemo(() => {
+    return consumableItems.filter(
+      (i) => Number(i.current_quantity) <= Number(i.minimum_stock) && Number(i.minimum_stock) > 0 && i.is_active !== false
+    ).length;
+  }, [consumableItems]);
+
+  const activeCount = useMemo(() => {
+    return consumableItems.filter((i) => i.is_active !== false).length;
+  }, [consumableItems]);
+
+  const inactiveCount = useMemo(() => {
+    return consumableItems.filter((i) => i.is_active === false).length;
+  }, [consumableItems]);
+
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    return consumableItems.filter((item) => {
       const matchesClass = filterClass === 'ALL' || item.inventory_class === filterClass;
       const matchesStatus =
         statusFilter === 'ALL' ||
@@ -250,7 +324,7 @@ function InventoryContent() {
 
       return matchesClass && matchesStatus && matchesSearch;
     });
-  }, [items, filterClass, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup]);
+  }, [consumableItems, filterClass, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup]);
 
   const filteredMovements = useMemo(() => {
     return movements.filter((m) => {
@@ -279,13 +353,6 @@ function InventoryContent() {
     });
   }, [movements, movementTypeFilter, movementItemFilter, movementLocationFilter, movementSearch]);
 
-  const totalStockValue = items.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
-  const lowStockCount = items.filter(
-    (i) => Number(i.current_quantity) <= Number(i.minimum_stock) && Number(i.minimum_stock) > 0 && i.is_active !== false
-  ).length;
-  const activeCount = items.filter((i) => i.is_active !== false).length;
-  const inactiveCount = items.filter((i) => i.is_active === false).length;
-
   const totalAdjustments = movements.filter((m) => m.movement_type === 'count_adjustment' || m.movement_type === 'physical_count_adjustment');
   const netAdjustmentValue = totalAdjustments.reduce(
     (sum, m) => sum + (Number(m.quantity) < 0 ? -Number(m.total_value) : Number(m.total_value)),
@@ -299,110 +366,197 @@ function InventoryContent() {
 
   const selectedLocationObj = locations.find((l) => l.id === selectedLocationId);
 
+  if (!isTabAuthorized) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-xl p-8 max-w-md w-full text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-stone-900">{t('common.app.accessRestricted')}</h2>
+            <p className="text-xs text-stone-500 mt-1">
+              {t('common.app.accessRestrictedDesc', {
+                role: activeRole,
+                path: `/inventory?tab=${effectiveTopTab}`,
+              })}
+            </p>
+            <p className="text-[11px] text-stone-400 mt-2 font-mono">
+              {t('common.app.requiredPermission', {
+                permission: effectiveTopTab === 'stock' ? 'inventory.stock' : 'inventory.assets',
+              })}
+            </p>
+          </div>
+          <div className="pt-2">
+            <Button
+              variant="amber"
+              size="sm"
+              onClick={() => {
+                if (canAccessStock) router.push('/inventory?tab=stock');
+                else if (canAccessAssets) router.push('/inventory?tab=assets');
+                else router.push('/dashboard');
+              }}
+              className="gap-2 mx-auto"
+            >
+              <ArrowLeft className="h-4 w-4" /> {t('common.app.returnToCommandCenter')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-full overflow-hidden">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
-            <Package className="h-6 w-6 text-amber-600" />
-            {t('inventory.stock.title')}
-          </h1>
+      {/* Top-Level Navigation: [ Inventory ] [ Physical Assets ] */}
+      {canAccessStock && canAccessAssets && (
+        <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
+          <div className="flex border-b border-stone-200 bg-white rounded-t-xl min-w-max shadow-xs">
+            <button
+              onClick={() => {
+                router.push('/inventory?tab=stock');
+              }}
+              className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                topTab === 'stock'
+                  ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              {t('inventory.stock.topTabs.stock')}
+            </button>
+
+            <button
+              onClick={() => {
+                router.push('/inventory?tab=assets');
+              }}
+              className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                topTab === 'assets'
+                  ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Layers className="h-4 w-4" />
+              {t('inventory.stock.topTabs.assets')}
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setEditingItem(null);
-              setItemModalOpen(true);
-            }}
-            className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
-          >
-            <Plus className="h-4 w-4" /> {t('inventory.stock.addItem')}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setUnitModalOpen(true)}
-            className="gap-1.5"
-          >
-            <Scale className="h-4 w-4 text-stone-500" /> {t('inventory.stock.units')}
-          </Button>
-
-          <Link href="/inventory/issues">
-            <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <ArrowRightLeft className="h-4 w-4 text-amber-600" /> {t('inventory.stock.issuesAndTransfers')}
-            </Button>
-          </Link>
-
-          <Link href="/inventory/count">
-            <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
-              <ClipboardList className="h-4 w-4 text-stone-500" /> {t('inventory.stock.stockAudit')}
-            </Button>
-          </Link>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              loadData();
-              loadMovements();
-            }}
-            title={t('inventory.stock.refresh')}
-          >
-            <RefreshCw className={`h-4 w-4 text-stone-600 ${loading || movementsLoading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </div>
-
-      {/* Primary Tab Navigation */}
-      <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
-        <div className="flex border-b border-stone-200 bg-white rounded-t-xl min-w-max">
-          <button
-            onClick={() => {
-              setActiveTab('catalog');
-              router.push('/inventory?tab=catalog');
-            }}
-            className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-              activeTab === 'catalog'
-                ? 'border-amber-600 text-amber-700 bg-amber-50/50'
-                : 'border-transparent text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <Package className="h-4 w-4" />
-            {t('inventory.stock.tabs.catalog', { count: items.length })}
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveTab('movements');
-              router.push('/inventory?tab=movements');
-            }}
-            className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-              activeTab === 'movements'
-                ? 'border-amber-600 text-amber-700 bg-amber-50/50'
-                : 'border-transparent text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            <ArrowRightLeft className="h-4 w-4" />
-            {t('inventory.stock.tabs.movements', { count: movements.length })}
-          </button>
-        </div>
-      </div>
-
-      {activeTab === 'catalog' ? (
+      {topTab === 'assets' ? (
+        <PhysicalAssetsView />
+      ) : (
         <>
-          {/* Catalog KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>{t('inventory.stock.kpi.totalValuation')}</CardDescription>
-                <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalStockValue)}</div>
-              </CardHeader>
-            </Card>
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
+                <Package className="h-6 w-6 text-amber-600" />
+                {t('inventory.stock.title')}
+              </h1>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  setEditingItem(null);
+                  setItemModalOpen(true);
+                }}
+                className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <Plus className="h-4 w-4" /> {t('inventory.stock.addItem')}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setUnitModalOpen(true)}
+                className="gap-1.5"
+              >
+                <Scale className="h-4 w-4 text-stone-500" /> {t('inventory.stock.units')}
+              </Button>
+
+              <Link href="/inventory/issues">
+                <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
+                  <ArrowRightLeft className="h-4 w-4 text-amber-600" /> {t('inventory.stock.issuesAndTransfers')}
+                </Button>
+              </Link>
+
+              <Link href="/inventory/count">
+                <Button variant="outline" size="sm" className="gap-1.5 text-stone-700">
+                  <ClipboardList className="h-4 w-4 text-stone-500" /> {t('inventory.stock.stockAudit')}
+                </Button>
+              </Link>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  loadData();
+                  loadMovements();
+                }}
+                title={t('inventory.stock.refresh')}
+              >
+                <RefreshCw className={`h-4 w-4 text-stone-600 ${loading || movementsLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
+
+          {/* Subordinate Tabs: [ Catalog ] [ Movements ] */}
+          <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
+            <div className="flex border-b border-stone-200 bg-white rounded-t-xl min-w-max">
+              <button
+                onClick={() => {
+                  setSubTab('catalog');
+                  router.push('/inventory?tab=stock');
+                }}
+                className={`flex items-center gap-2 py-2.5 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  subTab === 'catalog'
+                    ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <Package className="h-3.5 w-3.5" />
+                {t('inventory.stock.tabs.catalog', { count: consumableItems.length })}
+              </button>
+
+              <button
+                onClick={() => {
+                  setSubTab('movements');
+                  router.push('/inventory?tab=stock&subtab=movements');
+                }}
+                className={`flex items-center gap-2 py-2.5 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  subTab === 'movements'
+                    ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+                {t('inventory.stock.tabs.movements', { count: movements.length })}
+              </button>
+            </div>
+          </div>
+
+          {subTab === 'catalog' ? (
+            <>
+              {/* Catalog KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardDescription className="flex items-center justify-between">
+                      <span>{t('inventory.stock.kpi.totalValuation')}</span>
+                      <span className="text-[10px] text-stone-400 font-medium">({t('inventory.stock.secondaryKpi.consumableNote')})</span>
+                    </CardDescription>
+                    <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(consumableStockValue)}</div>
+                    <div className="text-[11px] text-stone-500 mt-1.5 pt-1.5 border-t border-stone-100 flex items-center justify-between gap-1 flex-wrap">
+                      <span>{t('inventory.stock.secondaryKpi.assetsValue', { val: formatINR(physicalAssetsValue) })}</span>
+                      <span>•</span>
+                      <span>{t('inventory.stock.secondaryKpi.uniformsValue', { val: formatINR(uniformsStockValue) })}</span>
+                    </div>
+                  </CardHeader>
+                </Card>
 
             <Card>
               <CardHeader className="pb-3">
@@ -495,7 +649,7 @@ function InventoryContent() {
             {/* Bottom Row: Category Class Pills & Search Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-stone-100">
               <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                {['ALL', 'Food Raw Material', 'Non-Food Consumable', 'Physical Asset', 'Uniform'].map((cls) => (
+                {['ALL', 'Food Raw Material', 'Non-Food Consumable'].map((cls) => (
                   <button
                     key={cls}
                     onClick={() => setFilterClass(cls)}
@@ -948,6 +1102,8 @@ function InventoryContent() {
         onClose={() => setSelectedMovementItem(null)}
         item={selectedMovementItem}
       />
+        </>
+      )}
     </div>
   );
 }

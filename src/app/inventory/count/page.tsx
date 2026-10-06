@@ -44,7 +44,7 @@ export default function StockCountPage() {
   const [itemsMaster, setItemsMaster] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('ALL');
-  const [selectedClass, setSelectedClass] = useState<string>('All');
+  const [selectedClass, setSelectedClass] = useState<string>('CONSUMABLES');
   const [searchQuery, setSearchQuery] = useState('');
   const [rows, setRows] = useState<CountItemRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +127,11 @@ export default function StockCountPage() {
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      if (selectedClass !== 'All' && r.inventory_class !== selectedClass) {
+      if (selectedClass === 'CONSUMABLES') {
+        if (r.inventory_class !== 'Food Raw Material' && r.inventory_class !== 'Non-Food Consumable') {
+          return false;
+        }
+      } else if (selectedClass !== 'All' && r.inventory_class !== selectedClass) {
         return false;
       }
       if (searchQuery.trim()) {
@@ -332,7 +336,11 @@ export default function StockCountPage() {
           </div>
           <div className="text-[10px] text-stone-500 mt-0.5">
             {t('inventory.count.classTarget', {
-              class: selectedClass === 'All' ? t('inventory.count.allClasses') : (t(`inventory.classes.${selectedClass}` as any) || selectedClass)
+              class: selectedClass === 'CONSUMABLES'
+                ? t('inventory.count.consumablesOnly')
+                : selectedClass === 'All'
+                ? t('inventory.count.allClasses')
+                : (t(`inventory.classes.${selectedClass}` as any) || selectedClass)
             })}
           </div>
         </Card>
@@ -367,11 +375,12 @@ export default function StockCountPage() {
             onChange={(e) => setSelectedClass(e.target.value)}
             className="w-full rounded-md border border-stone-300 p-1.5 text-stone-900 bg-white focus:outline-none"
           >
-            <option value="All">{t('inventory.count.allClasses')}</option>
+            <option value="CONSUMABLES">{t('inventory.count.consumablesOnly')}</option>
             <option value="Food Raw Material">{t('inventory.classes.Food Raw Material')}</option>
+            <option value="Non-Food Consumable">{t('inventory.classes.Non-Food Consumable')}</option>
+            <option value="All">{t('inventory.count.allClasses')}</option>
             <option value="Physical Asset">{t('inventory.classes.Physical Asset')}</option>
             <option value="Uniform">{t('inventory.classes.Uniform')}</option>
-            <option value="Non-Food Consumable">{t('inventory.classes.Non-Food Consumable')}</option>
           </select>
         </div>
 

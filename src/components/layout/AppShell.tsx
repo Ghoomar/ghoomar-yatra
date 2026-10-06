@@ -339,7 +339,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Direct URL route permission check
   const requiredPermission = getRequiredPermissionForPath(pathname);
-  const isAuthorized = !requiredPermission || checkPermission(requiredPermission);
+  const isAuthorized =
+    !requiredPermission ||
+    (Array.isArray(requiredPermission)
+      ? requiredPermission.some((p) => checkPermission(p))
+      : checkPermission(requiredPermission));
 
   return (
     <I18nProvider userId={user?.id} profileLocale={profile?.locale}>
@@ -414,10 +418,14 @@ function AccessRestrictedNotice({
 }: {
   activeRole: string;
   pathname: string;
-  requiredPermission?: string | null;
+  requiredPermission?: string | string[] | null;
 }) {
   const { t } = useI18n();
   const router = useRouter();
+
+  const formattedPerm = Array.isArray(requiredPermission)
+    ? requiredPermission.join(' / ')
+    : requiredPermission;
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -430,9 +438,9 @@ function AccessRestrictedNotice({
           <p className="text-xs text-stone-500 mt-1">
             {t('common.app.accessRestrictedDesc', { role: activeRole, path: pathname })}
           </p>
-          {requiredPermission && (
+          {formattedPerm && (
             <p className="text-[11px] text-stone-400 mt-2">
-              {t('common.app.requiredPermission', { permission: requiredPermission })}
+              {t('common.app.requiredPermission', { permission: formattedPerm })}
             </p>
           )}
         </div>

@@ -69,9 +69,8 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
     {
       titleKey: 'navigation.sections.inventory',
       items: [
-        { href: '/inventory', labelKey: 'navigation.items.inventory', icon: Package, permission: 'inventory.stock' },
+        { href: '/inventory', labelKey: 'navigation.items.inventoryAndAssets', icon: Package, permission: ['inventory.stock', 'inventory.assets'] },
         { href: '/inventory/issues', labelKey: 'navigation.items.storeIssues', icon: ArrowRightLeft, permission: 'inventory.issues' },
-        { href: '/inventory/assets', labelKey: 'navigation.items.physicalAssets', icon: Layers, permission: 'inventory.assets' },
         { href: '/inventory/count', labelKey: 'navigation.items.physicalCount', icon: ClipboardCheck, permission: 'inventory.count' },
       ]
     },
@@ -141,7 +140,13 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
         <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5">
           {navSections.map((section) => {
             // Dynamically filter items by database RBAC permissions
-            const visibleItems = section.items.filter((item) => hasPermission(item.permission));
+            const visibleItems = section.items.filter((item) => {
+              if (!item.permission) return true;
+              if (Array.isArray(item.permission)) {
+                return item.permission.some((p) => hasPermission(p));
+              }
+              return hasPermission(item.permission);
+            });
             if (visibleItems.length === 0) return null;
 
             // Collect all navigation hrefs to resolve hierarchical route collisions
@@ -154,6 +159,9 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
                 </div>
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => {
+                    const targetHref = (item.href === '/inventory' && !hasPermission('inventory.stock') && hasPermission('inventory.assets'))
+                      ? '/inventory?tab=assets'
+                      : item.href;
                     const isExactMatch = pathname === item.href;
                     const isPrefixMatch = pathname.startsWith(item.href + '/');
                     // If this is a prefix match, ensure no other nav item is a more specific match
@@ -166,7 +174,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
                     return (
                       <Link
                         key={item.href}
-                        href={item.href}
+                        href={targetHref}
                         onClick={onClose}
                         className={`
                           flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors

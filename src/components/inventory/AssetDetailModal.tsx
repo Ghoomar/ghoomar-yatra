@@ -104,7 +104,6 @@ export function AssetDetailModal({
   const totalInService = locationAllocations.reduce((sum: number, ls: any) => sum + Number(ls.quantity || 0), 0);
   const brokenQty = Number(asset.broken_qty || 0);
   const lostQty = Number(asset.lost_qty || 0);
-  const totalOwned = totalInService + brokenQty + lostQty;
 
   const handleExecuteTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -294,12 +293,6 @@ export function AssetDetailModal({
           const unitSym = getLocalizedMasterSymbol(asset.unit, locale) || asset.unit?.symbol || 'pcs';
           return (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
-                <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.assets.table.total')}</div>
-                <div className="text-base font-bold text-stone-900 mt-0.5">
-                  {totalOwned} <span className="text-[10px] text-stone-500 font-normal">{unitSym}</span>
-                </div>
-              </div>
               <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-200">
                 <div className="text-[10px] text-emerald-700 uppercase tracking-wider font-semibold">{t('inventory.assets.inService')}</div>
                 <div className="text-base font-bold text-emerald-900 mt-0.5">
@@ -316,6 +309,12 @@ export function AssetDetailModal({
                 <div className="text-[10px] text-red-700 uppercase tracking-wider font-semibold">{t('inventory.assets.missingLost')}</div>
                 <div className="text-base font-bold text-red-900 mt-0.5">
                   {lostQty} <span className="text-[10px] text-red-600 font-normal">{unitSym}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
+                <div className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">{t('inventory.assets.table.locations')}</div>
+                <div className="text-base font-bold text-stone-900 mt-0.5">
+                  {locationAllocations.length} <span className="text-[10px] text-stone-500 font-normal">{locale === 'hi' ? 'कमरे' : 'Rooms'}</span>
                 </div>
               </div>
             </div>

@@ -61,8 +61,7 @@ export default function UniformsPage() {
           employee:employees(name, employee_code, role:employee_roles(name, name_hi)),
           items:employee_uniform_issue_items(
             id, quantity, status, item_id, uniform_item_id, returned_at,
-            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, name_hi, item_code),
-            legacy_uniform:uniform_items(name, size)
+            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, name_hi, item_code)
           )
         `)
         .order('created_at', { ascending: false });
@@ -422,7 +421,7 @@ export default function UniformsPage() {
                     <td className="py-3 px-3">
                       <div className="space-y-1">
                         {(iss.items || []).map((item: any) => {
-                          const itemName = (item.item ? getLocalizedMasterName(item.item, locale) : null) || item.legacy_uniform?.name || t('operations.uniforms.uniformItemFallback');
+                          const itemName = (item.item ? getLocalizedMasterName(item.item, locale) : null) || t('operations.uniforms.uniformItemFallback');
                           const itemCode = item.item?.item_code || '';
                           const isIssued = item.status === 'Issued';
                           const targetUniformId = item.item_id || item.uniform_item_id;

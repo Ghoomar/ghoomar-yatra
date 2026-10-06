@@ -98,8 +98,7 @@ export function StaffLedgerDrawer({
           id, business_date, notes, created_at,
           items:employee_uniform_issue_items(
             id, quantity, status, item_id, uniform_item_id, returned_at, notes,
-            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, name_hi, item_code, current_stock, current_weighted_average_cost),
-            legacy_uniform:uniform_items(name, size)
+            item:inventory_items!employee_uniform_issue_items_item_id_fkey(name, name_hi, item_code, current_stock, current_weighted_average_cost)
           )
         `)
         .eq('employee_id', employeeId)
@@ -526,7 +525,7 @@ export function StaffLedgerDrawer({
                     >
                       <div>
                         <span className="font-semibold text-stone-900">
-                          {getLocalizedMasterName(u.item, locale) || u.legacy_uniform?.name || (locale === 'hi' ? 'यूनिफॉर्म आइटम' : 'Uniform Item')}
+                          {getLocalizedMasterName(u.item, locale) || (locale === 'hi' ? 'यूनिफॉर्म आइटम' : 'Uniform Item')}
                         </span>
                         <div className="text-[11px] text-stone-500 mt-0.5">
                           {locale === 'hi' ? `जारी दिनांक: ${u.issue_date} • मात्रा: ${u.quantity}` : `Issued: ${u.issue_date} • Qty: ${u.quantity}`}

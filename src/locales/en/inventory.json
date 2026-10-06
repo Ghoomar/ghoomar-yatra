@@ -35,6 +35,15 @@
       "catalog": "Catalog ({count})",
       "movements": "Movements ({count})"
     },
+    "topTabs": {
+      "stock": "Inventory",
+      "assets": "Physical Assets"
+    },
+    "secondaryKpi": {
+      "assetsValue": "Assets: {val}",
+      "uniformsValue": "Uniforms: {val}",
+      "consumableNote": "Food & Consumables"
+    },
     "kpi": {
       "totalItems": "Items",
       "totalValuation": "Stock Value",
@@ -323,6 +332,7 @@
     "countedBy": "Audit Conducted By",
     "locationFilter": "Location:",
     "allClasses": "All Inventory Classes",
+    "consumablesOnly": "Consumables & Food",
     "allLocations": "All Locations",
     "classFilter": "Class:",
     "searchPlaceholder": "Search items...",
