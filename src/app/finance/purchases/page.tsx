@@ -45,21 +45,21 @@ function PurchasesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Active view tab state (synchronized with URL query param `?view=vendors` / `?view=invoices`)
+  // Active view tab state (synchronized with URL query param `?view=invoices` / `?view=vendors`)
   const urlView = searchParams.get('view');
-  const [activeView, setActiveView] = useState<'vendors' | 'invoices'>(
-    urlView === 'invoices' ? 'invoices' : 'vendors'
+  const [activeView, setActiveView] = useState<'invoices' | 'vendors'>(
+    urlView === 'vendors' ? 'vendors' : 'invoices'
   );
 
   useEffect(() => {
-    if (urlView === 'invoices') {
-      setActiveView('invoices');
-    } else if (urlView === 'vendors') {
+    if (urlView === 'vendors') {
       setActiveView('vendors');
+    } else if (urlView === 'invoices') {
+      setActiveView('invoices');
     }
   }, [urlView]);
 
-  const handleViewChange = (view: 'vendors' | 'invoices') => {
+  const handleViewChange = (view: 'invoices' | 'vendors') => {
     setActiveView(view);
     const params = new URLSearchParams(window.location.search);
     params.set('view', view);
@@ -608,36 +608,7 @@ function PurchasesContent() {
 
         {/* Dynamic Contextual Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {activeView === 'vendors' ? (
-            <>
-              <Button
-                variant="amber"
-                size="sm"
-                onClick={() => {
-                  setEditingVendor(null);
-                  setVendorModalOpen(true);
-                }}
-                className="gap-1.5 text-xs shadow-xs"
-              >
-                <Plus className="h-4 w-4" />
-                <span>{t('purchases.vendors.addVendor')}</span>
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCategoryModalOpen(true)}
-                className="gap-1.5 text-xs text-stone-700 bg-white"
-              >
-                <Tag className="h-4 w-4 text-amber-600" />
-                <span>{t('purchases.vendors.categories')}</span>
-              </Button>
-
-              <Button variant="outline" size="sm" onClick={loadData} title="Refresh" className="bg-white">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </>
-          ) : (
+          {activeView === 'invoices' ? (
             <>
               <Button
                 variant="amber"
@@ -660,6 +631,35 @@ function PurchasesContent() {
               >
                 <CreditCard className="h-4 w-4" />
                 <span>{t('purchases.bills.recordPayment')}</span>
+              </Button>
+
+              <Button variant="outline" size="sm" onClick={loadData} title="Refresh" className="bg-white">
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="amber"
+                size="sm"
+                onClick={() => {
+                  setEditingVendor(null);
+                  setVendorModalOpen(true);
+                }}
+                className="gap-1.5 text-xs shadow-xs"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{t('purchases.vendors.addVendor')}</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCategoryModalOpen(true)}
+                className="gap-1.5 text-xs text-stone-700 bg-white"
+              >
+                <Tag className="h-4 w-4 text-amber-600" />
+                <span>{t('purchases.vendors.categories')}</span>
               </Button>
 
               <Button variant="outline" size="sm" onClick={loadData} title="Refresh" className="bg-white">
@@ -721,24 +721,8 @@ function PurchasesContent() {
         </div>
       )}
 
-      {/* View Switcher Tabs: [Vendors] [Purchase Invoices] */}
+      {/* View Switcher Tabs: [Purchase Invoices] [Vendors] */}
       <div className="flex items-center gap-2 border-b border-stone-200 pb-1">
-        <button
-          type="button"
-          onClick={() => handleViewChange('vendors')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 -mb-[5px] ${
-            activeView === 'vendors'
-              ? 'border-amber-600 text-amber-900 bg-amber-50/60 shadow-xs'
-              : 'border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50'
-          }`}
-        >
-          <Building2 className="h-4 w-4" />
-          <span>{t('purchases.tabs.vendors')}</span>
-          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-stone-200/70 text-stone-700 font-normal">
-            {vendors.length}
-          </span>
-        </button>
-
         <button
           type="button"
           onClick={() => handleViewChange('invoices')}
@@ -754,10 +738,37 @@ function PurchasesContent() {
             {invoices.length}
           </span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleViewChange('vendors')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 -mb-[5px] ${
+            activeView === 'vendors'
+              ? 'border-amber-600 text-amber-900 bg-amber-50/60 shadow-xs'
+              : 'border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>{t('purchases.tabs.vendors')}</span>
+          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-stone-200/70 text-stone-700 font-normal">
+            {vendors.length}
+          </span>
+        </button>
       </div>
 
       {/* Primary Views Content */}
-      {activeView === 'vendors' ? (
+      {activeView === 'invoices' ? (
+        <PurchaseInvoicesView
+          invoices={invoices}
+          loading={loading}
+          onRefresh={loadData}
+          onNewInvoice={() => setShowPurchaseModal(true)}
+          onRecordPayment={(vendorId) => {
+            if (vendorId) setPaymentVendorId(vendorId);
+            setShowPaymentModal(true);
+          }}
+        />
+      ) : (
         <VendorsView
           vendors={vendors}
           vendorItems={vendorItems}
@@ -773,17 +784,6 @@ function PurchasesContent() {
           onEditVendor={handleOpenEditModal}
           onToggleStatus={handleToggleStatus}
           onInitiateDelete={handleInitiateDelete}
-        />
-      ) : (
-        <PurchaseInvoicesView
-          invoices={invoices}
-          loading={loading}
-          onRefresh={loadData}
-          onNewInvoice={() => setShowPurchaseModal(true)}
-          onRecordPayment={(vendorId) => {
-            if (vendorId) setPaymentVendorId(vendorId);
-            setShowPaymentModal(true);
-          }}
         />
       )}
 
