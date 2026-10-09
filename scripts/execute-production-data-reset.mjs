@@ -103,12 +103,18 @@ async function executeReset() {
   await deleteAll('stock_movements');
   await deleteAll('item_location_stocks');
 
-  // Purge dummy inventory items, strictly preserving system anchors CON-DSL-001 and CON-LPG-001
-  console.log('Purging dummy inventory items (preserving system anchors CON-DSL-001 and CON-LPG-001)...');
+  // Purge legacy dummy inventory items if present, preserving legitimate catalog items and anchors
+  const KNOWN_DUMMY_SKUS = [
+    'AST-001', 'AST-002', 'AST-003', 'AST-DISP-001',
+    'BEV-WATER-001', 'CON-SACHET-001', 'DAI-001', 'OIL-001',
+    'RAW-001', 'RAW-002', 'RAW-003', 'RAW-004', 'RAW-005', 'RAW-007',
+    'STN-001', 'UNI-001', 'UNI-002', 'UNI-003', 'UNI-004', 'UNI-005'
+  ];
+  console.log('Purging legacy dummy inventory items (if any remain)...');
   const { error: delInvErr } = await supabase
     .from('inventory_items')
     .delete()
-    .not('item_code', 'in', '("CON-DSL-001","CON-LPG-001")');
+    .in('item_code', KNOWN_DUMMY_SKUS);
   if (delInvErr) throw delInvErr;
 
   // Reset stock counters on preserved inventory_items (CON-DSL-001, CON-LPG-001)
