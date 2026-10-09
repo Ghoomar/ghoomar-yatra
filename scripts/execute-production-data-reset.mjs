@@ -103,16 +103,16 @@ async function executeReset() {
   await deleteAll('stock_movements');
   await deleteAll('item_location_stocks');
 
-  // Delete the 4 dummy physical asset items from inventory_items
-  console.log('Deleting 4 dummy physical asset items from inventory_items (AST-001, AST-002, AST-003, AST-DISP-001)...');
-  const { error: delAstErr } = await supabase
+  // Purge dummy inventory items, strictly preserving system anchors CON-DSL-001 and CON-LPG-001
+  console.log('Purging dummy inventory items (preserving system anchors CON-DSL-001 and CON-LPG-001)...');
+  const { error: delInvErr } = await supabase
     .from('inventory_items')
     .delete()
-    .in('item_code', ['AST-001', 'AST-002', 'AST-003', 'AST-DISP-001']);
-  if (delAstErr) throw delAstErr;
+    .not('item_code', 'in', '("CON-DSL-001","CON-LPG-001")');
+  if (delInvErr) throw delInvErr;
 
-  // Reset stock counters on remaining inventory_items
-  console.log('Resetting stock counters on remaining inventory_items to 0...');
+  // Reset stock counters on preserved inventory_items (CON-DSL-001, CON-LPG-001)
+  console.log('Resetting stock counters on preserved inventory_items to 0...');
   const { error: rstStockErr } = await supabase
     .from('inventory_items')
     .update({ current_stock: 0, current_weighted_average_cost: 0 })

@@ -41,8 +41,8 @@ export default function ProfitabilityPage() {
     totalOperationalUtilities: 0,
   });
   const [variableExpenses, setVariableExpenses] = useState(0);
-  const [totalSalaries, setTotalSalaries] = useState(68000);
-  const [monthlyOtherFixed, setMonthlyOtherFixed] = useState(3500);
+  const [totalSalaries, setTotalSalaries] = useState(0);
+  const [monthlyOtherFixed, setMonthlyOtherFixed] = useState(0);
   const [, setPlanningBreakEven] = useState(3000000);
   const [healthBufferPercent, setHealthBufferPercent] = useState(10);
   const [rentRate, setRentRate] = useState(0.10);
@@ -150,7 +150,7 @@ export default function ProfitabilityPage() {
         .eq('employment_status', 'Active');
 
       const payroll = (emps || []).reduce((s, e) => s + (Number(e.monthly_salary) || 0), 0);
-      setTotalSalaries(payroll > 0 ? payroll : 68000);
+      setTotalSalaries(payroll);
 
       // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules, Electricity Ledger & Break-Even Targets
       const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecReadings }] = await Promise.all([
@@ -173,16 +173,18 @@ export default function ProfitabilityPage() {
       if (costRules && costRules.length > 0) {
         const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
         const fixedSum = fixedRules.reduce((sum, r) => sum + (Number(r.amount_or_rate) || 0), 0);
-        if (fixedSum > 0) setMonthlyOtherFixed(fixedSum);
+        setMonthlyOtherFixed(fixedSum);
 
         const rentRule = costRules.find((r) => r.category === 'Rent' && r.calculation_method === 'percentage_of_revenue');
-        if (rentRule) setRentRate(Number(rentRule.amount_or_rate) || 0.10);
+        if (rentRule && rentRule.amount_or_rate != null) setRentRate(Number(rentRule.amount_or_rate));
 
         const investorRule = costRules.find((r) => r.category === 'Finance' && r.calculation_method === 'percentage_of_revenue');
-        if (investorRule) setInvestorRate(Number(investorRule.amount_or_rate) || 0.08);
+        if (investorRule && investorRule.amount_or_rate != null) setInvestorRate(Number(investorRule.amount_or_rate));
 
         const elecCostRule = costRules.find((r) => r.category === 'Utilities' && r.calculation_method === 'meter_based');
-        if (elecCostRule) elecRate = Number(elecCostRule.amount_or_rate) || 10.00;
+        if (elecCostRule && elecCostRule.amount_or_rate != null) elecRate = Number(elecCostRule.amount_or_rate);
+      } else {
+        setMonthlyOtherFixed(0);
       }
 
       const totalElecCost = totalKvah * elecRate;

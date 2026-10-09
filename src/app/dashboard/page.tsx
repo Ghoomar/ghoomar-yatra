@@ -44,7 +44,7 @@ export default function DashboardPage() {
   // Hardened Dynamic Financial States
   const [mtdSummary, setMtdSummary] = useState<MTDFinancialSummary | null>(null);
   const [monthlySalaries, setMonthlySalaries] = useState<number>(0);
-  const [otherFixedCosts, setOtherFixedCosts] = useState<number>(3500);
+  const [otherFixedCosts, setOtherFixedCosts] = useState<number>(0);
   const [planningBreakEven, setPlanningBreakEven] = useState<number>(3000000);
   const [healthBufferPercent, setHealthBufferPercent] = useState<number>(10);
   const [rentRate, setRentRate] = useState<number>(0.10);
@@ -94,7 +94,7 @@ export default function DashboardPage() {
       const activeList = activeEmps || [];
       setActiveStaffCount(activeList.length);
       const totalSal = activeList.reduce((acc: number, emp: any) => acc + (Number(emp.monthly_salary) || 0), 0);
-      setMonthlySalaries(totalSal > 0 ? totalSal : activeList.length * 18000);
+      setMonthlySalaries(totalSal);
       setAbsentStaffCount((attRecords || []).filter((a) => a.status === 'Absent').length);
 
       // 7. Authoritative MTD Financial RPC, Fixed Cost Rules, Electricity & Fuel
@@ -118,16 +118,18 @@ export default function DashboardPage() {
       if (costRules && costRules.length > 0) {
         const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
         const fixedSum = fixedRules.reduce((sum, r) => sum + (Number(r.amount_or_rate) || 0), 0);
-        if (fixedSum > 0) setOtherFixedCosts(fixedSum);
+        setOtherFixedCosts(fixedSum);
 
         const rentRule = costRules.find((r) => r.category === 'Rent' && r.calculation_method === 'percentage_of_revenue');
-        if (rentRule) setRentRate(Number(rentRule.amount_or_rate) || 0.10);
+        if (rentRule && rentRule.amount_or_rate != null) setRentRate(Number(rentRule.amount_or_rate));
 
         const investorRule = costRules.find((r) => r.category === 'Finance' && r.calculation_method === 'percentage_of_revenue');
-        if (investorRule) setInvestorRate(Number(investorRule.amount_or_rate) || 0.08);
+        if (investorRule && investorRule.amount_or_rate != null) setInvestorRate(Number(investorRule.amount_or_rate));
 
         const elecCostRule = costRules.find((r) => r.category === 'Utilities' && r.calculation_method === 'meter_based');
-        if (elecCostRule) elecRate = Number(elecCostRule.amount_or_rate) || 10.00;
+        if (elecCostRule && elecCostRule.amount_or_rate != null) elecRate = Number(elecCostRule.amount_or_rate);
+      } else {
+        setOtherFixedCosts(0);
       }
 
       // Calculate Operational Utilities (Electricity, Diesel, LPG)
@@ -203,7 +205,7 @@ export default function DashboardPage() {
   const requiredVisitorsAtTargetSpend = requiredDinersAtTargetSpend;
 
   const { daysInMonth, daysElapsed } = getMonthDateRange(businessDate);
-  const actualSalariesPool = monthlySalaries > 0 ? monthlySalaries : (activeStaffCount * 18000);
+  const actualSalariesPool = monthlySalaries;
 
   const profitResult = calculateDailyProfitability({
     businessDate,
