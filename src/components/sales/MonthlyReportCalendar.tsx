@@ -193,7 +193,7 @@ export function MonthlyReportCalendar({ refreshKey = 0 }: MonthlyReportCalendarP
     return {
       days: dayList,
       totalImportedReports: importedTotal,
-      totalExpectedReports: expectedDays * 4,
+      totalExpectedReports: expectedDays * DAILY_REPORT_CONFIG.length,
       totalCompleteDays: completeTotal,
       expectedDaysCount: expectedDays,
     };
@@ -358,13 +358,13 @@ export function MonthlyReportCalendar({ refreshKey = 0 }: MonthlyReportCalendarP
 
                 {day.isComplete ? (
                   <Badge variant="success" className="h-4 px-1 text-[9px] font-bold bg-emerald-100 text-emerald-800 border-0">
-                    <Check className="h-2.5 w-2.5 mr-0.5" /> 4/4
+                    <Check className="h-2.5 w-2.5 mr-0.5" /> {DAILY_REPORT_CONFIG.length}/{DAILY_REPORT_CONFIG.length}
                   </Badge>
                 ) : day.isFuture ? (
                   <span className="text-[10px] text-stone-300 font-bold">—</span>
                 ) : (
                   <span className="text-[10px] font-semibold text-rose-600">
-                    {day.importedCount}/4
+                    {day.importedCount}/{DAILY_REPORT_CONFIG.length}
                   </span>
                 )}
               </div>
@@ -486,7 +486,7 @@ export function MonthlyReportCalendar({ refreshKey = 0 }: MonthlyReportCalendarP
 
               {/* Bottom tiny completion tag */}
               <span className="text-[8px] sm:text-[9px] font-bold text-stone-500 leading-none">
-                {day.isComplete ? '✓' : day.isFuture ? '—' : `${day.importedCount}/4`}
+                {day.isComplete ? '✓' : day.isFuture ? '—' : `${day.importedCount}/${DAILY_REPORT_CONFIG.length}`}
               </span>
             </button>
           ))}

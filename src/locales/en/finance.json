@@ -6,9 +6,9 @@
     "loadingSalesModule": "Loading sales module...",
     "import": {
       "title": "Import Petpooja Sales Report",
-      "description": "Upload Petpooja exports (.xlsx, .xls, .csv). Imports orders, hourly items, and daily executive summaries.",
+      "description": "Upload Petpooja exports (.xlsx, .xls, .csv). Imports orders, item details, and daily executive summaries.",
       "dropPrompt": "Drop Petpooja export file here, or browse",
-      "supportedFormats": "Supports Hourly Item Sales, Orders Master, Executive Sales Summary, or Menu Export (.xlsx, .xls, .csv)",
+      "supportedFormats": "Supports Item Order Details, Orders Master, Executive Sales Summary, or Menu Export (.xlsx, .xls, .csv)",
       "clickToReplace": "Click or drop to replace",
       "clear": "Clear",
       "importReport": "Import Report",
@@ -46,8 +46,8 @@
         "sun": "Sun"
       },
       "mobileModalTitle": "{date} Report Status",
-      "mobileStatusComplete": "All 4 Reports Uploaded",
-      "mobileStatusIncomplete": "{count} of 4 Reports Uploaded",
+      "mobileStatusComplete": "All 3 Reports Uploaded",
+      "mobileStatusIncomplete": "{count} of 3 Reports Uploaded",
       "mobileStatusFuture": "Future Date",
       "statusImported": "Imported",
       "statusMissing": "Pending",

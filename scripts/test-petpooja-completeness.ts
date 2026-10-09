@@ -43,37 +43,36 @@ function it(desc: string, fn: () => void) {
 }
 
 // -------------------------------------------------------------
-// Scenario 1: All 4 reports present -> complete/uploaded
+// Scenario 1: All 3 reports present -> complete/uploaded
 // -------------------------------------------------------------
-it('Scenario 1: All 4 reports present -> complete / uploaded', () => {
+it('Scenario 1: All 3 reports present -> complete / uploaded', () => {
   const result = evaluatePetpoojaReportStatus(
     '2026-09-30',
-    ['ITEM_ORDER_DETAILS', 'HOURLY_ITEM_SALES', 'ORDERS_MASTER', 'EXECUTIVE_SUMMARY'],
+    ['ITEM_ORDER_DETAILS', 'ORDERS_MASTER', 'EXECUTIVE_SUMMARY'],
     '2026-10-01'
   );
 
   assert.equal(result.isComplete, true);
-  assert.equal(result.importedCount, 4);
+  assert.equal(result.importedCount, 3);
   assert.equal(result.missingReportTypes.length, 0);
   assert.equal(result.status, 'uploaded');
   assert.equal(result.reports['ITEM_ORDER_DETAILS'].status, 'imported');
-  assert.equal(result.reports['HOURLY_ITEM_SALES'].status, 'imported');
   assert.equal(result.reports['ORDERS_MASTER'].status, 'imported');
   assert.equal(result.reports['EXECUTIVE_SUMMARY'].status, 'imported');
 });
 
 // -------------------------------------------------------------
-// Scenario 2: 3 of 4 present -> incomplete, missing identified
+// Scenario 2: 2 of 3 present -> incomplete, missing identified
 // -------------------------------------------------------------
-it('Scenario 2: 3 of 4 present -> incomplete with missing report identified', () => {
+it('Scenario 2: 2 of 3 present -> incomplete with missing report identified', () => {
   const result = evaluatePetpoojaReportStatus(
     '2026-09-30',
-    ['ITEM_ORDER_DETAILS', 'HOURLY_ITEM_SALES', 'EXECUTIVE_SUMMARY'], // missing ORDERS_MASTER
+    ['ITEM_ORDER_DETAILS', 'EXECUTIVE_SUMMARY'], // missing ORDERS_MASTER
     '2026-10-01'
   );
 
   assert.equal(result.isComplete, false);
-  assert.equal(result.importedCount, 3);
+  assert.equal(result.importedCount, 2);
   assert.deepEqual(result.missingReportTypes, ['ORDERS_MASTER']);
   assert.equal(result.reports['ORDERS_MASTER'].isImported, false);
   assert.equal(result.reports['ORDERS_MASTER'].status, 'pending');
@@ -143,28 +142,29 @@ it('Scenario 6: Exactly the due-date boundary (referenceDate === dueDate) -> due
 });
 
 // -------------------------------------------------------------
-// Scenario 7: MENU_MASTER present but the four required reports absent -> incomplete
 // -------------------------------------------------------------
-it('Scenario 7: MENU_MASTER present but 4 daily reports absent -> incomplete (0/4)', () => {
+// Scenario 7: MENU_MASTER present but the three required reports absent -> incomplete
+// -------------------------------------------------------------
+it('Scenario 7: MENU_MASTER present but 3 daily reports absent -> incomplete (0/3)', () => {
   const result = evaluatePetpoojaReportStatus('2026-09-30', ['MENU_MASTER'], '2026-10-01');
 
   assert.equal(result.isComplete, false);
   assert.equal(result.importedCount, 0);
-  assert.equal(result.missingReportTypes.length, 4);
+  assert.equal(result.missingReportTypes.length, 3);
 });
 
 // -------------------------------------------------------------
-// Scenario 8: MENU_MASTER present alongside all four required reports -> complete
+// Scenario 8: MENU_MASTER present alongside all three required reports -> complete
 // -------------------------------------------------------------
-it('Scenario 8: MENU_MASTER present alongside all four required reports -> complete (4/4)', () => {
+it('Scenario 8: MENU_MASTER present alongside all three required reports -> complete (3/3)', () => {
   const result = evaluatePetpoojaReportStatus(
     '2026-09-30',
-    ['MENU_MASTER', 'ITEM_ORDER_DETAILS', 'HOURLY_ITEM_SALES', 'ORDERS_MASTER', 'EXECUTIVE_SUMMARY'],
+    ['MENU_MASTER', 'ITEM_ORDER_DETAILS', 'ORDERS_MASTER', 'EXECUTIVE_SUMMARY'],
     '2026-10-01'
   );
 
   assert.equal(result.isComplete, true);
-  assert.equal(result.importedCount, 4);
+  assert.equal(result.importedCount, 3);
   assert.equal(result.status, 'uploaded');
 });
 
@@ -192,7 +192,7 @@ it('Scenario 10: Daily Operations date conversion: Oct 1 operational date -> Sep
 // Scenario 11: Month/calendar denominator behavior: future dates excluded from expected reports
 // -------------------------------------------------------------
 it('Scenario 11: Month/calendar denominator behavior: future dates excluded from expected reports', () => {
-  // Simulate an October 2026 calendar where today is Oct 1, and Oct 1 has all 4 reports
+  // Simulate an October 2026 calendar where today is Oct 1, and Oct 1 has all 3 reports
   const todayStr = '2026-10-01';
   const daysInMonth = 31;
   let expectedDays = 0;
@@ -202,7 +202,7 @@ it('Scenario 11: Month/calendar denominator behavior: future dates excluded from
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `2026-10-${String(d).padStart(2, '0')}`;
     const importedForDay = dateStr === '2026-10-01'
-      ? ['ITEM_ORDER_DETAILS', 'HOURLY_ITEM_SALES', 'ORDERS_MASTER', 'EXECUTIVE_SUMMARY']
+      ? ['ITEM_ORDER_DETAILS', 'ORDERS_MASTER', 'EXECUTIVE_SUMMARY']
       : [];
 
     const evalResult = evaluatePetpoojaReportStatus(dateStr, importedForDay, todayStr);
@@ -216,12 +216,12 @@ it('Scenario 11: Month/calendar denominator behavior: future dates excluded from
     }
   }
 
-  const expectedReports = expectedDays * 4;
+  const expectedReports = expectedDays * 3;
 
   // On Oct 1: exactly 1 expected day (Oct 1), 30 future days excluded
   assert.equal(expectedDays, 1, 'Expected days should be 1');
-  assert.equal(expectedReports, 4, 'Expected reports should be 4 (1 * 4), NOT 124 (31 * 4)');
-  assert.equal(totalImported, 4, 'Total imported should be 4');
+  assert.equal(expectedReports, 3, 'Expected reports should be 3 (1 * 3), NOT 93 (31 * 3)');
+  assert.equal(totalImported, 3, 'Total imported should be 3');
   assert.equal(completeDays, 1, 'Complete days should be 1');
 });
 

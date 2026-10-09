@@ -34,6 +34,16 @@ export async function POST(request: NextRequest) {
     const { reportType, businessDate, fileChecksum, recordCount, totalNetSales, totalGrossSales, metadata, data } =
       parseResult;
 
+    // 1b. Discontinue manual HOURLY_ITEM_SALES import
+    if (reportType === 'HOURLY_ITEM_SALES') {
+      return NextResponse.json({
+        success: true,
+        message:
+          'Hourly Item Sales import has been streamlined out and is no longer required. Hourly analytics are now automatically derived from the Items Detailed Report. Please upload the Items Detailed Report instead.',
+        streamlined: true,
+      });
+    }
+
     // 2. Duplicate Detection Check
     if (reportType !== 'MENU_MASTER') {
       const { data: existingBatch } = await supabase
@@ -84,86 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Ingest parsed data based on report type
-    if (reportType === 'HOURLY_ITEM_SALES') {
-      // Fetch authoritative Menu Master mapping & hierarchy directly from database
-      const lookup = await loadMenuMasterLookupFromDb(supabase);
-
-      const unmappedItemsMap = new Map<string, number>();
-
-      const hourlyPayload = data.map((item) => {
-        const resolution = resolveItemCategory(item.item_name, lookup);
-
-        if (!resolution.isMatched || resolution.category === 'Uncategorized') {
-          const cleanName = item.item_name.trim();
-          if (!unmappedItemsMap.has(cleanName)) {
-            unmappedItemsMap.set(cleanName, Number(item.unit_price) || 0);
-          }
-        }
-
-        return {
-          batch_id: newBatch.id,
-          business_date: businessDate,
-          hour_of_day: item.hour_of_day,
-          hour_label: item.hour_label,
-          item_name: item.item_name,
-          parent_category: resolution.parentCategory,
-          category: resolution.category,
-          unit_price: item.unit_price,
-          quantity: item.quantity,
-          net_amount: item.net_amount,
-          discount_amount: item.discount_amount,
-          tax_amount: item.tax_amount,
-          total_sales: item.total_sales,
-          net_sales: item.net_sales,
-        };
-      });
-
-      // Insert in chunks of 100
-      for (let i = 0; i < hourlyPayload.length; i += 100) {
-        const chunk = hourlyPayload.slice(i, i + 100);
-        const { error: insErr } = await supabase.from('sales_hourly_items').insert(chunk);
-        if (insErr) {
-          throw new Error(`Failed to insert hourly items: ${insErr.message}`);
-        }
-      }
-
-      // Discover and register genuinely newly seen items into pos_menu_items with needs_setup: true
-      if (unmappedItemsMap.size > 0) {
-        const { data: allMenuItems } = await supabase
-          .from('pos_menu_items')
-          .select('name, normalized_name, needs_setup, category');
-
-        const existingNames = new Set((allMenuItems || []).map((e) => e.name.toLowerCase().trim()));
-        const existingNorms = new Set(
-          (allMenuItems || []).map((e) => e.normalized_name || normalizeItemName(e.name))
-        );
-
-        const newMenuItems: any[] = [];
-        for (const [itemName, price] of unmappedItemsMap.entries()) {
-          const norm = normalizeItemName(itemName);
-          if (!existingNames.has(itemName.toLowerCase().trim()) && !existingNorms.has(norm)) {
-            const hindiSuggestion = suggestHindiName(itemName, 'menu_item');
-            newMenuItems.push({
-              name: itemName,
-              normalized_name: norm,
-              name_hi: hindiSuggestion.suggestion,
-              name_hi_is_custom: false,
-              category: 'Uncategorized',
-              parent_category: 'Uncategorized',
-              price: price,
-              is_active: true,
-              needs_setup: true,
-            });
-            existingNames.add(itemName.toLowerCase().trim());
-            existingNorms.add(norm);
-          }
-        }
-
-        if (newMenuItems.length > 0) {
-          await supabase.from('pos_menu_items').insert(newMenuItems);
-        }
-      }
-    } else if (reportType === 'ORDERS_MASTER') {
+    if (reportType === 'ORDERS_MASTER') {
       const ordersPayload = data.map((order) => ({
         batch_id: newBatch.id,
         business_date: businessDate,
@@ -276,6 +207,91 @@ export async function POST(request: NextRequest) {
         const { error: insErr } = await supabase.from('sales_order_items').insert(chunk);
         if (insErr) {
           throw new Error(`Failed to insert detailed order items: ${insErr.message}`);
+        }
+      }
+
+      // 4b. Automatically derive and synchronize sales_hourly_items from ITEM_ORDER_DETAILS
+      const hourlyAggregationMap = new Map<
+        string,
+        {
+          hour_of_day: number;
+          hour_label: string;
+          item_name: string;
+          parent_category: string;
+          category: string;
+          unit_price: number;
+          total_subtotal: number;
+          quantity: number;
+          net_amount: number;
+          discount_amount: number;
+          tax_amount: number;
+          total_sales: number;
+          net_sales: number;
+        }
+      >();
+
+      for (const item of itemsPayload) {
+        if (item.status && item.status !== 'Success') continue;
+
+        const h = item.hour_of_day ?? 12;
+        const displayH = h % 12 === 0 ? 12 : h % 12;
+        const displayMeridiem = h >= 12 ? 'PM' : 'AM';
+        const hourLabel = `${String(displayH).padStart(2, '0')}:00 ${displayMeridiem}`;
+        const key = `${h}__${item.item_name}__${item.parent_category}__${item.category}`;
+
+        const existing = hourlyAggregationMap.get(key);
+        if (existing) {
+          existing.quantity += Number(item.quantity) || 0;
+          existing.total_subtotal += (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+          existing.net_amount += Number(item.net_sales) || 0;
+          existing.discount_amount += Number(item.discount_amount) || 0;
+          existing.tax_amount += Number(item.tax_amount) || 0;
+          existing.total_sales += Number(item.final_total) || 0;
+          existing.net_sales += Number(item.net_sales) || 0;
+        } else {
+          hourlyAggregationMap.set(key, {
+            hour_of_day: h,
+            hour_label: hourLabel,
+            item_name: item.item_name,
+            parent_category: item.parent_category,
+            category: item.category,
+            unit_price: Number(item.unit_price) || 0,
+            total_subtotal: (Number(item.quantity) || 0) * (Number(item.unit_price) || 0),
+            quantity: Number(item.quantity) || 0,
+            net_amount: Number(item.net_sales) || 0,
+            discount_amount: Number(item.discount_amount) || 0,
+            tax_amount: Number(item.tax_amount) || 0,
+            total_sales: Number(item.final_total) || 0,
+            net_sales: Number(item.net_sales) || 0,
+          });
+        }
+      }
+
+      // Clear any pre-existing hourly items for this business date before repopulating
+      await supabase.from('sales_hourly_items').delete().eq('business_date', businessDate);
+
+      const derivedHourlyPayload = Array.from(hourlyAggregationMap.values()).map((row) => ({
+        batch_id: newBatch.id,
+        business_date: businessDate,
+        hour_of_day: row.hour_of_day,
+        hour_label: row.hour_label,
+        item_name: row.item_name,
+        parent_category: row.parent_category,
+        category: row.category,
+        unit_price: row.quantity > 0 ? Math.round((row.total_subtotal / row.quantity) * 100) / 100 : row.unit_price,
+        quantity: row.quantity,
+        net_amount: Math.round(row.net_amount * 100) / 100,
+        discount_amount: Math.round(row.discount_amount * 100) / 100,
+        tax_amount: Math.round(row.tax_amount * 100) / 100,
+        total_sales: Math.round(row.total_sales * 100) / 100,
+        net_sales: Math.round(row.net_sales * 100) / 100,
+      }));
+
+      for (let i = 0; i < derivedHourlyPayload.length; i += 100) {
+        const chunk = derivedHourlyPayload.slice(i, i + 100);
+        const { error: hInsErr } = await supabase.from('sales_hourly_items').insert(chunk);
+        if (hInsErr) {
+          console.error('Failed to insert derived hourly items:', hInsErr);
         }
       }
 

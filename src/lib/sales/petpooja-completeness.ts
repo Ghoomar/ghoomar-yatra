@@ -1,12 +1,12 @@
 import { getTodayBusinessDate } from '@/lib/utils';
 
 /**
- * Authoritative Canonical List of the 4 Petpooja Daily Sales Report Types.
+ * Authoritative Canonical List of the 3 Petpooja Daily Sales Report Types.
+ * HOURLY_ITEM_SALES has been streamlined out (derived on-the-fly from ITEM_ORDER_DETAILS).
  * MENU_MASTER is master configuration data and is NOT part of daily sales completeness.
  */
 export const REQUIRED_PETPOOJA_DAILY_REPORTS = [
   'ITEM_ORDER_DETAILS',
-  'HOURLY_ITEM_SALES',
   'ORDERS_MASTER',
   'EXECUTIVE_SUMMARY',
 ] as const;
@@ -29,11 +29,6 @@ export const DAILY_REPORT_CONFIG: readonly PetpoojaReportConfigItem[] = [
     key: 'ITEM_ORDER_DETAILS',
     labelKey: 'shortReportLabels.details',
     fullTitleKey: 'reportTypes.itemOrderDetails',
-  },
-  {
-    key: 'HOURLY_ITEM_SALES',
-    labelKey: 'shortReportLabels.hourly',
-    fullTitleKey: 'reportTypes.hourlyItemSales',
   },
   {
     key: 'ORDERS_MASTER',
