@@ -12,6 +12,7 @@ import { hasPermission as evaluatePermission, getRequiredPermissionForPath } fro
 import { ShieldAlert, RefreshCw, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { I18nProvider, useI18n } from '@/lib/i18n/context';
+import { useUserTelemetry } from '@/lib/telemetry/useUserTelemetry';
 
 interface RoleContextType {
   role: RoleName;
@@ -53,6 +54,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [offlineGateMode, setOfflineGateMode] = useState(false);
 
+  // Mount lightweight user telemetry & reliability monitoring (zero-blocking, offline-safe)
+  useUserTelemetry(user, offlineGateMode);
+
   // Gesture state refs
   const touchStartX = React.useRef<number | null>(null);
   const touchStartY = React.useRef<number | null>(null);
@@ -77,6 +81,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const handleSignOut = useCallback(async (reason: string = 'USER_INITIATED') => {
     console.info(`[AppShell] Initiating sign out. Reason: ${reason}`);
+    if (user?.id) {
+      try {
+        fetch('/api/auth/record-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: user.id,
+            identifier: user.email || 'unknown',
+            event_type: 'logout',
+            status: 'success',
+            metadata: { reason },
+          }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {}
+    }
     try {
       await supabase.auth.signOut();
     } catch (err) {

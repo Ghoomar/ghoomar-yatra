@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAppRole } from '@/components/layout/AppShell';
-import { saveDeviceEnrollment } from '@/lib/gate/offline-store';
+import { saveDeviceEnrollment, getDeviceEnrollment } from '@/lib/gate/offline-store';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { ShieldCheck, Lock, User, AlertCircle, RefreshCw, Car } from 'lucide-react';
@@ -38,37 +38,76 @@ function LoginForm() {
     setError(null);
 
     try {
-      // 1. Resolve email if user entered phone number
+      let user = null;
       let emailToAuth = identifier.trim();
+
+      // 1. Authenticate based on identifier type
       if (!emailToAuth.includes('@')) {
+        // Phone login flow: Authenticate via resolve-phone endpoint
         const resolveRes = await fetch('/api/auth/resolve-phone', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: emailToAuth }),
+          body: JSON.stringify({
+            phone: emailToAuth,
+            password: password.trim(),
+          }),
         });
 
         const resolveData = await resolveRes.json().catch(() => null);
-        if (!resolveRes.ok || !resolveData?.email) {
-          throw new Error(resolveData?.error || 'No account registered with this phone number.');
+        if (!resolveRes.ok || !resolveData?.session) {
+          throw new Error(resolveData?.error || 'Invalid login credentials.');
         }
 
-        emailToAuth = resolveData.email;
-      }
-
-      // 2. Authenticate against Supabase Auth
-      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-        email: emailToAuth,
-        password: password.trim(),
-      });
-
-      if (authErr) {
-        if (authErr.message?.toLowerCase().includes('banned') || authErr.message?.toLowerCase().includes('disabled')) {
-          throw new Error('This account has been deactivated. Please contact your system administrator.');
+        const { data: sessionData, error: sessionErr } = await supabase.auth.setSession(resolveData.session);
+        if (sessionErr || !sessionData?.user) {
+          throw new Error('Authentication failed. Please try again.');
         }
-        throw new Error(authErr.message || 'Invalid credentials.');
+        user = sessionData.user;
+      } else {
+        // 2. Existing email login flow directly against Supabase Auth
+        const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+          email: emailToAuth,
+          password: password.trim(),
+        });
+
+        if (authErr) {
+          // Asynchronously record email login failure (non-blocking)
+          fetch('/api/auth/record-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              identifier: emailToAuth,
+              event_type: 'login_failure',
+              status: 'failure',
+              failure_reason: authErr.message || 'invalid_password',
+              metadata: { auth_method: 'email' },
+            }),
+          }).catch(() => {});
+
+          if (authErr.message?.toLowerCase().includes('banned') || authErr.message?.toLowerCase().includes('disabled')) {
+            throw new Error('This account has been deactivated. Please contact your system administrator.');
+          }
+          throw new Error(authErr.message || 'Invalid login credentials.');
+        }
+
+        user = authData.user;
+
+        // Asynchronously record email login success (non-blocking)
+        if (user) {
+          fetch('/api/auth/record-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: user.id,
+              identifier: emailToAuth,
+              event_type: 'login_success',
+              status: 'success',
+              metadata: { auth_method: 'email' },
+            }),
+          }).catch(() => {});
+        }
       }
 
-      const user = authData.user;
       if (!user) {
         throw new Error('Authentication failed.');
       }
@@ -95,7 +134,27 @@ function LoginForm() {
 
       // 4. If Gate Staff, perform Device Enrollment for offline authorization
       if (userRole === 'Gate Staff') {
-        const deviceId = crypto.randomUUID();
+        // Reuse persistent application-installation identifier or existing Gate enrollment
+        let deviceId: string | null = null;
+        try {
+          const existingEnrollment = await getDeviceEnrollment();
+          if (existingEnrollment?.deviceId) {
+            deviceId = existingEnrollment.deviceId;
+          }
+        } catch {}
+
+        if (!deviceId && typeof window !== 'undefined') {
+          deviceId = localStorage.getItem('ghoomar_device_id');
+        }
+
+        if (!deviceId) {
+          deviceId = crypto.randomUUID();
+        }
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('ghoomar_device_id', deviceId);
+        }
+
         const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown';
         const deviceName = userAgent.includes('Android') ? 'Android Gate Device' : 'Gate Mobile Device';
 

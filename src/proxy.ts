@@ -60,8 +60,14 @@ export async function proxy(request: NextRequest) {
 
   // 3. Unauthenticated access enforcement
   if (!user) {
-    // If accessing /login, allow
-    if (pathname === '/login') {
+    // Explicit allowlist of endpoints that must function prior to authentication
+    const PRE_LOGIN_PUBLIC_ROUTES = new Set([
+      '/login',
+      '/api/auth/resolve-phone',
+      '/api/auth/record-event',
+    ]);
+
+    if (PRE_LOGIN_PUBLIC_ROUTES.has(pathname)) {
       return response;
     }
 

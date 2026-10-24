@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -44,6 +45,7 @@ import {
   ShieldAlert,
   Save,
   Car,
+  Activity,
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -161,7 +163,7 @@ export default function AdminSettingsPage() {
           });
       }
       await loadData();
-      alert(`Break-Even Health Buffer updated to ${val}%. Healthy status requires ≥ ${100 + val}% of Calculated BEP.`);
+      alert(`Break-Even Health Buffer updated to ${val}%. Healthy status requires â‰¥ ${100 + val}% of Calculated BEP.`);
     } catch (err: any) {
       console.error(err);
       alert('Failed to update buffer: ' + err.message);
@@ -182,17 +184,17 @@ export default function AdminSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-stone-900 flex items-center gap-2">
             <Settings className="h-6 w-6 text-amber-600" />
-            {locale === 'hi' ? 'सिस्टम एडमिनिस्ट्रेशन और सेटिंग्स' : 'System Administration & Master Configuration'}
+            {locale === 'hi' ? 'à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤à¤¡à¤®à¤¿à¤¨à¤¿à¤¸à¥à¤Ÿà¥à¤°à¥‡à¤¶à¤¨ à¤”à¤° à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸' : 'System Administration & Master Configuration'}
           </h1>
           <p className="text-sm text-stone-500">
             {locale === 'hi'
-              ? 'मास्टर डेटा, खर्च के नियम, वित्तीय टारगेट, रोल और संगठन संरचना प्रबंधित करें।'
+              ? 'à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤¡à¥‡à¤Ÿà¤¾, à¤–à¤°à¥à¤š à¤•à¥‡ à¤¨à¤¿à¤¯à¤®, à¤µà¤¿à¤¤à¥à¤¤à¥€à¤¯ à¤Ÿà¤¾à¤°à¤—à¥‡à¤Ÿ, à¤°à¥‹à¤² à¤”à¤° à¤¸à¤‚à¤—à¤ à¤¨ à¤¸à¤‚à¤°à¤šà¤¨à¤¾ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤°à¥‡à¤‚à¥¤'
               : 'Configure operational master data, cost rules, targets, roles, and business structures without code changes.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={loadData} title={locale === 'hi' ? 'सेटिंग्स रीफ्रेश करें' : 'Refresh configuration'}>
+          <Button variant="outline" size="sm" onClick={loadData} title={locale === 'hi' ? 'à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸ à¤°à¥€à¤«à¥à¤°à¥‡à¤¶ à¤•à¤°à¥‡à¤‚' : 'Refresh configuration'}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -209,7 +211,7 @@ export default function AdminSettingsPage() {
           }`}
         >
           <UtensilsCrossed className="h-4 w-4" />
-          <span>{locale === 'hi' ? 'मेनू मास्टर' : 'Menu Master'}</span>
+          <span>{locale === 'hi' ? 'à¤®à¥‡à¤¨à¥‚ à¤®à¤¾à¤¸à¥à¤Ÿà¤°' : 'Menu Master'}</span>
         </button>
         <button
           onClick={() => setActiveTab('masters')}
@@ -219,7 +221,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          {locale === 'hi' ? 'मास्टर डेटा' : 'Operational Masters'}
+          {locale === 'hi' ? 'à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤¡à¥‡à¤Ÿà¤¾' : 'Operational Masters'}
         </button>
         <button
           onClick={() => setActiveTab('cost_rules')}
@@ -229,7 +231,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          {locale === 'hi' ? 'खर्च के नियम' : 'Financial Cost Rules'}
+          {locale === 'hi' ? 'à¤–à¤°à¥à¤š à¤•à¥‡ à¤¨à¤¿à¤¯à¤®' : 'Financial Cost Rules'}
         </button>
         <button
           onClick={() => setActiveTab('targets')}
@@ -239,7 +241,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          {locale === 'hi' ? 'दैनिक व ब्रेक-ईवन टारगेट' : 'Daily & Break-Even Targets'}
+          {locale === 'hi' ? 'à¤¦à¥ˆà¤¨à¤¿à¤• à¤µ à¤¬à¥à¤°à¥‡à¤•-à¤ˆà¤µà¤¨ à¤Ÿà¤¾à¤°à¤—à¥‡à¤Ÿ' : 'Daily & Break-Even Targets'}
         </button>
         <button
           onClick={() => setActiveTab('users')}
@@ -249,7 +251,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          {locale === 'hi' ? `यूजर और परमिशन (${profiles.length})` : `User Accounts & RBAC (${profiles.length})`}
+          {locale === 'hi' ? `à¤¯à¥‚à¤œà¤° à¤”à¤° à¤ªà¤°à¤®à¤¿à¤¶à¤¨ (${profiles.length})` : `User Accounts & RBAC (${profiles.length})`}
         </button>
         <button
           onClick={() => setActiveTab('audit')}
@@ -259,7 +261,7 @@ export default function AdminSettingsPage() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          {locale === 'hi' ? 'ऑडिट लॉग' : 'System Audit Trail'}
+          {locale === 'hi' ? 'à¤‘à¤¡à¤¿à¤Ÿ à¤²à¥‰à¤—' : 'System Audit Trail'}
         </button>
       </div>
 
@@ -272,7 +274,7 @@ export default function AdminSettingsPage() {
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap items-center gap-2 bg-stone-50 p-3 rounded-xl border border-stone-200">
             <span className="text-xs font-bold text-stone-700 mr-2">
-              {locale === 'hi' ? 'मास्टर सेटिंग्स:' : 'Configure Masters:'}
+              {locale === 'hi' ? 'à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸:' : 'Configure Masters:'}
             </span>
             <Button
               variant="primary"
@@ -284,7 +286,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
             >
               <UtensilsCrossed className="h-4 w-4" />{' '}
-              {locale === 'hi' ? `किचन सेक्शन और टीमें (${teams.length})` : `Kitchen Sections & Teams (${teams.length})`}
+              {locale === 'hi' ? `à¤•à¤¿à¤šà¤¨ à¤¸à¥‡à¤•à¥à¤¶à¤¨ à¤”à¤° à¤Ÿà¥€à¤®à¥‡à¤‚ (${teams.length})` : `Kitchen Sections & Teams (${teams.length})`}
             </Button>
             <Button
               variant="outline"
@@ -296,7 +298,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Network className="h-4 w-4 text-stone-500" />{' '}
-              {locale === 'hi' ? 'डिपार्टमेंट और रोल' : 'Depts & Roles'}
+              {locale === 'hi' ? 'à¤¡à¤¿à¤ªà¤¾à¤°à¥à¤Ÿà¤®à¥‡à¤‚à¤Ÿ à¤”à¤° à¤°à¥‹à¤²' : 'Depts & Roles'}
             </Button>
             <Button
               variant="outline"
@@ -305,7 +307,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Layers className="h-4 w-4 text-stone-500" />{' '}
-              {locale === 'hi' ? `इन्वेंटरी श्रेणियां (${inventoryCategories.length})` : `Inventory Categories (${inventoryCategories.length})`}
+              {locale === 'hi' ? `à¤‡à¤¨à¥à¤µà¥‡à¤‚à¤Ÿà¤°à¥€ à¤¶à¥à¤°à¥‡à¤£à¤¿à¤¯à¤¾à¤‚ (${inventoryCategories.length})` : `Inventory Categories (${inventoryCategories.length})`}
             </Button>
             <Button
               variant="outline"
@@ -314,7 +316,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Sparkles className="h-4 w-4 text-stone-500" />{' '}
-              {locale === 'hi' ? 'एक्टिविटी मास्टर' : 'Activity Master'}
+              {locale === 'hi' ? 'à¤à¤•à¥à¤Ÿà¤¿à¤µà¤¿à¤Ÿà¥€ à¤®à¤¾à¤¸à¥à¤Ÿà¤°' : 'Activity Master'}
             </Button>
             <Button
               variant="outline"
@@ -323,7 +325,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Scale className="h-4 w-4 text-stone-500" />{' '}
-              {locale === 'hi' ? `माप इकाइयाँ (${units.length})` : `Units (${units.length})`}
+              {locale === 'hi' ? `à¤®à¤¾à¤ª à¤‡à¤•à¤¾à¤‡à¤¯à¤¾à¤ (${units.length})` : `Units (${units.length})`}
             </Button>
             <Button
               variant="outline"
@@ -332,7 +334,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Tag className="h-4 w-4 text-stone-500" />{' '}
-              {locale === 'hi' ? `वेंडर श्रेणियां (${vendorCategories.length})` : `Vendor Categories (${vendorCategories.length})`}
+              {locale === 'hi' ? `à¤µà¥‡à¤‚à¤¡à¤° à¤¶à¥à¤°à¥‡à¤£à¤¿à¤¯à¤¾à¤‚ (${vendorCategories.length})` : `Vendor Categories (${vendorCategories.length})`}
             </Button>
             <Button
               variant="outline"
@@ -341,7 +343,7 @@ export default function AdminSettingsPage() {
               className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
             >
               <Layers className="h-4 w-4 text-amber-600" />{' '}
-              {locale === 'hi' ? 'डिपार्टमेंट ↔ श्रेणी मैपिंग' : 'Dept ↔ Category Mapping'}
+              {locale === 'hi' ? 'à¤¡à¤¿à¤ªà¤¾à¤°à¥à¤Ÿà¤®à¥‡à¤‚à¤Ÿ â†” à¤¶à¥à¤°à¥‡à¤£à¥€ à¤®à¥ˆà¤ªà¤¿à¤‚à¤—' : 'Dept â†” Category Mapping'}
             </Button>
             <Button
               variant="outline"
@@ -351,7 +353,7 @@ export default function AdminSettingsPage() {
             >
               <Car className="h-4 w-4 text-amber-600" />{' '}
               {locale === 'hi'
-                ? `कार ऑरिजिन प्रीफिक्स (${vehiclePrefixes.length})`
+                ? `à¤•à¤¾à¤° à¤‘à¤°à¤¿à¤œà¤¿à¤¨ à¤ªà¥à¤°à¥€à¤«à¤¿à¤•à¥à¤¸ (${vehiclePrefixes.length})`
                 : `Car Origins & Prefixes (${vehiclePrefixes.length})`}
             </Button>
           </div>
@@ -363,10 +365,10 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-amber-600" />
-                    {locale === 'hi' ? 'संगठन स्ट्रक्चर' : 'Organizational Structure'}
+                    {locale === 'hi' ? 'à¤¸à¤‚à¤—à¤ à¤¨ à¤¸à¥à¤Ÿà¥à¤°à¤•à¥à¤šà¤°' : 'Organizational Structure'}
                   </CardTitle>
                   <CardDescription>
-                    {locale === 'hi' ? 'डिपार्टमेंट, ऑपरेशनल टीमें और रोल' : 'Departments, operational teams, and roles'}
+                    {locale === 'hi' ? 'à¤¡à¤¿à¤ªà¤¾à¤°à¥à¤Ÿà¤®à¥‡à¤‚à¤Ÿ, à¤‘à¤ªà¤°à¥‡à¤¶à¤¨à¤² à¤Ÿà¥€à¤®à¥‡à¤‚ à¤”à¤° à¤°à¥‹à¤²' : 'Departments, operational teams, and roles'}
                   </CardDescription>
                 </div>
                 <Button
@@ -378,22 +380,22 @@ export default function AdminSettingsPage() {
                   }}
                   className="h-7 text-xs"
                 >
-                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                  {locale === 'hi' ? 'à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤°à¥‡à¤‚' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 space-y-3 text-xs">
                 <div className="grid grid-cols-3 gap-2 bg-stone-50 p-2.5 rounded-lg border border-stone-100 text-center">
                   <div>
                     <div className="font-bold text-base text-stone-900">{departments.length}</div>
-                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'डिपार्टमेंट' : 'Departments'}</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'à¤¡à¤¿à¤ªà¤¾à¤°à¥à¤Ÿà¤®à¥‡à¤‚à¤Ÿ' : 'Departments'}</div>
                   </div>
                   <div>
                     <div className="font-bold text-base text-stone-900">{teams.length}</div>
-                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'टीमें' : 'Teams'}</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'à¤Ÿà¥€à¤®à¥‡à¤‚' : 'Teams'}</div>
                   </div>
                   <div>
                     <div className="font-bold text-base text-stone-900">{employeeRoles.length}</div>
-                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'रोल' : 'Roles'}</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'à¤°à¥‹à¤²' : 'Roles'}</div>
                   </div>
                 </div>
 
@@ -405,11 +407,11 @@ export default function AdminSettingsPage() {
                         <div>
                           <span className="font-semibold text-stone-900">{getLocalizedMasterName(d, locale)}</span>
                           <span className="text-[10px] text-stone-400 ml-1.5">
-                            ({dTeams.length} {locale === 'hi' ? 'टीमें' : dTeams.length === 1 ? 'team' : 'teams'})
+                            ({dTeams.length} {locale === 'hi' ? 'à¤Ÿà¥€à¤®à¥‡à¤‚' : dTeams.length === 1 ? 'team' : 'teams'})
                           </span>
                         </div>
                         <Badge variant={d.is_active !== false ? 'success' : 'outline'}>
-                          {d.is_active !== false ? (locale === 'hi' ? 'चालू' : 'Active') : (locale === 'hi' ? 'बंद' : 'Inactive')}
+                          {d.is_active !== false ? (locale === 'hi' ? 'à¤šà¤¾à¤²à¥‚' : 'Active') : (locale === 'hi' ? 'à¤¬à¤‚à¤¦' : 'Inactive')}
                         </Badge>
                       </div>
                     );
@@ -424,10 +426,10 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Scale className="h-4 w-4 text-amber-600" />
-                    {locale === 'hi' ? 'माप की इकाइयाँ' : 'Units of Measurement'}
+                    {locale === 'hi' ? 'à¤®à¤¾à¤ª à¤•à¥€ à¤‡à¤•à¤¾à¤‡à¤¯à¤¾à¤' : 'Units of Measurement'}
                   </CardTitle>
                   <CardDescription>
-                    {locale === 'hi' ? 'स्टोर सामग्री के लिए आधिकारिक माप' : 'Authoritative metrics for store SKU inventory'}
+                    {locale === 'hi' ? 'à¤¸à¥à¤Ÿà¥‹à¤° à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤•à¥‡ à¤²à¤¿à¤ à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤®à¤¾à¤ª' : 'Authoritative metrics for store SKU inventory'}
                   </CardDescription>
                 </div>
                 <Button
@@ -436,13 +438,13 @@ export default function AdminSettingsPage() {
                   onClick={() => setUnitModalOpen(true)}
                   className="h-7 text-xs"
                 >
-                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                  {locale === 'hi' ? 'à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤°à¥‡à¤‚' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 text-xs">
                 {units.length === 0 ? (
                   <div className="py-6 text-center text-stone-400">
-                    {locale === 'hi' ? 'कोई इकाई दर्ज नहीं है।' : 'No units defined.'}
+                    {locale === 'hi' ? 'à¤•à¥‹à¤ˆ à¤‡à¤•à¤¾à¤ˆ à¤¦à¤°à¥à¤œ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤' : 'No units defined.'}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
@@ -470,10 +472,10 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Tag className="h-4 w-4 text-amber-600" />
-                    {locale === 'hi' ? 'वेंडर सप्लायर श्रेणियां' : 'Vendor Supplier Categories'}
+                    {locale === 'hi' ? 'à¤µà¥‡à¤‚à¤¡à¤° à¤¸à¤ªà¥à¤²à¤¾à¤¯à¤° à¤¶à¥à¤°à¥‡à¤£à¤¿à¤¯à¤¾à¤‚' : 'Vendor Supplier Categories'}
                   </CardTitle>
                   <CardDescription>
-                    {locale === 'hi' ? 'खरीद के लिए वेंडर वर्गीकरण' : 'Procurement classifications for vendor onboarding'}
+                    {locale === 'hi' ? 'à¤–à¤°à¥€à¤¦ à¤•à¥‡ à¤²à¤¿à¤ à¤µà¥‡à¤‚à¤¡à¤° à¤µà¤°à¥à¤—à¥€à¤•à¤°à¤£' : 'Procurement classifications for vendor onboarding'}
                   </CardDescription>
                 </div>
                 <Button
@@ -482,13 +484,13 @@ export default function AdminSettingsPage() {
                   onClick={() => setVendorCategoryModalOpen(true)}
                   className="h-7 text-xs"
                 >
-                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                  {locale === 'hi' ? 'à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤°à¥‡à¤‚' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 text-xs">
                 {vendorCategories.length === 0 ? (
                   <div className="py-6 text-center text-stone-400">
-                    {locale === 'hi' ? 'कोई श्रेणी दर्ज नहीं है।' : 'No categories defined.'}
+                    {locale === 'hi' ? 'à¤•à¥‹à¤ˆ à¤¶à¥à¤°à¥‡à¤£à¥€ à¤¦à¤°à¥à¤œ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤' : 'No categories defined.'}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
@@ -516,12 +518,12 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <CreditCard className="h-4 w-4 text-amber-600" />
-                    {locale === 'hi' ? 'पेमेंट के तरीके और कमीशन' : 'Payment Methods & Commissions'}
+                    {locale === 'hi' ? 'à¤ªà¥‡à¤®à¥‡à¤‚à¤Ÿ à¤•à¥‡ à¤¤à¤°à¥€à¤•à¥‡ à¤”à¤° à¤•à¤®à¥€à¤¶à¤¨' : 'Payment Methods & Commissions'}
                   </CardTitle>
                   <CardDescription>
                     {locale === 'hi'
-                      ? 'कार्ड शुल्क और डिलीवरी कमीशन (लांचो)'
-                      : 'Gateway MDR and delivery channel commissions (Lancho 15–20%)'}
+                      ? 'à¤•à¤¾à¤°à¥à¤¡ à¤¶à¥à¤²à¥à¤• à¤”à¤° à¤¡à¤¿à¤²à¥€à¤µà¤°à¥€ à¤•à¤®à¥€à¤¶à¤¨ (à¤²à¤¾à¤‚à¤šà¥‹)'
+                      : 'Gateway MDR and delivery channel commissions (Lancho 15â€“20%)'}
                   </CardDescription>
                 </div>
                 <Button
@@ -530,13 +532,13 @@ export default function AdminSettingsPage() {
                   onClick={() => setPaymentMethodModalOpen(true)}
                   className="h-7 text-xs font-semibold"
                 >
-                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                  {locale === 'hi' ? 'à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤°à¥‡à¤‚' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0">
                 {loading ? (
                   <div className="py-8 text-center text-stone-400 text-xs">
-                    {locale === 'hi' ? 'पेमेंट के तरीके लोड हो रहे हैं...' : 'Loading payment methods...'}
+                    {locale === 'hi' ? 'à¤ªà¥‡à¤®à¥‡à¤‚à¤Ÿ à¤•à¥‡ à¤¤à¤°à¥€à¤•à¥‡ à¤²à¥‹à¤¡ à¤¹à¥‹ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚...' : 'Loading payment methods...'}
                   </div>
                 ) : (
                   <div className="divide-y divide-stone-100 text-xs max-h-56 overflow-y-auto">
@@ -549,8 +551,8 @@ export default function AdminSettingsPage() {
                           {pm.commission_percent}%{' '}
                           {locale === 'hi'
                             ? pm.name.toLowerCase() === 'lancho'
-                              ? 'कमीशन'
-                              : 'कार्ड शुल्क'
+                              ? 'à¤•à¤®à¥€à¤¶à¤¨'
+                              : 'à¤•à¤¾à¤°à¥à¤¡ à¤¶à¥à¤²à¥à¤•'
                             : pm.name.toLowerCase() === 'lancho'
                             ? 'Commission'
                             : 'MDR'}
@@ -568,11 +570,11 @@ export default function AdminSettingsPage() {
                 <div>
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Car className="h-4 w-4 text-amber-600" />
-                    {locale === 'hi' ? 'कार ऑरिजिन व रजिस्ट्रेशन प्रीफिक्स' : 'Car Origins & Vehicle Prefixes'}
+                    {locale === 'hi' ? 'à¤•à¤¾à¤° à¤‘à¤°à¤¿à¤œà¤¿à¤¨ à¤µ à¤°à¤œà¤¿à¤¸à¥à¤Ÿà¥à¤°à¥‡à¤¶à¤¨ à¤ªà¥à¤°à¥€à¤«à¤¿à¤•à¥à¤¸' : 'Car Origins & Vehicle Prefixes'}
                   </CardTitle>
                   <CardDescription>
                     {locale === 'hi'
-                      ? '4-अक्षर नंबर-प्लेट कोड और भौगोलिक स्थान मैपिंग'
+                      ? '4-à¤…à¤•à¥à¤·à¤° à¤¨à¤‚à¤¬à¤°-à¤ªà¥à¤²à¥‡à¤Ÿ à¤•à¥‹à¤¡ à¤”à¤° à¤­à¥Œà¤—à¥‹à¤²à¤¿à¤• à¤¸à¥à¤¥à¤¾à¤¨ à¤®à¥ˆà¤ªà¤¿à¤‚à¤—'
                       : '4-char vehicle prefix to geographic origin mapping and gate entry correction'}
                   </CardDescription>
                 </div>
@@ -582,13 +584,13 @@ export default function AdminSettingsPage() {
                   onClick={() => setPrefixModalOpen(true)}
                   className="h-7 text-xs font-semibold"
                 >
-                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                  {locale === 'hi' ? 'à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤°à¥‡à¤‚' : 'Manage'}
                 </Button>
               </CardHeader>
               <CardContent className="pt-0 text-xs">
                 {vehiclePrefixes.length === 0 ? (
                   <div className="py-6 text-center text-stone-400">
-                    {locale === 'hi' ? 'कोई प्रीफिक्स दर्ज नहीं है।' : 'No prefixes registered.'}
+                    {locale === 'hi' ? 'à¤•à¥‹à¤ˆ à¤ªà¥à¤°à¥€à¤«à¤¿à¤•à¥à¤¸ à¤¦à¤°à¥à¤œ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤' : 'No prefixes registered.'}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto py-1">
@@ -609,7 +611,7 @@ export default function AdminSettingsPage() {
                     ))}
                     {vehiclePrefixes.length > 24 && (
                       <span className="text-[11px] text-stone-400 self-center px-1 font-medium">
-                        +{vehiclePrefixes.length - 24} {locale === 'hi' ? 'अन्य...' : 'more...'}
+                        +{vehiclePrefixes.length - 24} {locale === 'hi' ? 'à¤…à¤¨à¥à¤¯...' : 'more...'}
                       </span>
                     )}
                   </div>
@@ -703,10 +705,10 @@ export default function AdminSettingsPage() {
                         </td>
                         <td className="py-3 px-3 text-stone-700 font-mono text-[11px]">
                           {cr.calculation_method === 'percentage_of_revenue'
-                            ? (locale === 'hi' ? 'सेल का %' : '% of Revenue')
+                            ? (locale === 'hi' ? 'à¤¸à¥‡à¤² à¤•à¤¾ %' : '% of Revenue')
                             : cr.calculation_method === 'fixed_monthly'
-                            ? (locale === 'hi' ? 'मासिक फिक्स' : 'Fixed Monthly')
-                            : (locale === 'hi' ? 'मीटर आधारित' : cr.calculation_method)}
+                            ? (locale === 'hi' ? 'à¤®à¤¾à¤¸à¤¿à¤• à¤«à¤¿à¤•à¥à¤¸' : 'Fixed Monthly')
+                            : (locale === 'hi' ? 'à¤®à¥€à¤Ÿà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤' : cr.calculation_method)}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-stone-900">
                           {cr.calculation_method === 'percentage_of_revenue'
@@ -715,17 +717,17 @@ export default function AdminSettingsPage() {
                         </td>
                         <td className="py-3 px-3 text-center">
                           <Badge variant={cr.cost_classification === 'Fixed' ? 'info' : 'warning'}>
-                            {locale === 'hi' ? (cr.cost_classification === 'Fixed' ? 'फिक्स्ड' : 'वेरिएबल') : cr.cost_classification}
+                            {locale === 'hi' ? (cr.cost_classification === 'Fixed' ? 'à¤«à¤¿à¤•à¥à¤¸à¥à¤¡' : 'à¤µà¥‡à¤°à¤¿à¤à¤¬à¤²') : cr.cost_classification}
                           </Badge>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <Badge variant={cr.is_active !== false ? 'success' : 'outline'}>
-                            {cr.is_active !== false ? (locale === 'hi' ? 'चालू' : 'Active') : (locale === 'hi' ? 'बंद' : 'Inactive')}
+                            {cr.is_active !== false ? (locale === 'hi' ? 'à¤šà¤¾à¤²à¥‚' : 'Active') : (locale === 'hi' ? 'à¤¬à¤‚à¤¦' : 'Inactive')}
                           </Badge>
                         </td>
                         <td className="py-3 px-3 text-center text-[11px] text-stone-500 font-mono">
                           {cr.start_date ? cr.start_date : '2026-01-01'}
-                          {cr.end_date ? ` → ${cr.end_date}` : (locale === 'hi' ? ' → निरंतर' : ' → Ongoing')}
+                          {cr.end_date ? ` â†’ ${cr.end_date}` : (locale === 'hi' ? ' â†’ à¤¨à¤¿à¤°à¤‚à¤¤à¤°' : ' â†’ Ongoing')}
                         </td>
                         <td className="py-3 px-3 text-right">
                           <Button
@@ -768,7 +770,7 @@ export default function AdminSettingsPage() {
                   </CardDescription>
                 </div>
                 <Badge variant="success" className="text-xs py-1 px-2.5 font-bold shrink-0 self-start sm:self-auto">
-                  HEALTHY ≥ {100 + (Number(healthBufferInput) || 10)}% of BEP
+                  HEALTHY â‰¥ {100 + (Number(healthBufferInput) || 10)}% of BEP
                 </Badge>
               </div>
             </CardHeader>
@@ -800,19 +802,19 @@ export default function AdminSettingsPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-stone-50 rounded-xl border border-stone-200/70 text-xs">
                 <div>
-                  <span className="font-bold text-emerald-800">● HEALTHY:</span>
+                  <span className="font-bold text-emerald-800">â— HEALTHY:</span>
                   <p className="text-[11px] text-stone-600 mt-0.5">
-                    Projected Revenue ≥ <strong>{100 + (Number(healthBufferInput) || 10)}%</strong> of Calculated BEP
+                    Projected Revenue â‰¥ <strong>{100 + (Number(healthBufferInput) || 10)}%</strong> of Calculated BEP
                   </p>
                 </div>
                 <div>
-                  <span className="font-bold text-amber-800">● AT RISK:</span>
+                  <span className="font-bold text-amber-800">â— AT RISK:</span>
                   <p className="text-[11px] text-stone-600 mt-0.5">
-                    Revenue ≥ <strong>100%</strong> and &lt; <strong>{100 + (Number(healthBufferInput) || 10)}%</strong> of Calculated BEP
+                    Revenue â‰¥ <strong>100%</strong> and &lt; <strong>{100 + (Number(healthBufferInput) || 10)}%</strong> of Calculated BEP
                   </p>
                 </div>
                 <div>
-                  <span className="font-bold text-rose-800">● BELOW BREAK-EVEN:</span>
+                  <span className="font-bold text-rose-800">â— BELOW BREAK-EVEN:</span>
                   <p className="text-[11px] text-stone-600 mt-0.5">
                     Projected Revenue &lt; <strong>100%</strong> of Calculated BEP
                   </p>
@@ -856,7 +858,7 @@ export default function AdminSettingsPage() {
                               ? `${Number(tg.target_value)}% buffer`
                               : formatINR(Number(tg.target_value))}
                           </td>
-                          <td className="py-3 px-3 text-stone-500">{tg.notes || '—'}</td>
+                          <td className="py-3 px-3 text-stone-500">{tg.notes || 'â€”'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -926,15 +928,22 @@ export default function AdminSettingsPage() {
                             }`}
                           >
                             <td className="py-3 px-3">
-                              <div className="font-bold text-stone-900">{p.full_name}</div>
+                              <Link
+                                href={`/admin/users/${p.id}`}
+                                className="font-bold text-stone-900 hover:text-amber-600 transition-colors inline-flex items-center gap-1.5 group cursor-pointer"
+                                title={locale === 'hi' ? 'यूजर इंटेलीजेंस देखें' : 'View User Intelligence'}
+                              >
+                                <span>{p.full_name}</span>
+                                <Activity className="h-3.5 w-3.5 text-stone-300 group-hover:text-amber-600 transition-colors" />
+                              </Link>
                               <div className="text-[11px] text-stone-500 font-mono">{p.email}</div>
                             </td>
                             <td className="py-3 px-3 text-stone-600 font-mono">
-                              {p.phone || '—'}
+                              {p.phone || 'â€”'}
                             </td>
                             <td className="py-3 px-3">
                               <Badge variant="outline" className="font-semibold text-stone-800">
-                                {getLocalizedMasterName(p.role, locale) || (locale === 'hi' ? 'असाइन नहीं' : 'Unassigned')}
+                                {getLocalizedMasterName(p.role, locale) || (locale === 'hi' ? 'à¤…à¤¸à¤¾à¤‡à¤¨ à¤¨à¤¹à¥€à¤‚' : 'Unassigned')}
                               </Badge>
                             </td>
                             <td className="py-3 px-3 text-center">
@@ -946,6 +955,14 @@ export default function AdminSettingsPage() {
                             </td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                <Link
+                                  href={`/admin/users/${p.id}`}
+                                  className="h-7 px-2 text-[11px] font-medium inline-flex items-center gap-1 rounded-md border border-stone-200 text-stone-700 bg-white hover:bg-amber-50 hover:border-amber-300 hover:text-amber-800 transition-colors shadow-xs"
+                                  title={locale === 'hi' ? 'यूजर इंटेलीजेंस व एनालिटिक्स देखें' : 'View User Intelligence & Analytics'}
+                                >
+                                  <Activity className="h-3.5 w-3.5 text-amber-600" />
+                                  <span>{locale === 'hi' ? 'इंटेलीजेंस' : 'Intelligence'}</span>
+                                </Link>
                                 <Button
                                   variant="outline"
                                   size="sm"

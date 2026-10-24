@@ -21,11 +21,11 @@
     "kpi": {
       "employees": "Employees",
       "inactive": "(+{count} inactive)",
-      "departmentsRoles": "{departments} departments • {roles} roles",
+      "departmentsRoles": "{departments} departments â€¢ {roles} roles",
       "payroll": "Monthly Payroll",
       "dailyCost": "Daily allocation: {cost}/day",
       "hierarchy": "Hierarchy",
-      "hierarchyFlow": "Department → Team → Role",
+      "hierarchyFlow": "Department â†’ Team â†’ Role",
       "hierarchyDesc": "Department, team, and role structure"
     },
     "table": {
@@ -64,7 +64,7 @@
     "selectTeam": "Select Team...",
     "role": "Operational Role",
     "selectRole": "Select Role...",
-    "monthlySalary": "Monthly Gross Salary (₹)",
+    "monthlySalary": "Monthly Gross Salary (â‚¹)",
     "allottedWeeklyOff": "Allotted Weekly Off",
     "daysPerMonth": "(Days/Mo)",
     "contractor": "Contractor / Agency",
@@ -176,8 +176,8 @@
     "closeSuccess": "Payroll month locked successfully.",
     "editDeductionModal": {
       "title": "Adjust Period Deductions",
-      "employeeSubtitle": "{name} • {month}",
-      "penalty": "Manual Deductions (₹)",
+      "employeeSubtitle": "{name} â€¢ {month}",
+      "penalty": "Manual Deductions (â‚¹)",
       "penaltyDesc": "Manager adjustments, damages, or fines. (Attendance penalties are separate).",
       "notes": "Notes / Reason",
       "notesPlaceholder": "Reason for deduction adjustment...",
@@ -200,7 +200,7 @@
     "date": "Disbursement Date *",
     "paymentType": "Payment Type *",
     "paymentMethod": "Payment Method *",
-    "amount": "Payment Amount (₹) *",
+    "amount": "Payment Amount (â‚¹) *",
     "referenceNumber": "Cheque / UPI / Ref No.",
     "notes": "Remarks / Notes",
     "submit": "Record Payment",
@@ -244,7 +244,7 @@
     "generalPool": "General Staff Pool",
     "department": "Department Pool",
     "selectDepartment": "Select Department...",
-    "amount": "Tip Amount (₹)",
+    "amount": "Tip Amount (â‚¹)",
     "source": "Source / Table",
     "sourcePlaceholder": "e.g. Table 14, Front Lawn Party",
     "sourceDining": "Dining Guest Tip",
@@ -268,5 +268,112 @@
     "tipFailed": "Failed to record tip: {error}",
     "validAmount": "Please enter a valid tip amount."
   },
-  "staff": "Staff"
+  "staff": "Staff",
+  "intelligence": {
+    "title": "User Intelligence & Environment",
+    "subtitle": "Identity, authentication events, registered devices, network diagnostics, and technical reliability.",
+    "backToUsers": "Back to User Accounts",
+    "presence": {
+      "active": "Recently Active",
+      "idle": "Idle (Inferred)",
+      "offline": "Offline",
+      "unknown": "Status Unknown",
+      "inferredHint": "Inferred from activity within the last 10 minutes"
+    },
+    "actions": {
+      "deactivate": "Deactivate User",
+      "activate": "Activate User",
+      "forceLogout": "Force Logout",
+      "deregisterDevice": "De-register Device",
+      "confirmDeactivate": "Are you sure you want to deactivate this account? The user will be blocked from logging in.",
+      "confirmForceLogout": "Are you sure you want to invalidate all active sessions for this user? They will be forced to log in again.",
+      "confirmDeregisterDevice": "Are you sure you want to de-register this device?"
+    },
+    "tabs": {
+      "overview": "Overview & Identity",
+      "auth": "Authentication History",
+      "devices": "Registered Devices",
+      "network": "Network Diagnostics",
+      "reliability": "App Reliability & Health",
+      "security": "Security Signals"
+    },
+    "kpi": {
+      "lastLogin": "Last Successful Login",
+      "totalLogins": "Total Logins (All-Time)",
+      "failedAttempts": "Failed Logins ({range})",
+      "devicesCount": "Registered Devices",
+      "recentDevice": "Most Recent Device",
+      "reliabilityStatus": "Technical Reliability",
+      "errorFree": "100% Error-free in period",
+      "never": "Never recorded",
+      "allTime": "All Time",
+      "sevenDays": "7 Days",
+      "thirtyDays": "30 Days"
+    },
+    "timeline": {
+      "title": "Authentication & Session Timeline",
+      "filterAll": "All Event Types",
+      "filterSuccess": "Successful Logins",
+      "filterFailure": "Failed Attempts",
+      "filterLogout": "Logouts",
+      "noEvents": "No authentication events recorded for this user in the selected period.",
+      "eventTypes": {
+        "login_success": "Login Successful",
+        "login_failure": "Login Failed",
+        "logout": "User Logged Out",
+        "account_activated": "Account Activated",
+        "account_deactivated": "Account Deactivated",
+        "device_enrolled": "Device Enrolled",
+        "device_revoked": "Device Revoked",
+        "session_expired": "Session Expired"
+      }
+    },
+    "deviceLabels": {
+      "title": "Identified Client Devices",
+      "subtitle": "Hardware and browser environments observed during application usage.",
+      "noDevices": "No devices registered yet. Device records are captured when the user logs in.",
+      "gateEnrolled": "Enrolled Gate Terminal",
+      "standardClient": "Standard Web Client",
+      "pwaInstalled": "PWA Installed (Standalone Mode)",
+      "browserTab": "Running in Browser Tab",
+      "firstSeen": "First Seen",
+      "lastSeen": "Last Seen",
+      "resolution": "Resolution",
+      "dpr": "Pixel Ratio",
+      "notifications": "Notifications",
+      "deregister": "De-register",
+      "deregisterConfirm": "De-register device authorization?"
+    },
+    "networkLabels": {
+      "title": "Network & Connection Diagnostics",
+      "observedIps": "Observed IP Addresses",
+      "ipDesc": "Server-observed client request IP addresses (not client self-reported).",
+      "noIps": "No network requests recorded yet.",
+      "lastObserved": "Last Observed IP",
+      "occurrences": "{count} events observed"
+    },
+    "reliabilityLabels": {
+      "title": "Application Health & Error Telemetry",
+      "subtitle": "Lightweight client diagnostics and unhandled runtime events.",
+      "noErrors": "No technical errors or unhandled promise rejections recorded in this period.",
+      "totalErrors": "Total Technical Errors",
+      "apiFailures": "API Connectivity Failures",
+      "jsErrors": "JavaScript Runtime Errors",
+      "table": {
+        "time": "Timestamp",
+        "type": "Error Type",
+        "category": "Category",
+        "message": "Message / Diagnostics",
+        "endpoint": "Endpoint / Location"
+      }
+    },
+    "securityLabels": {
+      "title": "Security & Anomaly Signals",
+      "subtitle": "Deterministic rule-based indicators for administrative review.",
+      "noSignals": "No unusual activity or security signals detected in the observed period.",
+      "alert": "Action Required",
+      "warning": "Warning",
+      "info": "Informational"
+    }
+  }
 }
