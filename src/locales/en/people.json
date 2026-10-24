@@ -375,5 +375,16 @@
       "warning": "Warning",
       "info": "Informational"
     }
+  },
+  "landingPage": {
+    "title": "Default Landing Page",
+    "description": "Select the initial destination page for this role upon login or root entry.",
+    "selectPlaceholder": "Choose a landing page...",
+    "authorizedGroup": "Authorized Pages",
+    "unauthorizedGroup": "Requires Additional Permissions",
+    "permissionWarning": "Warning: This role does not currently have permissions for the selected page ({route}). If saved, users will be directed to an authorized fallback until permissions are granted.",
+    "systemFallback": "System Fallback ({route})",
+    "savedSuccess": "Role permissions and default landing page successfully updated for {role}!",
+    "returnToHome": "Return to Home Page"
   }
 }

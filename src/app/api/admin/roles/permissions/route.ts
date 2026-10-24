@@ -1,14 +1,29 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isRouteAuthorized, LANDING_PAGE_OPTIONS } from '@/lib/rbac';
 
 async function verifyAdminCaller(request: Request) {
   const authHeader = request.headers.get('authorization');
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
-  const serverSupabase = await createServerSupabaseClient();
-  const { data: { user }, error: authErr } = await serverSupabase.auth.getUser(bearerToken);
 
-  if (authErr || !user) {
+  let user: any = null;
+  let serverSupabase: any = null;
+
+  try {
+    serverSupabase = await createServerSupabaseClient();
+    const { data: authData, error: authErr } = await serverSupabase.auth.getUser(bearerToken);
+    if (!authErr) user = authData?.user;
+  } catch {
+    const admin = createAdminClient();
+    if (bearerToken) {
+      const { data: authData } = await admin.auth.getUser(bearerToken);
+      user = authData?.user;
+    }
+    serverSupabase = admin;
+  }
+
+  if (!user) {
     return { authorized: false, status: 401, error: 'Authentication required. Please log in.' };
   }
 
@@ -28,7 +43,9 @@ async function verifyAdminCaller(request: Request) {
     .select('permissions(code)')
     .eq('role_id', profile.role_id);
 
-  const hasAdminPerm = permCheck?.some((rp: any) => rp.permissions?.code === 'admin.manage') || profile.role?.name === 'Admin';
+  const hasAdminPerm =
+    permCheck?.some((rp: any) => rp.permissions?.code === 'admin.manage') ||
+    profile.role?.name === 'Admin';
 
   if (!hasAdminPerm) {
     return { authorized: false, status: 403, error: 'Access denied. System Administrator privilege required.' };
@@ -83,7 +100,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { roleId, permissionIds } = body;
+    const { roleId, permissionIds, landingPage } = body;
 
     if (!roleId || !Array.isArray(permissionIds)) {
       return NextResponse.json({ error: 'roleId and permissionIds (array) are required.' }, { status: 400 });
@@ -115,6 +132,39 @@ export async function POST(request: Request) {
       }
     }
 
+    // Validate landingPage against assigned permissions if provided
+    let finalLandingPage = targetRole.landing_page;
+    if (landingPage !== undefined) {
+      if (landingPage !== null && landingPage !== '') {
+        const isValidRoute = LANDING_PAGE_OPTIONS.some((opt) => opt.route === landingPage);
+        if (!isValidRoute) {
+          return NextResponse.json(
+            { error: `Invalid landing page route: '${landingPage}'. Must be a valid application route.` },
+            { status: 400 }
+          );
+        }
+
+        // Fetch assigned permission codes to validate access
+        const { data: assignedPerms } = await adminClient
+          .from('permissions')
+          .select('code')
+          .in('id', permissionIds);
+
+        const permCodes = assignedPerms?.map((p: any) => p.code) || [];
+        if (!isRouteAuthorized(targetRole.name, permCodes, landingPage)) {
+          return NextResponse.json(
+            {
+              error: `Role '${targetRole.name}' does not possess the required permissions to access landing page '${landingPage}'. Please assign the necessary permissions first.`,
+            },
+            { status: 400 }
+          );
+        }
+        finalLandingPage = landingPage;
+      } else {
+        finalLandingPage = null;
+      }
+    }
+
     // Fetch existing permissions for audit log
     const { data: oldPerms } = await adminClient
       .from('role_permissions')
@@ -143,18 +193,38 @@ export async function POST(request: Request) {
       if (insertErr) throw insertErr;
     }
 
+    // Update landing_page in roles table if changed
+    if (landingPage !== undefined && finalLandingPage !== targetRole.landing_page) {
+      const { error: updateRoleErr } = await adminClient
+        .from('roles')
+        .update({ landing_page: finalLandingPage })
+        .eq('id', roleId);
+
+      if (updateRoleErr) throw updateRoleErr;
+    }
+
     // Audit log
     await adminClient.from('audit_logs').insert({
       action: 'UPDATE',
       entity_type: 'role_permissions',
       entity_id: roleId,
       user_id: auth.caller.id,
-      old_values: { permission_ids: oldPerms?.map((p: any) => p.permission_id) || [] },
-      new_values: { permission_ids: permissionIds },
+      old_values: {
+        permission_ids: oldPerms?.map((p: any) => p.permission_id) || [],
+        landing_page: targetRole.landing_page,
+      },
+      new_values: {
+        permission_ids: permissionIds,
+        landing_page: finalLandingPage,
+      },
       created_at: new Date().toISOString(),
     });
 
-    return NextResponse.json({ success: true, count: permissionIds.length });
+    return NextResponse.json({
+      success: true,
+      count: permissionIds.length,
+      landing_page: finalLandingPage,
+    });
   } catch (err: any) {
     console.error('Error updating role permissions:', err);
     return NextResponse.json({ error: err.message || 'Failed to update role permissions.' }, { status: 500 });

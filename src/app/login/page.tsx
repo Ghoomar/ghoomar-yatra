@@ -195,9 +195,9 @@ function LoginForm() {
         return;
       }
 
-      // 5. If Admin or other roles, set role and route to dashboard
+      // 5. Set active role and route to root / to resolve authorized landing page
       setRole(userRole);
-      router.push('/dashboard');
+      router.push('/');
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');

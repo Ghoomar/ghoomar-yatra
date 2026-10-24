@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { MODULE_CATEGORIES } from '@/lib/rbac';
+import { MODULE_CATEGORIES, LANDING_PAGE_OPTIONS, INITIAL_ROLE_DEFAULT_ROUTES, isRouteAuthorized } from '@/lib/rbac';
+import { useI18n } from '@/lib/i18n/context';
 import { 
   Shield, 
   Check, 
@@ -15,7 +16,8 @@ import {
   CheckSquare, 
   Square,
   Sparkles,
-  Info
+  Info,
+  Navigation
 } from 'lucide-react';
 
 interface Role {
@@ -23,6 +25,8 @@ interface Role {
   name: string;
   description: string;
   is_system?: boolean;
+  landing_page?: string | null;
+  name_hi?: string;
 }
 
 interface Permission {
@@ -39,9 +43,11 @@ interface RolePermissionMatrixProps {
 }
 
 export function RolePermissionMatrix({ roles, onPermissionsUpdated }: RolePermissionMatrixProps) {
+  const { t, locale } = useI18n();
   const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [rolePermissionsMap, setRolePermissionsMap] = useState<Record<string, string[]>>({});
+  const [roleLandingPagesMap, setRoleLandingPagesMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -58,14 +64,17 @@ export function RolePermissionMatrix({ roles, onPermissionsUpdated }: RolePermis
 
       // Build map: role_id -> array of permission_ids
       const map: Record<string, string[]> = {};
-      (data.roles || []).forEach((r: Role) => {
+      const lpMap: Record<string, string> = {};
+      (data.roles || []).forEach((r: any) => {
         map[r.id] = [];
+        lpMap[r.id] = r.landing_page || INITIAL_ROLE_DEFAULT_ROUTES[r.name] || '/dashboard';
       });
       (data.role_permissions || []).forEach((rp: { role_id: string; permission_id: string }) => {
         if (!map[rp.role_id]) map[rp.role_id] = [];
         map[rp.role_id].push(rp.permission_id);
       });
       setRolePermissionsMap(map);
+      setRoleLandingPagesMap(lpMap);
 
       if (!selectedRoleId && data.roles && data.roles.length > 0) {
         // Default to Cashier or Admin for clear demonstration
@@ -130,6 +139,15 @@ export function RolePermissionMatrix({ roles, onPermissionsUpdated }: RolePermis
     setSaveSuccess(false);
   };
 
+  const handleLandingPageChange = (newRoute: string) => {
+    if (!selectedRoleId) return;
+    setRoleLandingPagesMap((prev) => ({
+      ...prev,
+      [selectedRoleId]: newRoute,
+    }));
+    setSaveSuccess(false);
+  };
+
   const handleSavePermissions = async () => {
     if (!selectedRoleId) return;
     setSaving(true);
@@ -143,6 +161,7 @@ export function RolePermissionMatrix({ roles, onPermissionsUpdated }: RolePermis
         body: JSON.stringify({
           roleId: selectedRoleId,
           permissionIds: currentAssignedPermIds,
+          landingPage: roleLandingPagesMap[selectedRoleId] || null,
         }),
       });
 
@@ -306,6 +325,86 @@ export function RolePermissionMatrix({ roles, onPermissionsUpdated }: RolePermis
             </div>
           </div>
         )}
+
+        {/* Default Landing Page Setting */}
+        {selectedRole && (() => {
+          const assignedPermCodes = permissions
+            .filter((p) => currentAssignedPermIds.includes(p.id))
+            .map((p) => p.code);
+
+          const fallbackRoute = INITIAL_ROLE_DEFAULT_ROUTES[selectedRole.name] || '/dashboard';
+          const currentLandingPage = roleLandingPagesMap[selectedRoleId] || fallbackRoute;
+          const isCurrentAuthorized = isRouteAuthorized(selectedRole.name, assignedPermCodes, currentLandingPage);
+
+          const authorizedLandingOptions = LANDING_PAGE_OPTIONS.filter((opt) =>
+            isRouteAuthorized(selectedRole.name, assignedPermCodes, opt.route)
+          );
+          const unauthorizedLandingOptions = LANDING_PAGE_OPTIONS.filter(
+            (opt) => !isRouteAuthorized(selectedRole.name, assignedPermCodes, opt.route)
+          );
+
+          return (
+            <div className="p-4 bg-white border border-stone-200 rounded-xl space-y-3 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                    <Navigation className="h-3.5 w-3.5 text-amber-600" />
+                    {t('people.landingPage.title')}
+                  </label>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    {t('people.landingPage.description')}
+                  </p>
+                </div>
+                <div className="text-[11px] text-stone-500">
+                  <span className="font-semibold">{t('people.landingPage.systemFallback', { route: fallbackRoute })}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                  <select
+                    value={currentLandingPage}
+                    onChange={(e) => handleLandingPageChange(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <optgroup label={t('people.landingPage.authorizedGroup')}>
+                      {authorizedLandingOptions.map((opt) => (
+                        <option key={opt.route} value={opt.route}>
+                          {t(opt.labelKey)} ({opt.route})
+                        </option>
+                      ))}
+                    </optgroup>
+                    {unauthorizedLandingOptions.length > 0 && (
+                      <optgroup label={t('people.landingPage.unauthorizedGroup')}>
+                        {unauthorizedLandingOptions.map((opt) => (
+                          <option key={opt.route} value={opt.route}>
+                            ⚠️ {t(opt.labelKey)} ({opt.route})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div className="text-[11px]">
+                  {!isCurrentAuthorized ? (
+                    <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-start gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span>{t('people.landingPage.permissionWarning', { route: currentLandingPage })}</span>
+                    </div>
+                  ) : (
+                    <div className="text-emerald-700 flex items-center gap-1.5 bg-emerald-50/70 border border-emerald-200/80 p-2 rounded-lg">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span className="font-medium">
+                        {locale === 'hi' ? 'अनुमतियों द्वारा सत्यापित' : 'Authorized by assigned permissions'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Permissions Grid Grouped by Category */}
         <div className="space-y-4">

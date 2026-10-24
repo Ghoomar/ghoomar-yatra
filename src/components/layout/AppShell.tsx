@@ -468,7 +468,7 @@ function AccessRestrictedNotice({
           <Button
             variant="amber"
             size="sm"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/')}
             className="gap-2 mx-auto"
           >
             <ArrowLeft className="h-4 w-4" /> {t('common.app.returnToCommandCenter')}

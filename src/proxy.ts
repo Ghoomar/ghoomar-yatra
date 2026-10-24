@@ -81,10 +81,10 @@ export async function proxy(request: NextRequest) {
     return createRedirectWithCookies(redirectUrl);
   }
 
-  // 4. Authenticated user accessing /login or root / -> route to dashboard
-  if (pathname === '/login' || pathname === '/') {
-    const dashboardUrl = new URL('/dashboard', request.url);
-    return createRedirectWithCookies(dashboardUrl);
+  // 4. Authenticated user accessing /login -> route to root / to resolve configured landing page
+  if (pathname === '/login') {
+    const rootUrl = new URL('/', request.url);
+    return createRedirectWithCookies(rootUrl);
   }
 
   // 5. Invalidate back-button caching for protected views
