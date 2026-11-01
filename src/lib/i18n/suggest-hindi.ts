@@ -9,7 +9,9 @@
 export type MasterEntityType =
   | 'general'
   | 'menu_item'
+  | 'recipe'
   | 'category'
+  | 'vendor_category'
   | 'inventory_item'
   | 'vendor'
   | 'person'
@@ -55,7 +57,7 @@ const EXACT_PHRASE_DICTIONARY: Record<string, string> = {
   'snacks & stalls': 'स्नैक्स और स्टॉल',
   'paid activities': 'पेड गतिविधियां',
 
-  // Inventory Categories
+  // Inventory & Vendor Categories
   'cooking oils & ghee': 'कुकिंग ऑयल और घी',
   'dairy & paneer': 'डेयरी और पनीर',
   'fresh vegetables': 'ताज़ी सब्ज़ियाँ',
@@ -72,6 +74,22 @@ const EXACT_PHRASE_DICTIONARY: Record<string, string> = {
   'marketing & highway signs': 'मार्केटिंग और हाईवे बोर्ड',
   'repairs & maintenance': 'मरम्मत और रखरखाव',
   'miscellaneous': 'विविध खर्च',
+  'vegetables & fruits': 'सब्जियां और फल',
+  'groceries & spices': 'किराना और मसाले',
+  'dairy & milk': 'डेयरी और दूध',
+  'lpg & fuel': 'एलपीजी और ईंधन',
+  'disposables & packaging': 'डिस्पोजेबल और पैकेजिंग',
+  'uniforms & linens': 'यूनिफॉर्म और लिनन',
+  'seafood & poultry': 'सीफूड और पोल्ट्री',
+  'stationery & office supplies': 'स्टेशनरी और ऑफिस सामग्री',
+
+  // Common Recipe Formulations & Bases
+  'makhani gravy base': 'मखनी ग्रेवी बेस',
+  'dal tadka base': 'दाल तड़का बेस',
+  'gatta curry base': 'गट्टा करी बेस',
+  'kadhi base': 'कढ़ी बेस',
+  'gulab jamun prep': 'गुलाब जामुन प्रेप',
+  'green mint chutney': 'हरी पुदीना चटनी',
 
   // Store & Organization Locations
   'central store room': 'सेंट्रल स्टोर रूम',
@@ -480,6 +498,15 @@ const WORD_DICTIONARY: Record<string, string> = {
   'refined': 'रिफाइंड',
   'dry': 'ड्राई',
   'gravy': 'ग्रेवी',
+  'base': 'बेस',
+  'prep': 'प्रेप',
+  'preparation': 'तैयारी',
+  'preparations': 'तैयारियां',
+  'kadhi': 'कढ़ी',
+  'chasni': 'चाशनी',
+  'dough': 'डो',
+  'chutney': 'चटनी',
+  'decoction': 'काढ़ा',
 
   // Basic Foods & Preparations
   'thali': 'थाली',
@@ -717,6 +744,24 @@ const WORD_DICTIONARY: Record<string, string> = {
   'stand': 'स्टैंड',
   'stainless': 'स्टेनलेस',
   'steel': 'स्टील',
+  'vegetable': 'सब्ज़ी',
+  'vegetables': 'सब्ज़ियां',
+  'fruit': 'फल',
+  'fruits': 'फल',
+  'grocery': 'किराना',
+  'groceries': 'किराना',
+  'spice': 'मसाला',
+  'spices': 'मसाले',
+  'dairy': 'डेयरी',
+  'poultry': 'पोल्ट्री',
+  'seafood': 'सीफूड',
+  'linens': 'लिनन',
+  'hardware': 'हार्डवेयर',
+  'sanitation': 'स्वच्छता',
+  'cleaning': 'सफाई',
+  'supplies': 'सामग्री',
+  'office': 'ऑफिस',
+  'green': 'हरी',
 
   // Organization & Staffing
   'kitchen': 'किचन',

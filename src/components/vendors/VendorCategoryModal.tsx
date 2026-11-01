@@ -8,6 +8,7 @@ import { VendorCategory } from '@/lib/types/database';
 import { X, Plus, Edit2, Check, Power, AlertCircle, RefreshCw, Tag } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
 interface VendorCategoryModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
   // Form State
   const [name, setName] = useState('');
   const [nameHi, setNameHi] = useState('');
+  const [isCustomHindi, setIsCustomHindi] = useState(false);
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
     setEditingCat(null);
     setName('');
     setNameHi('');
+    setIsCustomHindi(false);
     setDescription('');
     setErrorMessage(null);
   };
@@ -64,7 +67,9 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
   const handleStartEdit = (cat: VendorCategory) => {
     setEditingCat(cat);
     setName(cat.name);
-    setNameHi((cat as any).name_hi || '');
+    const existingHi = (cat as any).name_hi || '';
+    setNameHi(existingHi);
+    setIsCustomHindi(Boolean(existingHi));
     setDescription(cat.description || '');
     setErrorMessage(null);
   };
@@ -174,44 +179,30 @@ export function VendorCategoryModal({ isOpen, onClose, onUpdated }: VendorCatego
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">
-                  {t('purchases.vendors.categoryModal.categoryName')} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Seafood & Poultry"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
-                />
-              </div>
+            <BilingualNameInput
+              englishName={name}
+              onChangeEnglish={setName}
+              hindiName={nameHi}
+              onChangeHindi={(val) => setNameHi(val)}
+              isCustomHindi={isCustomHindi}
+              onCustomHindiChange={setIsCustomHindi}
+              entityType="vendor_category"
+              englishLabel={t('purchases.vendors.categoryModal.categoryName')}
+              hindiLabel={t('purchases.vendors.categoryModal.categoryNameHi')}
+              placeholderEnglish="e.g. Seafood & Poultry"
+              placeholderHindi="उदा. समुद्री भोजन और पोल्ट्री"
+              required
+            />
 
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">
-                  {t('purchases.vendors.categoryModal.categoryNameHi')}
-                </label>
-                <input
-                  type="text"
-                  value={nameHi}
-                  onChange={(e) => setNameHi(e.target.value)}
-                  placeholder="उदा. समुद्री भोजन और पोल्ट्री"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.categoryModal.description')}</label>
-                <input
-                  type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Optional description / details"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
-                />
-              </div>
+            <div>
+              <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.categoryModal.description')}</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description / details"
+                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 bg-white"
+              />
             </div>
 
             <div className="flex justify-end gap-2 pt-1">

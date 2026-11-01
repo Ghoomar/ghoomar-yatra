@@ -11,6 +11,7 @@ import { useAppRole } from '@/components/layout/AppShell';
 import { canViewCosting } from '@/lib/rbac';
 import { formatINR } from '@/lib/utils';
 import { filterLogicalIngredientGroups } from '@/lib/inventory/search';
+import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 import {
   UtensilsCrossed,
   Plus,
@@ -73,6 +74,7 @@ function RecipesContent() {
   const [groupSearchQuery, setGroupSearchQuery] = useState('');
   const [selectedInitialGroup, setSelectedInitialGroup] = useState<any | null>(null);
   const [initialQty, setInitialQty] = useState('');
+  const [isCustomHindi, setIsCustomHindi] = useState(false);
   const [newForm, setNewForm] = useState({
     name: '',
     name_hi: '',
@@ -173,6 +175,7 @@ function RecipesContent() {
 
       const data = await res.json();
       setIsModalOpen(false);
+      setIsCustomHindi(false);
       setSelectedInitialGroup(null);
       setGroupSearchQuery('');
       setInitialQty('');
@@ -276,7 +279,25 @@ function RecipesContent() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => {
+                setNewForm({
+                  name: '',
+                  name_hi: '',
+                  category: 'PREPARATION',
+                  batch_yield_quantity: '',
+                  batch_yield_unit: 'kg',
+                  portion_size_quantity: '',
+                  portion_size_unit: 'g',
+                  instructions: '',
+                  notes: '',
+                });
+                setIsCustomHindi(false);
+                setSelectedInitialGroup(null);
+                setGroupSearchQuery('');
+                setInitialQty('');
+                setCreateError(null);
+                setIsModalOpen(true);
+              }}
               className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
             >
               <Plus className="h-4 w-4" />
@@ -578,32 +599,20 @@ function RecipesContent() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Recipe Name (English) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newForm.name}
-                  onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
-                  placeholder="e.g. Makhani Gravy Base"
-                  className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  रेसिपी का नाम (हिंदी)
-                </label>
-                <input
-                  type="text"
-                  value={newForm.name_hi}
-                  onChange={(e) => setNewForm({ ...newForm, name_hi: e.target.value })}
-                  placeholder="उदा. मखनी ग्रेवी बेस"
-                  className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-sans"
-                />
-              </div>
+              <BilingualNameInput
+                englishName={newForm.name}
+                onChangeEnglish={(val) => setNewForm((prev) => ({ ...prev, name: val }))}
+                hindiName={newForm.name_hi}
+                onChangeHindi={(val) => setNewForm((prev) => ({ ...prev, name_hi: val }))}
+                isCustomHindi={isCustomHindi}
+                onCustomHindiChange={setIsCustomHindi}
+                entityType="recipe"
+                englishLabel={locale === 'hi' ? 'रेसिपी का नाम (अंग्रेज़ी)' : 'Recipe Name (English)'}
+                hindiLabel={locale === 'hi' ? 'रेसिपी का नाम (हिंदी)' : 'Recipe Name (Hindi)'}
+                placeholderEnglish="e.g. Makhani Gravy Base"
+                placeholderHindi="उदा. मखनी ग्रेवी बेस"
+                required
+              />
 
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
@@ -751,7 +760,10 @@ function RecipesContent() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setIsCustomHindi(false);
+                  }}
                   disabled={creating}
                 >
                   {t('sops.recipes.cancel')}
