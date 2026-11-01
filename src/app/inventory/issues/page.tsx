@@ -10,6 +10,7 @@ import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
+import { getSearchableItemText } from '@/lib/inventory/search';
 import {
   ArrowRightLeft,
   Users,
@@ -27,11 +28,20 @@ import {
   FileText,
   Filter,
   Package,
+  Layers,
 } from 'lucide-react';
+import { BrandVariantModal } from '@/components/inventory/BrandVariantModal';
+import { buildSearchableText } from '@/lib/inventory/search';
 
 interface IssueLine {
   item_id: string;
+  group_id?: string;
   quantity: number;
+  display_quantity?: number;
+  display_unit?: string;
+  unit_factor?: number;
+  pack_unit_name?: string;
+  brand_name?: string;
   use_pack_unit?: boolean;
 }
 
@@ -49,6 +59,9 @@ export default function StoreIssuesPage() {
 
   // Master Data
   const [items, setItems] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [packagingList, setPackagingList] = useState<any[]>([]);
+  const [aliases, setAliases] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -65,6 +78,7 @@ export default function StoreIssuesPage() {
   const [isStaffKhana, setIsStaffKhana] = useState(false);
   const [issueNotes, setIssueNotes] = useState('');
   const [issueLines, setIssueLines] = useState<IssueLine[]>([{ item_id: '', quantity: 1, use_pack_unit: false }]);
+  const [brandModalOpenIndex, setBrandModalOpenIndex] = useState<number | null>(null);
 
   // Transfer Form State
   const [transferSrcLoc, setTransferSrcLoc] = useState('');
@@ -93,6 +107,9 @@ export default function StoreIssuesPage() {
         { data: tData },
         { data: eData },
         { data: profData },
+        { data: aliasData },
+        { data: gData },
+        { data: pkgData },
       ] = await Promise.all([
         supabase
           .from('inventory_items')
@@ -113,9 +130,23 @@ export default function StoreIssuesPage() {
           .eq('employment_status', 'Active')
           .order('name'),
         supabase.from('profiles').select('id, full_name, email'),
+        supabase.from('inventory_item_aliases').select('item_id, group_id, alias, alias_type'),
+        supabase
+          .from('logical_ingredient_groups')
+          .select(`
+            id, group_code, name, name_hi, category_id, inventory_class, base_unit_id, search_family, is_active,
+            base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+            category:inventory_categories(id, name, name_hi, inventory_class)
+          `)
+          .eq('is_active', true)
+          .order('name'),
+        supabase.from('item_packaging_units').select('*').eq('is_active', true),
       ]);
 
       setItems(iData || []);
+      setGroups(gData || []);
+      setPackagingList(pkgData || []);
+      setAliases(aliasData || []);
       setLocations(locData || []);
       setDepartments(dData || []);
       setTeams(tData || []);
@@ -180,6 +211,16 @@ export default function StoreIssuesPage() {
     return map;
   }, [profiles]);
 
+  // Map of item_id -> string[] aliases for multi-lingual and alias search
+  const itemAliasesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    aliases.forEach((a) => {
+      if (!map[a.item_id]) map[a.item_id] = [];
+      if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+    });
+    return map;
+  }, [aliases]);
+
   // Selected Employee Details & Derived Context
   const selectedStaff = useMemo(() => {
     return employees.find((e) => e.id === employeeId) || null;
@@ -215,6 +256,49 @@ export default function StoreIssuesPage() {
     return teams.filter((t) => t.department_id === deptFilterId);
   }, [teams, deptFilterId]);
 
+  // Groups with their attached stock-tracked physical variants
+  const groupsWithVariants = useMemo(() => {
+    return groups.map((g) => {
+      const variants = items.filter((it) => it.group_id === g.id);
+      return {
+        ...g,
+        variants,
+      };
+    });
+  }, [groups, items]);
+
+  // Group aliases lookup map
+  const groupAliasesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    aliases.forEach((a) => {
+      const key = a.group_id || a.item_id;
+      if (key) {
+        if (!map[key]) map[key] = [];
+        if (a.alias && !map[key].includes(a.alias)) map[key].push(a.alias);
+      }
+    });
+    return map;
+  }, [aliases]);
+
+  // Eligible groups for Issue: Food Raw Material & Non-Food Consumables ONLY
+  const eligibleIssueGroups = useMemo(() => {
+    return groupsWithVariants.filter((g) => {
+      if (g.inventory_class !== 'Food Raw Material' && g.inventory_class !== 'Non-Food Consumable') {
+        return false;
+      }
+      const catName = g.category?.name || '';
+      if (
+        catName.toLowerCase().includes('fuel') ||
+        catName.toLowerCase().includes('generator') ||
+        catName.toLowerCase().includes('lpg') ||
+        catName.toLowerCase().includes('diesel')
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [groupsWithVariants]);
+
   // Eligible items for Issue: Food Raw Material & Non-Food Consumables ONLY
   // (Excludes Physical Assets, Uniforms, and dedicated Utility fuels)
   const eligibleIssueItems = useMemo(() => {
@@ -232,6 +316,16 @@ export default function StoreIssuesPage() {
       return true;
     });
   }, [items]);
+
+  // Helper to get total available stock for a group at a specific location
+  const getGroupStockAtLocation = (grp: any, locId: string): number => {
+    if (!grp || !locId) return 0;
+    const variants = grp.variants || items.filter((it: any) => it.group_id === grp.id);
+    return variants.reduce((sum: number, it: any) => {
+      const ls = (it.location_stocks || []).find((s: any) => s.location_id === locId);
+      return sum + Number(ls?.quantity || 0);
+    }, 0);
+  };
 
   // Eligible items for Transfer (Food Raw Material, Non-Food Consumable with location stocks)
   const eligibleTransferItems = useMemo(() => {
@@ -427,6 +521,7 @@ export default function StoreIssuesPage() {
         await supabase.from('consumption_issue_items').insert({
           issue_id: issueHeader.id,
           item_id: line.item_id,
+          group_id: line.group_id || it.group_id || null,
           quantity: baseQty,
           unit_cost: unitCost,
           total_value: baseQty * unitCost,
@@ -909,10 +1004,14 @@ export default function StoreIssuesPage() {
                     <div className="space-y-2">
                       {issueLines.map((line, idx) => {
                         const selectedItem = items.find((i) => i.id === line.item_id);
+                        const selectedGroup = eligibleIssueGroups.find((g) => g.id === line.group_id) ||
+                          (selectedItem ? eligibleIssueGroups.find((g) => g.id === selectedItem.group_id) : null);
+                        const groupVariants = selectedGroup?.variants || (selectedItem ? [selectedItem] : []);
                         const storeStock = getItemStockAtLocation(selectedItem, sourceLocationId);
                         const factor = Number(selectedItem?.conversion_factor || 1);
                         const hasPack = selectedItem?.secondary_unit_id && factor > 1;
-                        const baseUnitSym = getLocalizedMasterSymbol(selectedItem?.unit, locale) || selectedItem?.unit?.symbol || 'units';
+                        const baseUnitSym = getLocalizedMasterSymbol(selectedItem?.unit || selectedGroup?.base_unit, locale) ||
+                          selectedItem?.unit?.symbol || selectedGroup?.base_unit?.symbol || 'units';
                         const secUnitSym = getLocalizedMasterSymbol(selectedItem?.sec_unit, locale) || selectedItem?.sec_unit?.symbol || 'pack';
                         const lineBaseQty = (line.quantity || 0) * (line.use_pack_unit ? factor : 1);
                         const isOverStock = selectedItem && lineBaseQty > storeStock;
@@ -925,52 +1024,119 @@ export default function StoreIssuesPage() {
                               isOverStock || isZeroStock ? 'bg-rose-50/70 border-rose-200' : 'bg-stone-50/70 border-stone-200'
                             }`}
                           >
-                            {/* Item Selector */}
+                            {/* Ingredient & Brand Variant Selector */}
                             <div className="flex-1 w-full">
                               <SearchableSelect
-                                options={eligibleIssueItems}
-                                value={line.item_id}
+                                options={eligibleIssueGroups}
+                                value={selectedGroup?.id || ''}
+                                getSearchableText={(grp) => buildSearchableText(grp, groupAliasesMap[grp.id] || [])}
                                 onChange={(val) => {
+                                  const grp = eligibleIssueGroups.find((g) => g.id === val);
+                                  if (!grp) return;
+                                  const variants = grp.variants || [];
+                                  const availVariants = variants.filter((v: any) => getItemStockAtLocation(v, sourceLocationId) > 0);
                                   const updated = [...issueLines];
-                                  updated[idx].item_id = val;
-                                  setIssueLines(updated);
+                                  if (variants.length > 1) {
+                                    const defaultVar = availVariants[0] || variants[0];
+                                    updated[idx] = {
+                                      group_id: grp.id,
+                                      item_id: defaultVar?.id || '',
+                                      quantity: 1,
+                                      brand_name: defaultVar?.brand_name || defaultVar?.name,
+                                    };
+                                    setIssueLines(updated);
+                                    setBrandModalOpenIndex(idx);
+                                  } else if (variants.length === 1) {
+                                    const v = variants[0];
+                                    const baseSym = getLocalizedMasterSymbol(v.unit, locale) || v.unit?.symbol || 'units';
+                                    updated[idx] = {
+                                      group_id: grp.id,
+                                      item_id: v.id,
+                                      quantity: 1,
+                                      display_quantity: 1,
+                                      display_unit: baseSym,
+                                      unit_factor: 1,
+                                      brand_name: v.brand_name || v.name,
+                                    };
+                                    setIssueLines(updated);
+                                  } else {
+                                    updated[idx] = {
+                                      group_id: grp.id,
+                                      item_id: '',
+                                      quantity: 1,
+                                    };
+                                    setIssueLines(updated);
+                                  }
                                 }}
-                                isOptionDisabled={(it) => getItemStockAtLocation(it, sourceLocationId) <= 0}
-                                labelKey={(it) => getLocalizedMasterName(it, locale) || it.name}
-                                secondaryLabelKey={(it) => {
-                                  const locQty = getItemStockAtLocation(it, sourceLocationId);
-                                  const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
-                                  return locQty <= 0 ? t('inventory.issues.outOfStock') : `${locQty} ${itUnitSym}`;
+                                isOptionDisabled={(grp) => getGroupStockAtLocation(grp, sourceLocationId) <= 0}
+                                labelKey={(grp) => getLocalizedMasterName(grp, locale) || grp.name}
+                                secondaryLabelKey={(grp) => {
+                                  const grpQty = getGroupStockAtLocation(grp, sourceLocationId);
+                                  const unitSym = getLocalizedMasterSymbol(grp.base_unit, locale) || grp.base_unit?.symbol || 'units';
+                                  return grpQty <= 0 ? t('inventory.issues.outOfStock') : `${grpQty} ${unitSym}`;
                                 }}
                                 placeholder={t('inventory.issues.selectItem')}
                                 required
                                 className="w-full"
                                 triggerClassName="p-2 font-medium bg-white text-xs rounded-lg"
-                                renderOption={(it) => {
-                                  const locQty = getItemStockAtLocation(it, sourceLocationId);
-                                  const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
-                                  const out = locQty <= 0;
+                                renderOption={(grp) => {
+                                  const grpQty = getGroupStockAtLocation(grp, sourceLocationId);
+                                  const unitSym = getLocalizedMasterSymbol(grp.base_unit, locale) || grp.base_unit?.symbol || 'units';
+                                  const out = grpQty <= 0;
+                                  const grpAliases = groupAliasesMap[grp.id] || [];
                                   return (
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="truncate font-medium text-stone-900">
-                                        {getLocalizedMasterName(it, locale) || it.name}
+                                    <div className="w-full">
+                                      <div className="flex items-center justify-between">
+                                        <div className="truncate font-medium text-stone-900">
+                                          {getLocalizedMasterName(grp, locale) || grp.name}
+                                        </div>
+                                        <span
+                                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono ml-2 shrink-0 ${
+                                            out ? 'bg-rose-100 text-rose-700 font-bold' : 'bg-emerald-50 text-emerald-800'
+                                          }`}
+                                        >
+                                          {out ? `[${t('inventory.issues.outOfStock')}]` : `${grpQty} ${unitSym}`}
+                                        </span>
                                       </div>
-                                      <span
-                                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ml-2 shrink-0 ${
-                                          out ? 'bg-rose-100 text-rose-700 font-bold' : 'bg-emerald-50 text-emerald-800'
-                                        }`}
-                                      >
-                                        {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
-                                      </span>
+                                      {grpAliases.length > 0 && (
+                                        <div className="text-[10px] text-stone-400 truncate mt-0.5">
+                                          {grpAliases.slice(0, 3).join(', ')}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 }}
                               />
-                              {selectedItem && (
-                                <div className="mt-1 flex items-center gap-2 text-[10px]">
-                                  <span className={storeStock > 0 ? 'text-stone-500' : 'text-rose-600 font-bold'}>
-                                    {t('inventory.issues.available')}: {storeStock} {baseUnitSym}
-                                  </span>
+                              {selectedGroup && (
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                                  {selectedItem && (
+                                    <Badge variant="outline" className="bg-amber-50 text-amber-900 border-amber-300 font-bold px-1.5 py-0.5">
+                                      {line.brand_name || selectedItem.brand_name || selectedItem.name}
+                                    </Badge>
+                                  )}
+                                  {groupVariants.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setBrandModalOpenIndex(idx)}
+                                      className="text-amber-700 hover:text-amber-800 underline font-semibold flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Layers className="h-3 w-3" />
+                                      {t('inventory.issues.changeVariant')}
+                                    </button>
+                                  )}
+                                  {selectedItem ? (
+                                    <span className={storeStock > 0 ? 'text-stone-500' : 'text-rose-600 font-bold'}>
+                                      {t('inventory.issues.available')}: {storeStock} {baseUnitSym}
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setBrandModalOpenIndex(idx)}
+                                      className="text-rose-600 font-bold underline"
+                                    >
+                                      {t('inventory.issues.stockVariant')}
+                                    </button>
+                                  )}
                                   {isOverStock && (
                                     <span className="text-rose-600 font-bold flex items-center gap-0.5">
                                       <AlertTriangle className="h-3 w-3" />
@@ -987,22 +1153,40 @@ export default function StoreIssuesPage() {
                                 type="number"
                                 step="any"
                                 min="0.001"
-                                max={hasPack && line.use_pack_unit ? storeStock / factor : storeStock}
-                                value={line.quantity || ''}
+                                max={
+                                  line.unit_factor && line.unit_factor > 0
+                                    ? storeStock / line.unit_factor
+                                    : hasPack && line.use_pack_unit
+                                    ? storeStock / factor
+                                    : storeStock
+                                }
+                                value={line.display_quantity ?? line.quantity ?? ''}
                                 onChange={(e) => {
                                   const updated = [...issueLines];
-                                  updated[idx].quantity = parseFloat(e.target.value) || 0;
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const uFactor = updated[idx].unit_factor || 1;
+                                  updated[idx].display_quantity = val;
+                                  updated[idx].quantity = val * uFactor;
                                   setIssueLines(updated);
                                 }}
                                 placeholder={t('inventory.issues.qtyPlaceholder')}
                                 required
                                 className="w-full rounded-lg border border-stone-300 p-2 font-bold text-stone-900 bg-white text-right focus:outline-none"
                               />
+                              {line.display_unit && line.display_unit !== baseUnitSym && (
+                                <span className="text-[9px] text-stone-500 font-mono block text-right mt-0.5 truncate">
+                                  = {(line.quantity || 0).toFixed(3)} {baseUnitSym}
+                                </span>
+                              )}
                             </div>
 
-                            {/* Pack Unit Toggle if applicable */}
+                            {/* Unit Display or Pack Unit Toggle */}
                             <div className="w-28 text-[11px]">
-                              {hasPack ? (
+                              {line.display_unit && line.display_unit !== baseUnitSym ? (
+                                <span className="text-amber-900 font-semibold py-2 px-2 block text-center bg-amber-100/70 border border-amber-300 rounded-lg">
+                                  {line.display_unit}
+                                </span>
+                              ) : hasPack ? (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1109,6 +1293,45 @@ export default function StoreIssuesPage() {
             </Card>
           )}
 
+          {/* Brand Variant Selection Modal */}
+          {brandModalOpenIndex !== null && (() => {
+            const line = issueLines[brandModalOpenIndex];
+            if (!line) return null;
+            const grp = eligibleIssueGroups.find((g) => g.id === line.group_id) ||
+                        groupsWithVariants.find((g) => g.variants.some((v: any) => v.id === line.item_id));
+            const sourceLocName = locations.find((l) => l.id === sourceLocationId)?.name || (locale === 'hi' ? 'सेंट्रल स्टोर' : 'Central Store');
+            if (!grp) return null;
+
+            return (
+              <BrandVariantModal
+                isOpen={true}
+                onClose={() => setBrandModalOpenIndex(null)}
+                group={grp}
+                variants={grp.variants || []}
+                packagingList={packagingList}
+                sourceLocationId={sourceLocationId}
+                sourceLocationName={sourceLocName}
+                initialVariantId={line.item_id}
+                onConfirm={(selection) => {
+                  const updated = [...issueLines];
+                  const factor = selection.displayQuantity > 0 ? selection.baseQuantity / selection.displayQuantity : 1;
+                  updated[brandModalOpenIndex] = {
+                    group_id: grp.id,
+                    item_id: selection.item.id,
+                    quantity: selection.baseQuantity,
+                    display_quantity: selection.displayQuantity,
+                    display_unit: selection.displayUnit,
+                    unit_factor: factor,
+                    pack_unit_name: selection.packUnitName,
+                    brand_name: selection.item.brand_name || selection.item.name,
+                  };
+                  setIssueLines(updated);
+                  setBrandModalOpenIndex(null);
+                }}
+              />
+            );
+          })()}
+
           {/* TAB 2: INTER-LOCATION TRANSFERS */}
           {activeTab === 'transfer' && (
             <Card className="border-stone-200 shadow-sm">
@@ -1201,6 +1424,7 @@ export default function StoreIssuesPage() {
                               <SearchableSelect
                                 options={eligibleTransferItems}
                                 value={line.item_id}
+                                getSearchableText={(it) => getSearchableItemText(it, itemAliasesMap)}
                                 onChange={(val) => {
                                   const updated = [...transferLines];
                                   updated[idx].item_id = val;
@@ -1221,18 +1445,26 @@ export default function StoreIssuesPage() {
                                   const locQty = getItemStockAtLocation(it, transferSrcLoc);
                                   const itUnitSym = getLocalizedMasterSymbol(it.unit, locale) || it.unit?.symbol || 'units';
                                   const out = locQty <= 0;
+                                  const itemAliases = itemAliasesMap[it.id] || [];
                                   return (
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="truncate font-medium text-stone-900">
-                                        {getLocalizedMasterName(it, locale) || it.name}
+                                    <div className="w-full">
+                                      <div className="flex items-center justify-between">
+                                        <div className="truncate font-medium text-stone-900">
+                                          {getLocalizedMasterName(it, locale) || it.name}
+                                        </div>
+                                        <span
+                                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono ml-2 shrink-0 ${
+                                            out ? 'bg-rose-100 text-rose-700 font-bold' : 'bg-emerald-50 text-emerald-800'
+                                          }`}
+                                        >
+                                          {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
+                                        </span>
                                       </div>
-                                      <span
-                                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ml-2 shrink-0 ${
-                                          out ? 'bg-rose-100 text-rose-700 font-bold' : 'bg-emerald-50 text-emerald-800'
-                                        }`}
-                                      >
-                                        {out ? `[${t('inventory.issues.outOfStock')}]` : `${locQty} ${itUnitSym}`}
-                                      </span>
+                                      {itemAliases.length > 0 && (
+                                        <div className="text-[10px] text-stone-400 truncate mt-0.5">
+                                          {itemAliases.slice(0, 3).join(', ')}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 }}

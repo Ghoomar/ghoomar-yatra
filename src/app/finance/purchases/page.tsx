@@ -11,6 +11,7 @@ import { VendorModal } from '@/components/vendors/VendorModal';
 import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
 import { VendorsView } from '@/components/purchases/VendorsView';
 import { PurchaseInvoicesView, PurchaseInvoiceRecord } from '@/components/purchases/PurchaseInvoicesView';
+import { getSearchableItemText } from '@/lib/inventory/search';
 import {
   ShoppingBag,
   Building2,
@@ -32,8 +33,13 @@ interface PurchaseLineForm {
   quantity: number;
   rate: number;
   use_pack?: boolean;
+  packaging_unit_id?: string | null;
+  brand_name?: string;
+  pack_unit?: string;
   pack_quantity?: number;
   pack_rate?: number;
+  conversion_factor?: number;
+  is_custom_pack?: boolean;
   destination_location_id?: string;
   previous_rate?: number;
   previous_date?: string;
@@ -70,6 +76,8 @@ function PurchasesContent() {
   const [vendors, setVendors] = useState<VendorOutstandingSummary[]>([]);
   const [rawVendors, setRawVendors] = useState<Vendor[]>([]);
   const [items, setItems] = useState<any[]>([]);
+  const [packagingUnits, setPackagingUnits] = useState<any[]>([]);
+  const [aliases, setAliases] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [vendorItems, setVendorItems] = useState<any[]>([]);
@@ -105,6 +113,12 @@ function PurchasesContent() {
   const [paymentMethodId, setPaymentMethodId] = useState('');
   const [paymentRef, setPaymentRef] = useState('');
   const [paymentSaving, setPaymentSaving] = useState(false);
+
+  // Invoice Cancellation Modal State
+  const [cancelInvoiceModalOpen, setCancelInvoiceModalOpen] = useState(false);
+  const [cancellingInvoice, setCancellingInvoice] = useState<PurchaseInvoiceRecord | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancellingLoading, setCancellingLoading] = useState(false);
 
   // Fetch vendor price memory whenever selectedVendorId changes
   useEffect(() => {
@@ -143,6 +157,8 @@ function PurchasesContent() {
         { data: vData, error: vErr },
         { data: vRaw, error: vRawErr },
         { data: iData, error: iErr },
+        { data: pkgData },
+        { data: aliasData },
         { data: locData },
         { data: pmData },
         { data: viData },
@@ -159,6 +175,8 @@ function PurchasesContent() {
             sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
           `)
           .order('name'),
+        supabase.from('item_packaging_units').select('*, pack_unit:units!item_packaging_units_pack_unit_id_fkey(symbol, symbol_hi, name, name_hi)').eq('is_active', true),
+        supabase.from('inventory_item_aliases').select('item_id, alias, alias_type'),
         supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
         supabase.from('payment_methods').select('*').order('name'),
         supabase.from('vendor_items').select('id, vendor_id, inventory_item_id, last_purchase_rate, last_purchase_date'),
@@ -173,6 +191,9 @@ function PurchasesContent() {
             business_date,
             net_amount,
             total_amount,
+            status,
+            cancelled_at,
+            cancelled_reason,
             vendor_id,
             vendors (
               id,
@@ -185,6 +206,12 @@ function PurchasesContent() {
               quantity,
               rate,
               total_amount,
+              packaging_unit_id,
+              brand_name_snapshot,
+              pack_unit_snapshot,
+              pack_quantity,
+              pack_rate,
+              conversion_factor_snapshot,
               inventory_items (
                 name,
                 name_hi,
@@ -207,6 +234,8 @@ function PurchasesContent() {
       setVendors(vData || []);
       setRawVendors(vRaw || []);
       setItems(iData || []);
+      setPackagingUnits(pkgData || []);
+      setAliases(aliasData || []);
       setLocations(locData || []);
       setPaymentMethods(pmData || []);
       setVendorItems(viData || []);
@@ -227,6 +256,12 @@ function PurchasesContent() {
           rate: Number(l.rate) || 0,
           total_amount: Number(l.total_amount) || 0,
           unit_symbol: (locale === 'hi' && l.inventory_items?.units?.symbol_hi) ? l.inventory_items.units.symbol_hi : (l.inventory_items?.units?.symbol || ''),
+          packaging_unit_id: l.packaging_unit_id,
+          brand_name_snapshot: l.brand_name_snapshot,
+          pack_unit_snapshot: l.pack_unit_snapshot,
+          pack_quantity: l.pack_quantity ? Number(l.pack_quantity) : null,
+          pack_rate: l.pack_rate ? Number(l.pack_rate) : null,
+          conversion_factor_snapshot: l.conversion_factor_snapshot ? Number(l.conversion_factor_snapshot) : null,
         }));
 
         return {
@@ -237,6 +272,9 @@ function PurchasesContent() {
           business_date: p.business_date,
           net_amount: Number(p.net_amount) || 0,
           total_amount: Number(p.total_amount) || 0,
+          status: p.status || 'completed',
+          cancelled_at: p.cancelled_at,
+          cancelled_reason: p.cancelled_reason,
           vendor_id: p.vendor_id,
           vendor_name: p.vendors?.name || 'Unknown Vendor',
           vendor_code: p.vendors?.vendor_code || '',
@@ -257,6 +295,45 @@ function PurchasesContent() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Map of item_id -> string[] aliases for multi-lingual and alias search
+  const itemAliasesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    aliases.forEach((a) => {
+      if (!map[a.item_id]) map[a.item_id] = [];
+      if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+    });
+    return map;
+  }, [aliases]);
+
+  const handleCancelInvoiceConfirm = async () => {
+    if (!cancellingInvoice) return;
+    if (!cancelReason.trim()) {
+      alert(t('purchases.bills.reasonRequired'));
+      return;
+    }
+    setCancellingLoading(true);
+    try {
+      const { error } = await supabase.rpc('cancel_purchase_invoice', {
+        p_purchase_id: cancellingInvoice.id,
+        p_reason: cancelReason.trim(),
+      });
+      if (error) throw error;
+      setMessage({
+        type: 'success',
+        text: t('purchases.bills.invoiceCancelledSuccess', { number: cancellingInvoice.purchase_number }),
+      });
+      setCancelInvoiceModalOpen(false);
+      setCancellingInvoice(null);
+      setCancelReason('');
+      loadData();
+    } catch (err: any) {
+      console.error('Error cancelling invoice:', err);
+      alert('Failed to cancel invoice: ' + err.message);
+    } finally {
+      setCancellingLoading(false);
+    }
+  };
 
   // Aggregate high-level summary KPIs
   const totalOutstanding = useMemo(() => {
@@ -434,29 +511,81 @@ function PurchasesContent() {
 
       for (const line of lines) {
         const currentItem = items.find((i) => i.id === line.item_id);
-        const conv = Number(currentItem?.conversion_factor) || 1;
-
         let baseQty: number;
         let baseRate: number;
+        let pkgUnitId: string | null = null;
+        let brandSnapshot: string | null = null;
+        let packUnitSnapshot: string | null = null;
+        let packQty: number | null = null;
+        let packRate: number | null = null;
+        let convFactorSnapshot: number | null = null;
 
-        if (line.use_pack && conv > 0) {
+        if (line.use_pack) {
+          const conv = Number(line.conversion_factor) || Number(currentItem?.conversion_factor) || 1;
           baseQty = (line.pack_quantity || 0) * conv;
-          baseRate = (line.pack_rate || 0) / conv;
+          baseRate = conv > 0 ? (line.pack_rate || 0) / conv : (line.pack_rate || 0);
+          pkgUnitId = line.packaging_unit_id || null;
+          brandSnapshot = line.brand_name?.trim() || null;
+          packUnitSnapshot = line.pack_unit?.trim() || currentItem?.sec_unit?.symbol || 'Pack';
+          packQty = line.pack_quantity || 0;
+          packRate = line.pack_rate || 0;
+          convFactorSnapshot = conv;
+
+          // Persist custom packaging definition to item_packaging_units for future reuse
+          if (line.is_custom_pack && brandSnapshot && packUnitSnapshot && conv > 0 && !pkgUnitId) {
+            try {
+              const pkgRes = await fetch('/api/inventory/packaging', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  inventory_item_id: line.item_id,
+                  brand_name: brandSnapshot,
+                  pack_unit_name: packUnitSnapshot,
+                  pack_size_in_base_units: conv,
+                  vendor_id: selectedVendorId || null,
+                  is_default: false,
+                }),
+              });
+
+              if (pkgRes.ok) {
+                const pkgJson = await pkgRes.json();
+                if (pkgJson.packaging?.id) pkgUnitId = pkgJson.packaging.id;
+              } else {
+                const errData = await pkgRes.json().catch(() => ({}));
+                const errMsg = errData.error || 'Failed to persist custom packaging unit';
+                setMessage({ type: 'error', text: `${errMsg} for "${brandSnapshot}"` });
+                throw new Error(errMsg);
+              }
+            } catch (pkgErr: any) {
+              console.error('Could not persist custom packaging unit:', pkgErr);
+              setMessage({
+                type: 'error',
+                text: pkgErr.message || 'Error saving custom packaging definition',
+              });
+              throw pkgErr;
+            }
+          }
         } else {
           baseQty = line.quantity;
           baseRate = line.rate;
         }
 
         if (!line.item_id || baseQty <= 0) continue;
-        const lineTotal = baseQty * baseRate;
+        const lineTotal = line.use_pack ? (packQty || 0) * (packRate || 0) : baseQty * baseRate;
 
-        // Insert purchase line in base units
+        // Insert purchase line in base units with immutable packaging snapshot
         const { error: lineErr } = await supabase.from('purchase_lines').insert({
           purchase_id: header.id,
           item_id: line.item_id,
           quantity: baseQty,
           rate: baseRate,
           total_amount: lineTotal,
+          packaging_unit_id: pkgUnitId,
+          brand_name_snapshot: brandSnapshot,
+          pack_unit_snapshot: packUnitSnapshot,
+          pack_quantity: packQty,
+          pack_rate: packRate,
+          conversion_factor_snapshot: convFactorSnapshot,
         });
         if (lineErr) throw lineErr;
 
@@ -767,6 +896,11 @@ function PurchasesContent() {
             if (vendorId) setPaymentVendorId(vendorId);
             setShowPaymentModal(true);
           }}
+          onCancelInvoice={(inv) => {
+            setCancellingInvoice(inv);
+            setCancelReason('');
+            setCancelInvoiceModalOpen(true);
+          }}
         />
       ) : (
         <VendorsView
@@ -869,6 +1003,90 @@ function PurchasesContent() {
         </div>
       )}
 
+      {/* Cancel Invoice Confirmation Modal */}
+      {cancelInvoiceModalOpen && cancellingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h2 className="text-base font-bold text-rose-700 flex items-center gap-2">
+                <Trash2 className="h-5 w-5" />
+                {t('purchases.bills.cancelInvoiceTitle')}
+              </h2>
+              <button
+                onClick={() => {
+                  setCancelInvoiceModalOpen(false);
+                  setCancellingInvoice(null);
+                }}
+                className="text-stone-400 hover:text-stone-700 text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-stone-700">
+              <p className="font-medium text-stone-900">
+                {t('purchases.bills.cancelInvoiceConfirm')}
+              </p>
+
+              <div className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-1 font-mono text-[11px]">
+                <div><strong>PO:</strong> {cancellingInvoice.purchase_number}</div>
+                {cancellingInvoice.invoice_number && <div><strong>Bill #:</strong> {cancellingInvoice.invoice_number}</div>}
+                <div><strong>Vendor:</strong> {cancellingInvoice.vendor_name}</div>
+                <div><strong>Total:</strong> {formatINR(cancellingInvoice.net_amount)}</div>
+                <div><strong>Date:</strong> {cancellingInvoice.purchase_date}</div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-stone-900 mb-1">
+                  {t('purchases.bills.cancelReason')} <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  rows={3}
+                  placeholder={t('purchases.bills.cancelReason')}
+                  required
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setCancelInvoiceModalOpen(false);
+                    setCancellingInvoice(null);
+                  }}
+                  disabled={cancellingLoading}
+                >
+                  {t('purchases.bills.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={handleCancelInvoiceConfirm}
+                  disabled={cancellingLoading || !cancelReason.trim()}
+                  className="gap-1.5"
+                >
+                  {cancellingLoading ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>{t('purchases.bills.saving')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{t('purchases.bills.cancelInvoice')}</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Purchase Invoice Modal */}
       {showPurchaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -931,8 +1149,9 @@ function PurchasesContent() {
 
                 {lines.map((line, idx) => {
                   const currentItem = items.find((i) => i.id === line.item_id);
-                  const hasPack = Boolean(currentItem?.sec_unit && Number(currentItem.conversion_factor) > 1);
-                  const conv = Number(currentItem?.conversion_factor) || 1;
+                  const itemPkgOptions = packagingUnits.filter((p) => (p.inventory_item_id || p.item_id) === line.item_id);
+                  const hasLegacyPack = Boolean(currentItem?.sec_unit && Number(currentItem.conversion_factor) > 1);
+                  const conv = Number(line.conversion_factor) || (line.use_pack ? Number(currentItem?.conversion_factor) || 1 : 1);
 
                   const lineBaseQty = line.use_pack && conv > 0 ? (line.pack_quantity || 0) * conv : line.quantity;
                   const lineBaseRate = line.use_pack && conv > 0 ? (line.pack_rate || 0) / conv : line.rate;
@@ -948,25 +1167,54 @@ function PurchasesContent() {
 
                   const secUnitSymbol = getLocalizedMasterSymbol(currentItem?.sec_unit, locale) || currentItem?.sec_unit?.symbol || (locale === 'hi' ? 'पैक' : 'Packs');
                   const baseUnitSymbol = getLocalizedMasterSymbol(currentItem?.unit, locale) || currentItem?.unit?.symbol || (locale === 'hi' ? 'इकाई' : 'Units');
+                  const currentPackUnitLabel = line.pack_unit || secUnitSymbol;
 
                   return (
                     <div key={idx} className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2">
-                      {/* Top Row: Item Select, Pack Toggle, Qty, Rate, Total, Delete */}
+                      {/* Top Row: Item Select, Packaging Selector, Qty, Rate, Total, Delete */}
                       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                         <SearchableSelect
                           options={items.filter((i) => i.is_active !== false || i.id === line.item_id)}
                           value={line.item_id}
+                          getSearchableText={(i) => getSearchableItemText(i, itemAliasesMap)}
                           onChange={(selectedId) => {
                             const next = [...lines];
                             next[idx].item_id = selectedId;
                             const selItem = items.find((it) => it.id === selectedId);
+                            const selPkgs = packagingUnits.filter((p) => (p.inventory_item_id || p.item_id) === selectedId);
+                            const defaultPkg = selPkgs.find((p) => p.is_default) || selPkgs[0];
+
+                            if (defaultPkg) {
+                              next[idx].use_pack = true;
+                              next[idx].is_custom_pack = false;
+                              next[idx].packaging_unit_id = defaultPkg.id;
+                              next[idx].brand_name = defaultPkg.brand_name || defaultPkg.packaging_name || '';
+                              next[idx].pack_unit = defaultPkg.pack_unit_name || defaultPkg.pack_unit?.symbol || defaultPkg.packaging_type || 'Pack';
+                              next[idx].conversion_factor = Number(defaultPkg.pack_size_in_base_units || defaultPkg.conversion_factor) || 1;
+                              next[idx].pack_rate = defaultPkg.default_purchase_rate ? Number(defaultPkg.default_purchase_rate) : undefined;
+                              next[idx].pack_quantity = 1;
+                            } else if (selItem?.secondary_unit_id && Number(selItem.conversion_factor) > 1) {
+                              next[idx].use_pack = true;
+                              next[idx].is_custom_pack = false;
+                              next[idx].packaging_unit_id = null;
+                              next[idx].conversion_factor = Number(selItem.conversion_factor);
+                              next[idx].pack_unit = selItem.sec_unit?.symbol || 'Pack';
+                              next[idx].pack_quantity = 1;
+                            } else {
+                              next[idx].use_pack = false;
+                              next[idx].is_custom_pack = false;
+                              next[idx].packaging_unit_id = null;
+                              next[idx].conversion_factor = 1;
+                              next[idx].quantity = 1;
+                            }
+
                             const mem = vendorPriceMemory[selectedId];
                             if (mem && mem.rate > 0) {
                               next[idx].rate = mem.rate;
                               next[idx].previous_rate = mem.rate;
                               next[idx].previous_date = mem.date;
-                              if (selItem?.conversion_factor && Number(selItem.conversion_factor) > 1) {
-                                next[idx].pack_rate = mem.rate * Number(selItem.conversion_factor);
+                              if (next[idx].use_pack && next[idx].conversion_factor) {
+                                next[idx].pack_rate = mem.rate * Number(next[idx].conversion_factor);
                               }
                             } else {
                               next[idx].previous_rate = undefined;
@@ -980,42 +1228,95 @@ function PurchasesContent() {
                           required
                           className="flex-1 min-w-[200px]"
                           triggerClassName="bg-white p-2 text-xs"
-                          renderOption={(i) => (
-                            <div className="flex items-center justify-between w-full">
-                              <div className="truncate font-medium">
-                                {i.name_hi && locale === 'hi' ? i.name_hi : i.name}
+                          renderOption={(i) => {
+                            const itemAliases = itemAliasesMap[i.id] || [];
+                            return (
+                              <div className="w-full">
+                                <div className="flex items-center justify-between">
+                                  <div className="truncate font-medium">
+                                    {i.name_hi && locale === 'hi' ? i.name_hi : i.name}
+                                  </div>
+                                  <span className="font-mono text-[10px] text-stone-500 bg-stone-100 px-1 py-0.5 rounded ml-2 shrink-0">
+                                    {i.item_code}
+                                  </span>
+                                </div>
+                                {itemAliases.length > 0 && (
+                                  <div className="text-[10px] text-stone-400 truncate mt-0.5">
+                                    {itemAliases.slice(0, 3).join(', ')}
+                                  </div>
+                                )}
                               </div>
-                              <span className="font-mono text-[10px] text-stone-500 bg-stone-100 px-1 py-0.5 rounded ml-2 shrink-0">
-                                {i.item_code}
-                              </span>
-                            </div>
-                          )}
+                            );
+                          }}
                         />
 
-                        {hasPack && (
-                          <button
-                            type="button"
-                            onClick={() => {
+                        {/* Packaging Selection Dropdown */}
+                        <div className="shrink-0">
+                          <select
+                            value={
+                              line.is_custom_pack
+                                ? 'CUSTOM'
+                                : line.packaging_unit_id
+                                ? line.packaging_unit_id
+                                : line.use_pack
+                                ? 'LEGACY'
+                                : 'BASE'
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
                               const next = [...lines];
-                              const willUse = !next[idx].use_pack;
-                              next[idx].use_pack = willUse;
-                              if (willUse) {
+                              if (val === 'BASE') {
+                                next[idx].use_pack = false;
+                                next[idx].is_custom_pack = false;
+                                next[idx].packaging_unit_id = null;
+                                next[idx].conversion_factor = 1;
+                              } else if (val === 'CUSTOM') {
+                                next[idx].use_pack = true;
+                                next[idx].is_custom_pack = true;
+                                next[idx].packaging_unit_id = null;
                                 next[idx].pack_quantity = next[idx].pack_quantity || 1;
-                                next[idx].pack_rate = next[idx].pack_rate || (next[idx].rate > 0 ? next[idx].rate * conv : 0);
+                              } else if (val === 'LEGACY') {
+                                next[idx].use_pack = true;
+                                next[idx].is_custom_pack = false;
+                                next[idx].packaging_unit_id = null;
+                                next[idx].conversion_factor = Number(currentItem?.conversion_factor) || 1;
+                                next[idx].pack_unit = currentItem?.sec_unit?.symbol || 'Pack';
+                                next[idx].pack_quantity = next[idx].pack_quantity || 1;
+                              } else {
+                                const foundPkg = itemPkgOptions.find((p) => p.id === val);
+                                if (foundPkg) {
+                                  next[idx].use_pack = true;
+                                  next[idx].is_custom_pack = false;
+                                  next[idx].packaging_unit_id = foundPkg.id;
+                                  next[idx].brand_name = foundPkg.brand_name || foundPkg.packaging_name || '';
+                                  next[idx].pack_unit = foundPkg.pack_unit_name || foundPkg.pack_unit?.symbol || foundPkg.packaging_type || 'Pack';
+                                  next[idx].conversion_factor = Number(foundPkg.pack_size_in_base_units || foundPkg.conversion_factor) || 1;
+                                  if (foundPkg.default_purchase_rate) {
+                                    next[idx].pack_rate = Number(foundPkg.default_purchase_rate);
+                                  }
+                                  next[idx].pack_quantity = next[idx].pack_quantity || 1;
+                                }
                               }
                               setLines(next);
                             }}
-                            className={`px-2 py-1.5 rounded text-[10px] font-bold border transition-colors shrink-0 ${
-                              line.use_pack
-                                ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-xs'
-                                : 'bg-white border-stone-300 text-stone-600 hover:bg-stone-100'
-                            }`}
-                            title={`1 ${secUnitSymbol} = ${conv} ${baseUnitSymbol}`}
+                            className="rounded-md border border-stone-300 bg-white p-2 text-stone-800 text-xs font-medium focus:outline-none focus:border-amber-500 max-w-[150px]"
                           >
-                            📦 {line.use_pack ? `${t('purchases.bills.pack')} (${secUnitSymbol} ×${conv})` : `${t('purchases.bills.base')} (${baseUnitSymbol})`}
-                          </button>
-                        )}
+                            <option value="BASE">📏 {baseUnitSymbol} ({t('purchases.bills.base')})</option>
+                            {itemPkgOptions.map((pkg) => (
+                              <option key={pkg.id} value={pkg.id}>
+                                📦 {pkg.brand_name ? `${pkg.brand_name} - ` : ''}{pkg.pack_unit_name || pkg.packaging_name} ({pkg.pack_size_in_base_units || pkg.conversion_factor} {baseUnitSymbol})
+                              </option>
+                            ))}
+                            {hasLegacyPack && (
+                              <option value="LEGACY">
+                                📦 {secUnitSymbol} (×{currentItem?.conversion_factor})
+                              </option>
+                            )}
+                            <option value="CUSTOM">✨ + {t('purchases.bills.customPackaging')}</option>
+                          </select>
+                        </div>
 
+                        {/* Quantity Input */}
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
@@ -1036,10 +1337,11 @@ function PurchasesContent() {
                             className="w-16 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
                           />
                           <span className="px-1.5 py-1.5 bg-stone-200/80 border border-stone-300 rounded text-stone-700 font-mono text-[11px] font-bold">
-                            {line.use_pack ? secUnitSymbol : baseUnitSymbol}
+                            {line.use_pack ? currentPackUnitLabel : baseUnitSymbol}
                           </span>
                         </div>
 
+                        {/* Rate Input */}
                         <div className="relative">
                           <input
                             type="number"
@@ -1055,7 +1357,7 @@ function PurchasesContent() {
                               }
                               setLines(next);
                             }}
-                            placeholder={line.use_pack ? `₹ / ${secUnitSymbol}` : t('purchases.bills.rate')}
+                            placeholder={line.use_pack ? `₹ / ${currentPackUnitLabel}` : t('purchases.bills.rate')}
                             required
                             className={`w-24 rounded-md border p-2 text-right text-stone-900 text-xs focus:outline-none bg-white ${
                               isDeviation ? 'border-amber-400 bg-amber-50/50' : 'border-stone-300'
@@ -1076,10 +1378,66 @@ function PurchasesContent() {
                         </button>
                       </div>
 
-                      {line.use_pack && hasPack && (
-                        <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200 rounded px-2 py-1 font-mono flex items-center justify-between">
+                      {/* Custom Packaging Input Sub-Row if user selected Custom Pack */}
+                      {line.use_pack && line.is_custom_pack && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-amber-50/50 p-2 rounded-md border border-amber-200 text-xs">
+                          <div>
+                            <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
+                              {t('purchases.bills.brandName')}
+                            </label>
+                            <input
+                              type="text"
+                              value={line.brand_name || ''}
+                              onChange={(e) => {
+                                const next = [...lines];
+                                next[idx].brand_name = e.target.value;
+                                setLines(next);
+                              }}
+                              placeholder="e.g. Fortune, Tata Salt"
+                              className="w-full rounded border border-amber-300 p-1 bg-white text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
+                              {t('purchases.bills.packUnitName')}
+                            </label>
+                            <input
+                              type="text"
+                              value={line.pack_unit || ''}
+                              onChange={(e) => {
+                                const next = [...lines];
+                                next[idx].pack_unit = e.target.value;
+                                setLines(next);
+                              }}
+                              placeholder="e.g. Tin, Can, Pkt, Box"
+                              className="w-full rounded border border-amber-300 p-1 bg-white text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
+                              {t('purchases.bills.packSize')} ({baseUnitSymbol})
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={line.conversion_factor || ''}
+                              onChange={(e) => {
+                                const next = [...lines];
+                                next[idx].conversion_factor = parseFloat(e.target.value) || 1;
+                                setLines(next);
+                              }}
+                              placeholder="e.g. 15 for 15L tin"
+                              className="w-full rounded border border-amber-300 p-1 bg-white text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Live Packaging Conversion Strip */}
+                      {line.use_pack && (
+                        <div className="text-[11px] text-amber-900 bg-amber-50/80 border border-amber-200 rounded px-2.5 py-1 font-mono flex items-center justify-between flex-wrap gap-1">
                           <span>
-                            {t('purchases.bills.conversion')} <strong>{line.pack_quantity || 0} {secUnitSymbol}</strong> × {conv} = <strong>{lineBaseQty.toFixed(2)} {baseUnitSymbol}</strong>
+                            {t('purchases.bills.conversion')} <strong>{line.brand_name ? `${line.brand_name} ` : ''}{line.pack_quantity || 0} {currentPackUnitLabel}</strong> × {conv} = <strong>{lineBaseQty.toFixed(2)} {baseUnitSymbol}</strong>
                           </span>
                           <span>
                             {t('purchases.bills.derivedRate')} <strong>{formatINR(lineBaseRate)}</strong> / {baseUnitSymbol}

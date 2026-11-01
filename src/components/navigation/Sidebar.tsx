@@ -25,7 +25,9 @@ import {
   Lock,
   Building2,
   X,
-  LogOut
+  LogOut,
+  UtensilsCrossed,
+  BookOpen
 } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
 import { useAppRole } from '@/components/layout/AppShell';
@@ -72,6 +74,13 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
         { href: '/inventory', labelKey: 'navigation.items.inventoryAndAssets', icon: Package, permission: ['inventory.stock', 'inventory.assets'] },
         { href: '/inventory/issues', labelKey: 'navigation.items.storeIssues', icon: ArrowRightLeft, permission: 'inventory.issues' },
         { href: '/inventory/count', labelKey: 'navigation.items.physicalCount', icon: ClipboardCheck, permission: 'inventory.count' },
+      ]
+    },
+    {
+      titleKey: 'navigation.sections.sops',
+      items: [
+        { href: '/sops/menu', labelKey: 'navigation.items.menuMaster', icon: UtensilsCrossed, permission: 'sops.menu.view' },
+        { href: '/sops/recipes', labelKey: 'navigation.items.recipeBook', icon: BookOpen, permission: 'sops.recipes.view' },
       ]
     },
     {

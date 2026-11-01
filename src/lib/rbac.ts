@@ -23,13 +23,23 @@ export const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   '/uniforms': 'uniforms.ledger',
   '/reports': 'reports.view',
   '/admin': 'admin.manage',
+  '/sops/menu': 'sops.menu.view',
+  '/sops/recipes': 'sops.recipes.view',
 };
+
+export const SOP_PERMISSIONS = {
+  MENU_VIEW: 'sops.menu.view',
+  RECIPES_VIEW: 'sops.recipes.view',
+  RECIPES_MANAGE: 'sops.recipes.manage',
+  COSTING_VIEW: 'sops.costing.view',
+} as const;
 
 export const MODULE_CATEGORIES: Record<string, { label: string; icon: string }> = {
   dashboard: { label: 'Command Center', icon: 'LayoutDashboard' },
   operations: { label: 'Village Operations', icon: 'Sparkles' },
   finance: { label: 'Finance & Accounts', icon: 'IndianRupee' },
   inventory: { label: 'Store & Inventory', icon: 'Package' },
+  sops: { label: 'SOPs & Recipes', icon: 'UtensilsCrossed' },
   people: { label: 'Staff & Attendance', icon: 'Users' },
   uniforms: { label: 'Uniform Ledger', icon: 'Shirt' },
   reports: { label: 'Intelligence & Reports', icon: 'BarChart3' },
@@ -52,6 +62,23 @@ export function hasPermission(
   if (requiredCode === 'finance.purchases' && userPermissions.includes('finance.vendors')) return true;
   if (requiredCode === 'finance.vendors' && userPermissions.includes('finance.purchases')) return true;
   return false;
+}
+
+/**
+ * Checks whether user has permission to view costs, WAC valuations, and purchase rates.
+ */
+export function canViewCosting(
+  userRole: string | null | undefined,
+  userPermissions: string[] | null | undefined
+): boolean {
+  if (userRole === 'Admin') return true;
+  if (!userPermissions || userPermissions.length === 0) return false;
+  return (
+    userPermissions.includes('sops.costing.view') ||
+    userPermissions.includes('finance.profitability') ||
+    userPermissions.includes('finance.purchases') ||
+    userPermissions.includes('admin.manage')
+  );
 }
 
 /**
@@ -97,6 +124,8 @@ export const LANDING_PAGE_OPTIONS: LandingPageOption[] = [
   { route: '/people/tips', labelKey: 'navigation.items.tips', requiredPermission: 'people.tips', module: 'people' },
   { route: '/uniforms', labelKey: 'navigation.items.uniforms', requiredPermission: 'uniforms.ledger', module: 'uniforms' },
   { route: '/reports', labelKey: 'navigation.items.reports', requiredPermission: 'reports.view', module: 'reports' },
+  { route: '/sops/menu', labelKey: 'navigation.items.menuMaster', requiredPermission: 'sops.menu.view', module: 'sops' },
+  { route: '/sops/recipes', labelKey: 'navigation.items.recipeBook', requiredPermission: 'sops.recipes.view', module: 'sops' },
   { route: '/admin', labelKey: 'navigation.items.settings', requiredPermission: 'admin.manage', module: 'admin' },
 ];
 

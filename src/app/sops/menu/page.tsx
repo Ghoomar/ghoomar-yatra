@@ -1,0 +1,993 @@
+'use client';
+
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { useI18n } from '@/lib/i18n/context';
+import { useAppRole } from '@/components/layout/AppShell';
+import { canViewCosting } from '@/lib/rbac';
+import { formatINR } from '@/lib/utils';
+import { getCategoryColor } from '@/lib/constants/category-colors';
+import {
+  UtensilsCrossed,
+  Sparkles,
+  TrendingUp,
+  DollarSign,
+  Search,
+  RefreshCw,
+  AlertTriangle,
+  Lock,
+  ChevronRight,
+  Filter,
+  Layers,
+  Star,
+  Activity,
+  HelpCircle,
+  Flame,
+  ArrowRight,
+  ShoppingBag,
+  Calendar,
+} from 'lucide-react';
+
+function MenuMasterContent() {
+  const { t, locale } = useI18n();
+  const { hasPermission, role: activeRole, permissions } = useAppRole();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const canManage = hasPermission('sops.recipes.manage');
+  const hasCostAccess = canViewCosting(activeRole, permissions);
+
+  // Active top tab: catalog vs matrix vs combos
+  const [activeTab, setActiveTab] = useState<'catalog' | 'matrix' | 'combos'>('catalog');
+
+  // Channel toggle: DINE_IN vs TAKEAWAY
+  const [channel, setChannel] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
+
+  // Date range presets for matrix and sales
+  type DatePreset = 'all' | 'today' | '7d' | '30d' | 'this_month' | 'custom';
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  // Data state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [combos, setCombos] = useState<any[]>([]);
+  const [matrix, setMatrix] = useState<any>(null);
+
+  // Search & filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [parentCatFilter, setParentCatFilter] = useState('ALL');
+  const [quadrantFilter, setQuadrantFilter] = useState('ALL');
+
+  const fetchMenuData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('channel', channel);
+
+      const now = new Date();
+      if (datePreset === 'today') {
+        const todayStr = now.toISOString().substring(0, 10);
+        params.set('date_from', todayStr);
+        params.set('date_to', todayStr);
+      } else if (datePreset === '7d') {
+        const dFrom = new Date(now.getTime() - 7 * 86400000).toISOString().substring(0, 10);
+        params.set('date_from', dFrom);
+        params.set('date_to', now.toISOString().substring(0, 10));
+      } else if (datePreset === '30d') {
+        const dFrom = new Date(now.getTime() - 30 * 86400000).toISOString().substring(0, 10);
+        params.set('date_from', dFrom);
+        params.set('date_to', now.toISOString().substring(0, 10));
+      } else if (datePreset === 'this_month') {
+        const dFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().substring(0, 10);
+        params.set('date_from', dFrom);
+        params.set('date_to', now.toISOString().substring(0, 10));
+      } else if (datePreset === 'custom') {
+        if (customFrom) params.set('date_from', customFrom);
+        if (customTo) params.set('date_to', customTo);
+      }
+
+      const res = await fetch(`/api/sops/menu?${params.toString()}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to fetch menu items');
+      }
+
+      const data = await res.json();
+      setItems(data.items || []);
+      setCombos(data.combos || []);
+      setMatrix(data.matrix || null);
+    } catch (err: any) {
+      console.error('Fetch menu data error:', err);
+      setError(err.message || 'Error fetching menu master');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMenuData();
+  }, [channel, datePreset, customFrom, customTo]);
+
+  // Unique parent categories for filtering
+  const parentCategories = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((i) => {
+      if (i.parent_category) set.add(i.parent_category);
+    });
+    return Array.from(set).sort();
+  }, [items]);
+
+  // Matrix items map for fast lookup
+  const matrixItemMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (matrix && Array.isArray(matrix.items)) {
+      matrix.items.forEach((m: any) => map.set(m.menuItemId, m));
+    }
+    return map;
+  }, [matrix]);
+
+  // Filtered menu items
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (parentCatFilter !== 'ALL' && item.parent_category !== parentCatFilter) return false;
+      const mData = matrixItemMap.get(item.id);
+      if (quadrantFilter !== 'ALL' && mData?.quadrant !== quadrantFilter) return false;
+      if (searchTerm.trim()) {
+        const query = searchTerm.toLowerCase().trim();
+        const nameMatch = item.name?.toLowerCase().includes(query);
+        const nameHiMatch = item.name_hi?.toLowerCase().includes(query);
+        if (!nameMatch && !nameHiMatch) return false;
+      }
+      return true;
+    });
+  }, [items, parentCatFilter, quadrantFilter, searchTerm, matrixItemMap]);
+
+  const getQuadrantBadge = (quadrant?: string) => {
+    switch (quadrant) {
+      case 'STAR':
+        return (
+          <Badge variant="success" className="gap-1 font-mono text-[11px] bg-emerald-100 text-emerald-900 border-emerald-300">
+            <Star className="h-3 w-3 fill-emerald-600 text-emerald-600" /> Star
+          </Badge>
+        );
+      case 'PLOWHORSE':
+        return (
+          <Badge variant="warning" className="gap-1 font-mono text-[11px] bg-amber-100 text-amber-900 border-amber-300">
+            <TrendingUp className="h-3 w-3 text-amber-700" /> Plowhorse
+          </Badge>
+        );
+      case 'PUZZLE':
+        return (
+          <Badge variant="purple" className="gap-1 font-mono text-[11px] bg-purple-100 text-purple-900 border-purple-300">
+            <Sparkles className="h-3 w-3 text-purple-700" /> Puzzle
+          </Badge>
+        );
+      case 'DOG':
+        return (
+          <Badge variant="danger" className="gap-1 font-mono text-[11px] bg-rose-100 text-rose-900 border-rose-300">
+            <Activity className="h-3 w-3 text-rose-700" /> Dog
+          </Badge>
+        );
+      case 'COSTING_INCOMPLETE':
+        return (
+          <Badge variant="danger" className="text-[10px]">
+            Incomplete
+          </Badge>
+        );
+      case 'UNCOSTED':
+        return (
+          <Badge variant="warning" className="text-[10px]">
+            Uncosted
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="text-[10px]">
+            Ineligible
+          </Badge>
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900">
+              {t('sops.menu.title')}
+            </h1>
+            <Badge variant="outline" className="font-mono text-xs text-stone-600 bg-stone-50">
+              {items.length} {locale === 'hi' ? 'आइटम' : 'Items'}
+            </Badge>
+          </div>
+          <p className="text-sm text-stone-500 mt-1">
+            {t('sops.menu.description')}
+          </p>
+        </div>
+
+        {/* Channel and Refresh Controls */}
+        <div className="flex items-center gap-2">
+          {/* Channel Selector Toggle */}
+          <div className="bg-[#FAF8F5] border border-[#E7E2D8] rounded-lg p-0.5 flex text-xs font-medium">
+            <button
+              onClick={() => setChannel('DINE_IN')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                channel === 'DINE_IN'
+                  ? 'bg-amber-600 text-white shadow-xs font-semibold'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {t('sops.menu.channelDineIn')}
+            </button>
+            <button
+              onClick={() => setChannel('TAKEAWAY')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                channel === 'TAKEAWAY'
+                  ? 'bg-amber-600 text-white shadow-xs font-semibold'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {t('sops.menu.channelTakeaway')}
+            </button>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchMenuData}
+            disabled={loading}
+            className="gap-1.5"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {locale === 'hi' ? 'रिफ्रेश' : 'Refresh'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Navigation Tabs */}
+      <div className="flex overflow-x-auto gap-2 border-b border-[#E7E2D8] pb-px">
+        <button
+          onClick={() => setActiveTab('catalog')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+            activeTab === 'catalog'
+              ? 'border-amber-600 text-amber-700 font-semibold'
+              : 'border-transparent text-stone-600 hover:text-stone-900 hover:border-stone-300'
+          }`}
+        >
+          {t('sops.menu.tabCatalog')}
+        </button>
+        <button
+          onClick={() => setActiveTab('matrix')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'matrix'
+              ? 'border-amber-600 text-amber-700 font-semibold'
+              : 'border-transparent text-stone-600 hover:text-stone-900 hover:border-stone-300'
+          }`}
+        >
+          <Sparkles className="h-4 w-4 text-amber-600" />
+          {t('sops.menu.tabMatrix')}
+        </button>
+        <button
+          onClick={() => setActiveTab('combos')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+            activeTab === 'combos'
+              ? 'border-amber-600 text-amber-700 font-semibold'
+              : 'border-transparent text-stone-600 hover:text-stone-900 hover:border-stone-300'
+          }`}
+        >
+          {t('sops.menu.tabCombos')} ({combos.length})
+        </button>
+      </div>
+
+      {/* Date Presets & Channel Filter Bar */}
+      <div className="bg-[#FAF8F5] border border-[#E7E2D8] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-semibold text-stone-700 mr-1 flex items-center gap-1">
+            <Calendar className="h-3.5 w-3.5 text-stone-500" />
+            {locale === 'hi' ? 'अवधि चुनें:' : 'Date Presets:'}
+          </span>
+          {[
+            { key: 'today', label: locale === 'hi' ? 'आज' : 'Today' },
+            { key: '7d', label: locale === 'hi' ? 'पिछले 7 दिन' : 'Last 7 Days' },
+            { key: '30d', label: locale === 'hi' ? 'पिछले 30 दिन' : 'Last 30 Days' },
+            { key: 'this_month', label: locale === 'hi' ? 'इस माह' : 'This Month' },
+            { key: 'all', label: locale === 'hi' ? 'समस्त काल' : 'All Time' },
+            { key: 'custom', label: locale === 'hi' ? 'कस्टम अवधि' : 'Custom Range' },
+          ].map((preset) => (
+            <button
+              key={preset.key}
+              onClick={() => setDatePreset(preset.key as DatePreset)}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                datePreset === preset.key
+                  ? 'bg-amber-600 text-white shadow-2xs font-semibold'
+                  : 'bg-white border border-[#E7E2D8] text-stone-700 hover:bg-stone-50'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+          {datePreset === 'custom' && (
+            <div className="flex items-center gap-1 ml-2">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="px-2 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
+              />
+              <span className="text-stone-400">to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="px-2 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[#E7E2D8]">
+          <button
+            onClick={() => setChannel('DINE_IN')}
+            className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
+              channel === 'DINE_IN'
+                ? 'bg-amber-600 text-white font-semibold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            {t('sops.menu.channelDineIn')}
+          </button>
+          <button
+            onClick={() => setChannel('TAKEAWAY')}
+            className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
+              channel === 'TAKEAWAY'
+                ? 'bg-amber-600 text-white font-semibold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            {t('sops.menu.channelTakeaway')}
+          </button>
+        </div>
+      </div>
+
+      {/* TAB 1: MENU CATALOG & CHANNEL COSTS */}
+      {activeTab === 'catalog' && (
+        <div className="space-y-4">
+          {/* Filters Bar */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+              <input
+                type="text"
+                placeholder={t('sops.menu.searchPlaceholder')}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-white border border-[#E7E2D8] rounded-lg text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-stone-400" />
+              <select
+                value={parentCatFilter}
+                onChange={(e) => setParentCatFilter(e.target.value)}
+                className="px-3 py-2 bg-white border border-[#E7E2D8] rounded-lg text-sm text-stone-700 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">{locale === 'hi' ? 'सभी मूल श्रेणियां' : 'All Parent Categories'}</option>
+                {parentCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={quadrantFilter}
+                onChange={(e) => setQuadrantFilter(e.target.value)}
+                className="px-3 py-2 bg-white border border-[#E7E2D8] rounded-lg text-sm text-stone-700 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">{locale === 'hi' ? 'सभी क्वाड्रंट' : 'All BCG Quadrants'}</option>
+                <option value="STAR">Star</option>
+                <option value="PLOWHORSE">Plowhorse</option>
+                <option value="PUZZLE">Puzzle</option>
+                <option value="DOG">Dog</option>
+                <option value="UNCOSTED">Uncosted</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Catalog Table */}
+          <Card>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-12 text-center text-stone-500 flex flex-col items-center gap-2">
+                  <RefreshCw className="h-6 w-6 animate-spin text-amber-600" />
+                  <span>Loading catalog...</span>
+                </div>
+              ) : filteredItems.length === 0 ? (
+                <div className="p-12 text-center text-stone-400">
+                  {t('sops.menu.noItemsFound')}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
+                        <th className="py-3 px-4">{t('sops.menu.colItem')}</th>
+                        <th className="py-3 px-4">{t('sops.menu.colCategory')}</th>
+                        <th className="py-3 px-4 text-right">{t('sops.menu.colPrice')}</th>
+                        <th className="py-3 px-4">{t('sops.menu.colVariant')}</th>
+                        <th className="py-3 px-4 text-right">{t('sops.menu.colFoodCost')}</th>
+                        <th className="py-3 px-4 text-right">{t('sops.menu.colFoodCostPct')}</th>
+                        <th className="py-3 px-4 text-right">{t('sops.menu.colMargin')}</th>
+                        <th className="py-3 px-4">{t('sops.menu.colQuadrant')}</th>
+                        <th className="py-3 px-4 text-right">{t('sops.menu.colActions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E7E2D8]">
+                      {filteredItems.map((item) => {
+                        const mData = matrixItemMap.get(item.id);
+                        const v = item.defaultVariant;
+                        const parentColor = getCategoryColor(item.parent_category);
+
+                        return (
+                          <tr key={item.id} className="hover:bg-amber-50/20 transition-colors">
+                            <td className="py-3.5 px-4">
+                              <Link href={`/sops/menu/${item.id}`} className="font-medium text-stone-900 hover:text-amber-700">
+                                {item.name}
+                              </Link>
+                              {item.name_hi && (
+                                <div className="text-xs text-stone-500 font-sans">{item.name_hi}</div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: parentColor }}
+                                />
+                                <span className="text-xs text-stone-700 font-medium">
+                                  {item.parent_category || 'Other'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-stone-400 ml-4">{item.category}</div>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
+                              {item.price ? formatINR(item.price) : '—'}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              {v ? (
+                                <div>
+                                  <span className="text-xs font-medium text-stone-800">
+                                    {v.variant_name}
+                                  </span>
+                                  {v.serving_quantity != null && (
+                                    <div className="text-[10px] text-stone-500 font-mono">
+                                      {v.serving_quantity} {v.serving_unit}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-stone-400 italic">No variant</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-mono text-sm">
+                              {!hasCostAccess ? (
+                                <Lock className="h-3 w-3 inline text-stone-400" />
+                              ) : v?.food_cost != null ? (
+                                <span className="text-stone-800 font-medium">
+                                  {formatINR(v.food_cost)}
+                                </span>
+                              ) : (
+                                <span className="text-stone-400">—</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-mono text-xs">
+                              {!hasCostAccess ? (
+                                <Lock className="h-3 w-3 inline text-stone-400" />
+                              ) : v?.food_cost_pct != null ? (
+                                <span
+                                  className={`font-semibold ${
+                                    v.food_cost_pct <= 30
+                                      ? 'text-emerald-700'
+                                      : v.food_cost_pct <= 40
+                                      ? 'text-amber-700'
+                                      : 'text-rose-700'
+                                  }`}
+                                >
+                                  {v.food_cost_pct.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-stone-400">—</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-mono text-sm">
+                              {!hasCostAccess ? (
+                                <Lock className="h-3 w-3 inline text-stone-400" />
+                              ) : v?.margin_amount != null ? (
+                                <span className="font-semibold text-emerald-800">
+                                  {formatINR(v.margin_amount)}
+                                </span>
+                              ) : (
+                                <span className="text-stone-400">—</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              {getQuadrantBadge(mData?.quadrant)}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right">
+                              <Link href={`/sops/menu/${item.id}`}>
+                                <Button variant="ghost" size="sm" className="h-8 px-2 text-stone-600 hover:text-amber-700">
+                                  <span className="text-xs mr-1">{t('sops.menu.editCosts')}</span>
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                </Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 2: BCG MENU ENGINEERING MATRIX */}
+      {activeTab === 'matrix' && matrix && (
+        <div className="space-y-6">
+          {/* Empty-State Banner for NO_SALES_DATA / NO_ELIGIBLE_COSTED_SALES */}
+          {matrix.state === 'NO_SALES_DATA' || Number(matrix.totalUnitsSold || 0) === 0 ? (
+            <div className="p-5 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-amber-950">
+                  {locale === 'hi' ? 'चयनित अवधि के लिए कोई बिक्री डेटा नहीं मिला' : 'No Sales Data Available for Selected Date Range'}
+                </h3>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  {locale === 'hi'
+                    ? 'बीसीजी मेनू इंजीनियरिंग मैट्रिक्स को लोकप्रियता और अंशदान मार्जिन की गणना के लिए पीओएस बिक्री की आवश्यकता होती है। कृपया अन्य तिथि सीमा चुनें या बिक्री दर्ज होने की प्रतीक्षा करें।'
+                    : 'The Boston Consulting Group (BCG) Menu Engineering Matrix requires actual sales transactions from POS orders to calculate volume share and contribution margin quadrants. Select a different date range or record sales to activate matrix classification.'}
+                </p>
+              </div>
+            </div>
+          ) : matrix.state === 'NO_ELIGIBLE_COSTED_SALES' ? (
+            <div className="p-5 bg-blue-50/80 border border-blue-200 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-blue-950">
+                  {locale === 'hi' ? 'बिक्री उपलब्ध है, लेकिन किसी लागत गणना व्यंजन की बिक्री नहीं हुई' : 'Sales Orders Found, But No Costed Items Sold'}
+                </h3>
+                <p className="text-xs text-blue-800 mt-1 leading-relaxed">
+                  {locale === 'hi'
+                    ? 'इस अवधि में बिक्री ऑर्डर मौजूद हैं, लेकिन बेचे गए किसी भी व्यंजन में लागत गणना पूर्ण नहीं है। बीसीज मैट्रिक्स सक्रिय करने के लिए व्यंजनों की रेसिपी और लागत जोड़ें।'
+                    : 'Sales transactions exist for this period, but none of the sold items have active costed formulations. Link recipes and establish inventory valuations to activate BCG profitability quadrants.'}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Matrix Top Summary & Thresholds Banner */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="bg-emerald-50/60 border-emerald-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-sm">
+                    <Star className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+                    {t('sops.matrix.star')}
+                  </div>
+                  <Badge variant="success" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'STAR').length}
+                  </Badge>
+                </div>
+                <p className="text-xs text-emerald-800 mt-1">
+                  {t('sops.matrix.starDesc')}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-amber-50/60 border-amber-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-900 text-sm">
+                    <TrendingUp className="h-4 w-4 text-amber-700" />
+                    {t('sops.matrix.plowhorse')}
+                  </div>
+                  <Badge variant="warning" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'PLOWHORSE').length}
+                  </Badge>
+                </div>
+                <p className="text-xs text-amber-800 mt-1">
+                  {t('sops.matrix.plowhorseDesc')}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-purple-50/60 border-purple-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-purple-900 text-sm">
+                    <Sparkles className="h-4 w-4 text-purple-700" />
+                    {t('sops.matrix.puzzle')}
+                  </div>
+                  <Badge variant="purple" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'PUZZLE').length}
+                  </Badge>
+                </div>
+                <p className="text-xs text-purple-800 mt-1">
+                  {t('sops.matrix.puzzleDesc')}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-rose-50/60 border-rose-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-900 text-sm">
+                    <Activity className="h-4 w-4 text-rose-700" />
+                    {t('sops.matrix.dog')}
+                  </div>
+                  <Badge variant="danger" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'DOG').length}
+                  </Badge>
+                </div>
+                <p className="text-xs text-rose-800 mt-1">
+                  {t('sops.matrix.dogDesc')}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Thresholds Strip */}
+          <div className="bg-[#FAF8F5] border border-[#E7E2D8] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
+            <div>
+              <span className="text-stone-500 mr-1">{t('sops.matrix.thresholdPopularity')}:</span>
+              <span className="font-mono font-bold text-stone-900">
+                {matrix.popularityThresholdPct?.toFixed(2)}% of sales mix
+              </span>
+            </div>
+
+            <div>
+              <span className="text-stone-500 mr-1">{t('sops.matrix.thresholdMargin')}:</span>
+              <span className="font-mono font-bold text-emerald-800">
+                {!hasCostAccess ? (
+                  <Lock className="h-3 w-3 inline text-stone-400" />
+                ) : matrix.salesWeightedContributionThreshold != null ? (
+                  formatINR(matrix.salesWeightedContributionThreshold)
+                ) : (
+                  '—'
+                )}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-stone-500 mr-1">{t('sops.matrix.totalSold')}:</span>
+              <span className="font-mono font-bold text-stone-900">
+                {Number(matrix.totalUnitsSold || 0).toLocaleString()} pcs
+              </span>
+            </div>
+
+            <div>
+              <span className="text-stone-500 mr-1">{t('sops.matrix.eligibleItems')}:</span>
+              <span className="font-mono font-bold text-stone-900">
+                {matrix.eligibleItemsCount} / {matrix.totalItemsCount}
+              </span>
+            </div>
+          </div>
+
+          {/* 4 Quadrants Interactive Display */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Top-Right: STARS */}
+            <Card className="border-emerald-200 shadow-sm">
+              <CardHeader className="bg-emerald-50/50 border-b border-emerald-100 py-3">
+                <CardTitle className="text-sm font-bold text-emerald-950 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Star className="h-4 w-4 fill-emerald-600 text-emerald-600" />
+                    <span>Stars (High Popularity, High Margin)</span>
+                  </div>
+                  <Badge variant="success" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'STAR').length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-96 overflow-y-auto divide-y divide-[#E7E2D8]">
+                  {matrix.items
+                    .filter((i: any) => i.quadrant === 'STAR')
+                    .map((item: any) => (
+                      <div key={item.menuItemId} className="p-3 hover:bg-emerald-50/20 flex items-center justify-between">
+                        <div>
+                          <Link href={`/sops/menu/${item.menuItemId}`} className="font-medium text-stone-900 hover:text-emerald-700">
+                            {item.name}
+                          </Link>
+                          <div className="text-[11px] text-stone-500">
+                            {item.unitsSold} sold ({item.salesMixPct?.toFixed(1)}% mix)
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono text-xs font-semibold text-emerald-800">
+                            {!hasCostAccess ? <Lock className="h-3 w-3" /> : item.unitContributionMargin ? formatINR(item.unitContributionMargin) : '—'}
+                          </div>
+                          {hasCostAccess && item.foodCostPct != null && (
+                            <div className="text-[10px] text-stone-400 font-mono">
+                              FC: {item.foodCostPct.toFixed(1)}%
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top-Left: PUZZLES */}
+            <Card className="border-purple-200 shadow-sm">
+              <CardHeader className="bg-purple-50/50 border-b border-purple-100 py-3">
+                <CardTitle className="text-sm font-bold text-purple-950 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-purple-700" />
+                    <span>Puzzles (Low Popularity, High Margin)</span>
+                  </div>
+                  <Badge variant="purple" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'PUZZLE').length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-96 overflow-y-auto divide-y divide-[#E7E2D8]">
+                  {matrix.items
+                    .filter((i: any) => i.quadrant === 'PUZZLE')
+                    .map((item: any) => (
+                      <div key={item.menuItemId} className="p-3 hover:bg-purple-50/20 flex items-center justify-between">
+                        <div>
+                          <Link href={`/sops/menu/${item.menuItemId}`} className="font-medium text-stone-900 hover:text-purple-700">
+                            {item.name}
+                          </Link>
+                          <div className="text-[11px] text-stone-500">
+                            {item.unitsSold} sold ({item.salesMixPct?.toFixed(1)}% mix)
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono text-xs font-semibold text-purple-800">
+                            {!hasCostAccess ? <Lock className="h-3 w-3" /> : item.unitContributionMargin ? formatINR(item.unitContributionMargin) : '—'}
+                          </div>
+                          {hasCostAccess && item.foodCostPct != null && (
+                            <div className="text-[10px] text-stone-400 font-mono">
+                              FC: {item.foodCostPct.toFixed(1)}%
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Bottom-Right: PLOWHORSES */}
+            <Card className="border-amber-200 shadow-sm">
+              <CardHeader className="bg-amber-50/50 border-b border-amber-100 py-3">
+                <CardTitle className="text-sm font-bold text-amber-950 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-amber-700" />
+                    <span>Plowhorses (High Popularity, Low Margin)</span>
+                  </div>
+                  <Badge variant="warning" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'PLOWHORSE').length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-96 overflow-y-auto divide-y divide-[#E7E2D8]">
+                  {matrix.items
+                    .filter((i: any) => i.quadrant === 'PLOWHORSE')
+                    .map((item: any) => (
+                      <div key={item.menuItemId} className="p-3 hover:bg-amber-50/20 flex items-center justify-between">
+                        <div>
+                          <Link href={`/sops/menu/${item.menuItemId}`} className="font-medium text-stone-900 hover:text-amber-700">
+                            {item.name}
+                          </Link>
+                          <div className="text-[11px] text-stone-500">
+                            {item.unitsSold} sold ({item.salesMixPct?.toFixed(1)}% mix)
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono text-xs font-semibold text-amber-900">
+                            {!hasCostAccess ? <Lock className="h-3 w-3" /> : item.unitContributionMargin ? formatINR(item.unitContributionMargin) : '—'}
+                          </div>
+                          {hasCostAccess && item.foodCostPct != null && (
+                            <div className="text-[10px] text-stone-400 font-mono">
+                              FC: {item.foodCostPct.toFixed(1)}%
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Bottom-Left: DOGS */}
+            <Card className="border-rose-200 shadow-sm">
+              <CardHeader className="bg-rose-50/50 border-b border-rose-100 py-3">
+                <CardTitle className="text-sm font-bold text-rose-950 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="h-4 w-4 text-rose-700" />
+                    <span>Dogs (Low Popularity, Low Margin)</span>
+                  </div>
+                  <Badge variant="danger" className="font-mono text-xs">
+                    {matrix.items.filter((i: any) => i.quadrant === 'DOG').length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-96 overflow-y-auto divide-y divide-[#E7E2D8]">
+                  {matrix.items
+                    .filter((i: any) => i.quadrant === 'DOG')
+                    .map((item: any) => (
+                      <div key={item.menuItemId} className="p-3 hover:bg-rose-50/20 flex items-center justify-between">
+                        <div>
+                          <Link href={`/sops/menu/${item.menuItemId}`} className="font-medium text-stone-900 hover:text-rose-700">
+                            {item.name}
+                          </Link>
+                          <div className="text-[11px] text-stone-500">
+                            {item.unitsSold} sold ({item.salesMixPct?.toFixed(1)}% mix)
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono text-xs font-semibold text-rose-800">
+                            {!hasCostAccess ? <Lock className="h-3 w-3" /> : item.unitContributionMargin ? formatINR(item.unitContributionMargin) : '—'}
+                          </div>
+                          {hasCostAccess && item.foodCostPct != null && (
+                            <div className="text-[10px] text-stone-400 font-mono">
+                              FC: {item.foodCostPct.toFixed(1)}%
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: COMBOS & THALIS */}
+      {activeTab === 'combos' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-bold flex items-center gap-2">
+              <Layers className="h-4 w-4 text-amber-600" />
+              {t('sops.menu.tabCombos')}
+            </CardTitle>
+            <CardDescription>
+              Culinary combo portions, thali component formulas, and multi-dish channel margins
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {combos.length === 0 ? (
+              <div className="p-8 text-center text-stone-400 text-sm">
+                No combos or thalis configured.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
+                      <th className="py-3 px-4">Combo / Thali Name</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Components</th>
+                      <th className="py-3 px-4 text-right">Selling Price</th>
+                      <th className="py-3 px-4 text-right">Food Cost</th>
+                      <th className="py-3 px-4 text-right">Food Cost %</th>
+                      <th className="py-3 px-4 text-right">Contribution Margin</th>
+                      <th className="py-3 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E2D8]">
+                    {combos.map((combo) => (
+                      <tr key={combo.id} className="hover:bg-amber-50/20">
+                        <td className="py-3.5 px-4">
+                          <div className="font-medium text-stone-900">{combo.name}</div>
+                          {combo.name_hi && (
+                            <div className="text-xs text-stone-500 font-sans">{combo.name_hi}</div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <Badge variant={combo.product_type === 'THALI' ? 'maroon' : 'purple'} className="text-[10px]">
+                            {combo.product_type}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-0.5">
+                            {(combo.components || []).map((c: any, idx: number) => (
+                              <div key={idx} className="text-xs text-stone-700 flex items-center gap-1 font-mono">
+                                <span>• {c.component_name || c.recipe?.name}</span>
+                                <span className="text-stone-400">({c.portion_quantity} {c.portion_unit})</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
+                          {combo.selling_price ? formatINR(combo.selling_price) : '—'}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-mono text-sm">
+                          {!hasCostAccess ? (
+                            <Lock className="h-3 w-3 inline text-stone-400" />
+                          ) : combo.food_cost != null ? (
+                            <span className="text-stone-800 font-medium">{formatINR(combo.food_cost)}</span>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-mono text-xs">
+                          {!hasCostAccess ? (
+                            <Lock className="h-3 w-3 inline text-stone-400" />
+                          ) : combo.food_cost_pct != null ? (
+                            <span className="font-semibold text-emerald-700">
+                              {combo.food_cost_pct.toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-mono text-sm">
+                          {!hasCostAccess ? (
+                            <Lock className="h-3 w-3 inline text-stone-400" />
+                          ) : combo.margin_amount != null ? (
+                            <span className="font-semibold text-emerald-800">
+                              {formatINR(combo.margin_amount)}
+                            </span>
+                          ) : (
+                            <span className="text-stone-400">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          {getQuadrantBadge(combo.costing_status)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+export default function MenuMasterPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-stone-500">Loading Menu Master...</div>}>
+      <MenuMasterContent />
+    </Suspense>
+  );
+}

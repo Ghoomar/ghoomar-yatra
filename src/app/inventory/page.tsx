@@ -15,6 +15,8 @@ import { UnitModal } from '@/components/admin/UnitModal';
 import { ItemMovementDrawer } from '@/components/inventory/ItemMovementDrawer';
 import { PhysicalAssetsView } from '@/components/inventory/PhysicalAssetsView';
 import { useAppRole } from '@/components/layout/AppShell';
+import { canViewCosting } from '@/lib/rbac';
+import { filterInventoryItems, getSearchableItemText } from '@/lib/inventory/search';
 import {
   Package,
   Layers,
@@ -108,13 +110,14 @@ function getMovementBadge(type: string, t: (key: string, params?: any) => string
 
 function InventoryContent() {
   const { t, locale } = useI18n();
-  const { hasPermission, role: activeRole } = useAppRole();
+  const { hasPermission, role: activeRole, permissions } = useAppRole();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const canAccessStock = hasPermission('inventory.stock');
   const canAccessAssets = hasPermission('inventory.assets');
+  const hasCostAccess = canViewCosting(activeRole, permissions);
 
   const tabParam = searchParams.get('tab');
   const subtabParam = searchParams.get('subtab');
@@ -153,6 +156,7 @@ function InventoryContent() {
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [locationStocks, setLocationStocks] = useState<any[]>([]);
+  const [aliases, setAliases] = useState<any[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('ALL');
   const [loading, setLoading] = useState(true);
   const [filterClass, setFilterClass] = useState('ALL');
@@ -179,16 +183,27 @@ function InventoryContent() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [posRes, locRes, stockRes] = await Promise.all([
-        supabase.from('inventory_current_position').select('*').order('name'),
-        supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
-        supabase.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, name_hi, code)'),
-      ]);
+      const res = await fetch('/api/inventory');
+      if (res.ok) {
+        const json = await res.json();
+        setItems(json.items || []);
+        setLocations(json.locations || []);
+        setLocationStocks(json.locationStocks || []);
+        setAliases(json.aliases || []);
+      } else {
+        const [posRes, locRes, stockRes, aliasRes] = await Promise.all([
+          supabase.from('inventory_current_position').select('*').order('name'),
+          supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
+          supabase.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, name_hi, code)'),
+          supabase.from('inventory_item_aliases').select('item_id, alias, alias_type'),
+        ]);
 
-      if (posRes.error) throw posRes.error;
-      setItems(posRes.data || []);
-      setLocations(locRes.data || []);
-      setLocationStocks(stockRes.data || []);
+        if (posRes.error) throw posRes.error;
+        setItems(posRes.data || []);
+        setLocations(locRes.data || []);
+        setLocationStocks(stockRes.data || []);
+        setAliases(aliasRes.data || []);
+      }
     } catch (err: any) {
       console.error('Error loading inventory:', err);
     } finally {
@@ -199,6 +214,14 @@ function InventoryContent() {
   const loadMovements = async () => {
     setMovementsLoading(true);
     try {
+      const res = await fetch('/api/inventory?include_movements=true');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.movements && json.movements.length > 0) {
+          setMovements(json.movements);
+          return;
+        }
+      }
       const { data, error } = await supabase
         .from('stock_movements')
         .select(`*, item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)), source_location:inventory_locations!stock_movements_source_location_id_fkey(id, name, name_hi, code), destination_location:inventory_locations!stock_movements_destination_location_id_fkey(id, name, name_hi, code)`)
@@ -276,19 +299,35 @@ function InventoryContent() {
     return items.filter((i) => i.inventory_class === 'Uniform');
   }, [items]);
 
-  // Primary consumable stock value
+  // Primary consumable stock value (only costed items contribute to valuation)
   const consumableStockValue = useMemo(() => {
-    return consumableItems.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
+    return consumableItems
+      .filter((i) => i.is_costed)
+      .reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
   }, [consumableItems]);
 
   // Secondary read-only indicators
   const physicalAssetsValue = useMemo(() => {
-    return physicalAssetItems.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
+    return physicalAssetItems
+      .filter((i) => i.is_costed)
+      .reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
   }, [physicalAssetItems]);
 
   const uniformsStockValue = useMemo(() => {
-    return uniformItems.reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
+    return uniformItems
+      .filter((i) => i.is_costed)
+      .reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
   }, [uniformItems]);
+
+  // Lookup map: item_id -> string[] of aliases
+  const itemAliasesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    aliases.forEach((a) => {
+      if (!map[a.item_id]) map[a.item_id] = [];
+      if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+    });
+    return map;
+  }, [aliases]);
 
   const lowStockCount = useMemo(() => {
     return consumableItems.filter(
@@ -305,26 +344,41 @@ function InventoryContent() {
   }, [consumableItems]);
 
   const filteredItems = useMemo(() => {
-    return consumableItems.filter((item) => {
-      const matchesClass = filterClass === 'ALL' || item.inventory_class === filterClass;
-      const matchesStatus =
-        statusFilter === 'ALL' ||
-        (statusFilter === 'ACTIVE' && item.is_active !== false) ||
-        (statusFilter === 'INACTIVE' && item.is_active === false);
-      const matchesSearch =
-        !search ||
-        item.name?.toLowerCase().includes(search.toLowerCase()) ||
-        item.item_code?.toLowerCase().includes(search.toLowerCase());
+    const q = search.trim().toLowerCase();
+    const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
 
-      // Location filter
-      if (selectedLocationId !== 'ALL') {
-        const locQty = itemLocQtyLookup[item.item_id]?.[selectedLocationId] || 0;
-        if (hideZeroStock && locQty <= 0) return false;
-      }
+    return consumableItems
+      .map((item) => {
+        const itemAliases = itemAliasesMap[item.item_id] || [];
+        let matchedAlias: string | null = null;
+        if (tokens.length > 0) {
+          const found = itemAliases.find((al) => tokens.some((tok) => al.toLowerCase().includes(tok)));
+          if (found) matchedAlias = found;
+        }
+        return { ...item, matched_alias: matchedAlias, aliases: itemAliases };
+      })
+      .filter((item) => {
+        const matchesClass = filterClass === 'ALL' || item.inventory_class === filterClass;
+        const matchesStatus =
+          statusFilter === 'ALL' ||
+          (statusFilter === 'ACTIVE' && item.is_active !== false) ||
+          (statusFilter === 'INACTIVE' && item.is_active === false);
 
-      return matchesClass && matchesStatus && matchesSearch;
-    });
-  }, [consumableItems, filterClass, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup]);
+        let matchesSearch = true;
+        if (tokens.length > 0) {
+          const searchable = getSearchableItemText(item, itemAliasesMap).toLowerCase();
+          matchesSearch = tokens.every((token) => searchable.includes(token));
+        }
+
+        // Location filter
+        if (selectedLocationId !== 'ALL') {
+          const locQty = itemLocQtyLookup[item.item_id]?.[selectedLocationId] || 0;
+          if (hideZeroStock && locQty <= 0) return false;
+        }
+
+        return matchesClass && matchesStatus && matchesSearch;
+      });
+  }, [consumableItems, filterClass, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup, itemAliasesMap]);
 
   const filteredMovements = useMemo(() => {
     return movements.filter((m) => {
@@ -549,11 +603,23 @@ function InventoryContent() {
                       <span>{t('inventory.stock.kpi.totalValuation')}</span>
                       <span className="text-[10px] text-stone-400 font-medium">({t('inventory.stock.secondaryKpi.consumableNote')})</span>
                     </CardDescription>
-                    <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(consumableStockValue)}</div>
+                    <div className="text-2xl font-bold text-stone-900 mt-1">
+                      {!hasCostAccess ? (
+                        <span className="font-mono text-stone-400">🔒 ***</span>
+                      ) : (
+                        formatINR(consumableStockValue)
+                      )}
+                    </div>
                     <div className="text-[11px] text-stone-500 mt-1.5 pt-1.5 border-t border-stone-100 flex items-center justify-between gap-1 flex-wrap">
-                      <span>{t('inventory.stock.secondaryKpi.assetsValue', { val: formatINR(physicalAssetsValue) })}</span>
-                      <span>•</span>
-                      <span>{t('inventory.stock.secondaryKpi.uniformsValue', { val: formatINR(uniformsStockValue) })}</span>
+                      {!hasCostAccess ? (
+                        <span className="text-stone-400 font-mono">🔒 {locale === 'hi' ? 'लागत सुरक्षित' : 'Costs restricted'}</span>
+                      ) : (
+                        <>
+                          <span>{t('inventory.stock.secondaryKpi.assetsValue', { val: formatINR(physicalAssetsValue) })}</span>
+                          <span>•</span>
+                          <span>{t('inventory.stock.secondaryKpi.uniformsValue', { val: formatINR(uniformsStockValue) })}</span>
+                        </>
+                      )}
                     </div>
                   </CardHeader>
                 </Card>
@@ -740,24 +806,25 @@ function InventoryContent() {
                             }`}
                           >
                             <td className="py-3 px-3 font-mono font-bold text-amber-700">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedMovementItem(i)}
-                                className="hover:underline hover:text-amber-800 cursor-pointer font-mono text-left"
-                                title={t('inventory.stock.actions.viewLedger')}
+                              <Link
+                                href={`/inventory/${i.item_id}`}
+                                className="hover:underline hover:text-amber-800 cursor-pointer font-mono text-left inline-block"
                               >
                                 {i.item_code}
-                              </button>
+                              </Link>
                             </td>
                             <td className="py-3 px-3">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedMovementItem(i)}
+                              <Link
+                                href={`/inventory/${i.item_id}`}
                                 className="font-semibold text-stone-900 hover:text-amber-700 hover:underline cursor-pointer text-left block"
-                                title={t('inventory.stock.actions.viewLedger')}
                               >
                                 {getLocalizedMasterName(i, locale) || i.name}
-                              </button>
+                              </Link>
+                              {i.matched_alias && (
+                                <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mt-0.5 inline-block font-sans">
+                                  {locale === 'hi' ? 'उर्फ़: ' : 'aka: '}{i.matched_alias}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-3 text-stone-600">
                               {(locale === 'hi' && i.category_name_hi) ? i.category_name_hi : (i.category_name || (locale === 'hi' ? 'सामान्य' : 'General'))} <span className="text-stone-400">({t(`inventory.stock.classes.${i.inventory_class}`, { defaultValue: i.inventory_class })})</span>
@@ -789,10 +856,24 @@ function InventoryContent() {
                               {Number(i.minimum_stock || 0).toFixed(1)}
                             </td>
                             <td className="py-3 px-3 text-right text-stone-800 font-medium">
-                              {formatINR(Number(i.wac_cost || 0))}
+                              {!hasCostAccess ? (
+                                <span className="text-stone-400 font-mono">🔒 ***</span>
+                              ) : !i.is_costed ? (
+                                <Badge variant="outline" className="text-[10px] text-stone-500 border-dashed">
+                                  {locale === 'hi' ? 'लागत रहित' : 'Uncosted'}
+                                </Badge>
+                              ) : (
+                                formatINR(Number(i.wac_cost || 0))
+                              )}
                             </td>
                             <td className="py-3 px-3 text-right font-bold text-stone-900">
-                              {formatINR(Number(i.current_stock_value || 0))}
+                              {!hasCostAccess ? (
+                                <span className="text-stone-400 font-mono">🔒 ***</span>
+                              ) : !i.is_costed ? (
+                                <span className="text-stone-400 font-mono">—</span>
+                              ) : (
+                                formatINR(Number(i.current_stock_value || 0))
+                              )}
                             </td>
                             <td className="py-3 px-3 text-center">
                               {isLow ? (

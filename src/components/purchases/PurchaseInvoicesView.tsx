@@ -17,7 +17,8 @@ import {
   ExternalLink,
   Package,
   Calendar,
-  Building2
+  Building2,
+  Trash2,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 
@@ -29,6 +30,9 @@ export interface PurchaseInvoiceRecord {
   business_date?: string | null;
   net_amount: number;
   total_amount: number;
+  status?: string;
+  cancelled_at?: string | null;
+  cancelled_reason?: string | null;
   vendor_id: string;
   vendor_name: string;
   vendor_code?: string | null;
@@ -42,6 +46,12 @@ export interface PurchaseInvoiceRecord {
     rate: number;
     total_amount: number;
     unit_symbol?: string;
+    packaging_unit_id?: string | null;
+    brand_name_snapshot?: string | null;
+    pack_unit_snapshot?: string | null;
+    pack_quantity?: number | null;
+    pack_rate?: number | null;
+    conversion_factor_snapshot?: number | null;
   }[];
 }
 
@@ -51,6 +61,7 @@ interface PurchaseInvoicesViewProps {
   onRefresh: () => void;
   onNewInvoice: () => void;
   onRecordPayment: (vendorId?: string) => void;
+  onCancelInvoice?: (invoice: PurchaseInvoiceRecord) => void;
 }
 
 export function PurchaseInvoicesView({
@@ -59,6 +70,7 @@ export function PurchaseInvoicesView({
   onRefresh,
   onNewInvoice,
   onRecordPayment,
+  onCancelInvoice,
 }: PurchaseInvoicesViewProps) {
   const { t, locale } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,13 +229,16 @@ export function PurchaseInvoicesView({
                   filteredInvoices.map((inv) => {
                     const balanceDue = inv.net_amount - inv.allocated_amount;
                     const isExpanded = expandedInvoiceId === inv.id;
+                    const isCancelled = inv.status === 'cancelled';
                     const isSettled = balanceDue <= 0.01;
                     const isPartial = inv.allocated_amount > 0.01 && !isSettled;
 
                     return (
                       <React.Fragment key={inv.id}>
                         <tr
-                          className="hover:bg-stone-50/80 transition-colors cursor-pointer"
+                          className={`hover:bg-stone-50/80 transition-colors cursor-pointer ${
+                            isCancelled ? 'opacity-60 bg-stone-50/40' : ''
+                          }`}
                           onClick={() => setExpandedInvoiceId(isExpanded ? null : inv.id)}
                         >
                           {/* Toggle Expand Icon */}
@@ -237,7 +252,9 @@ export function PurchaseInvoicesView({
 
                           {/* Purchase Number / PO */}
                           <td className="py-3 px-3 font-mono font-medium text-stone-900 whitespace-nowrap">
-                            {inv.purchase_number}
+                            <span className={isCancelled ? 'line-through text-stone-400' : ''}>
+                              {inv.purchase_number}
+                            </span>
                           </td>
 
                           {/* Invoice / Bill # */}
@@ -271,7 +288,9 @@ export function PurchaseInvoicesView({
 
                           {/* Net Total */}
                           <td className="py-3 px-3 text-right font-medium text-stone-900 whitespace-nowrap">
-                            {formatINR(inv.net_amount)}
+                            <span className={isCancelled ? 'line-through text-stone-400' : ''}>
+                              {formatINR(inv.net_amount)}
+                            </span>
                           </td>
 
                           {/* Paid */}
@@ -281,12 +300,16 @@ export function PurchaseInvoicesView({
 
                           {/* Balance Due */}
                           <td className="py-3 px-3 text-right font-bold text-rose-600 whitespace-nowrap">
-                            {formatINR(Math.max(0, balanceDue))}
+                            {isCancelled ? '—' : formatINR(Math.max(0, balanceDue))}
                           </td>
 
                           {/* Status Badge */}
                           <td className="py-3 px-3 text-center whitespace-nowrap">
-                            {isSettled ? (
+                            {isCancelled ? (
+                              <Badge variant="danger" className="bg-rose-100 text-rose-800 border-rose-300 font-bold">
+                                {t('purchases.bills.cancelledBadge')}
+                              </Badge>
+                            ) : isSettled ? (
                               <Badge variant="success">{t('purchases.bills.settled')}</Badge>
                             ) : isPartial ? (
                               <Badge variant="warning">{t('purchases.bills.partial')}</Badge>
@@ -297,18 +320,32 @@ export function PurchaseInvoicesView({
 
                           {/* Actions */}
                           <td className="py-3 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            {!isSettled && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onRecordPayment(inv.vendor_id)}
-                                className="text-[11px] h-7 px-2 gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-                                title={t('purchases.bills.recordPayment')}
-                              >
-                                <CreditCard className="h-3 w-3" />
-                                <span>{t('purchases.bills.recordPayment')}</span>
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-end gap-1.5">
+                              {!isSettled && !isCancelled && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => onRecordPayment(inv.vendor_id)}
+                                  className="text-[11px] h-7 px-2 gap-1 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                                  title={t('purchases.bills.recordPayment')}
+                                >
+                                  <CreditCard className="h-3 w-3" />
+                                  <span>{t('purchases.bills.recordPayment')}</span>
+                                </Button>
+                              )}
+                              {!isCancelled && onCancelInvoice && inv.allocated_amount <= 0.01 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => onCancelInvoice(inv)}
+                                  className="text-[11px] h-7 px-2 gap-1 text-rose-600 border-rose-200 hover:bg-rose-50"
+                                  title={t('purchases.bills.cancelInvoice')}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  <span>{t('purchases.bills.cancelInvoice')}</span>
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
 
@@ -316,7 +353,7 @@ export function PurchaseInvoicesView({
                         {isExpanded && (
                           <tr className="bg-amber-50/20 border-b border-stone-200">
                             <td colSpan={11} className="p-3 sm:p-4">
-                              <div className="bg-white rounded-lg border border-amber-200/80 p-3 shadow-xs space-y-2">
+                              <div className="bg-white rounded-lg border border-amber-200/80 p-3 shadow-xs space-y-3">
                                 <div className="flex items-center justify-between border-b border-stone-100 pb-2">
                                   <div className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
                                     <Package className="h-3.5 w-3.5 text-amber-600" />
@@ -329,6 +366,20 @@ export function PurchaseInvoicesView({
                                     {t('purchases.invoices.table.date')}: {inv.purchase_date}
                                   </span>
                                 </div>
+
+                                {isCancelled && (
+                                  <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center justify-between">
+                                    <div>
+                                      <span className="font-bold">{t('purchases.bills.cancelledBadge')}: </span>
+                                      <span>{inv.cancelled_reason || 'Cancelled'}</span>
+                                    </div>
+                                    {inv.cancelled_at && (
+                                      <span className="text-[10px] font-mono text-stone-500">
+                                        {new Date(inv.cancelled_at).toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
 
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left text-[11px]">
@@ -345,7 +396,16 @@ export function PurchaseInvoicesView({
                                       {inv.lines.map((l) => (
                                         <tr key={l.id}>
                                           <td className="py-1.5 px-2 font-medium text-stone-800">
-                                            {l.item_name}
+                                            <div>{l.item_name}</div>
+                                            {l.pack_unit_snapshot && (
+                                              <div className="text-[10px] text-amber-800 font-mono mt-0.5">
+                                                {l.brand_name_snapshot ? `${l.brand_name_snapshot} ` : ''}
+                                                {l.pack_quantity} {l.pack_unit_snapshot} @ {formatINR(l.pack_rate || 0)}/{l.pack_unit_snapshot}
+                                                {l.conversion_factor_snapshot && Number(l.conversion_factor_snapshot) > 1 && (
+                                                  <span> (×{l.conversion_factor_snapshot} = {l.quantity} {l.unit_symbol})</span>
+                                                )}
+                                              </div>
+                                            )}
                                           </td>
                                           <td className="py-1.5 px-2 font-mono text-stone-500">
                                             {l.item_code}
