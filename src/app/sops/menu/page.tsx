@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
 import { canViewCosting } from '@/lib/rbac';
-import { formatINR } from '@/lib/utils';
+import { formatINR, formatNumber, getYesterdayBusinessDate } from '@/lib/utils';
 import { getCategoryColor } from '@/lib/constants/category-colors';
 import {
   UtensilsCrossed,
@@ -21,6 +21,9 @@ import {
   AlertTriangle,
   Lock,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
   Filter,
   Layers,
   Star,
@@ -31,6 +34,278 @@ import {
   ShoppingBag,
   Calendar,
 } from 'lucide-react';
+
+type MenuSortField =
+  | 'name'
+  | 'category'
+  | 'price'
+  | 'variant'
+  | 'food_cost'
+  | 'food_cost_pct'
+  | 'margin'
+  | 'units_sold'
+  | 'revenue'
+  | 'quadrant';
+
+type SortOrder = 'asc' | 'desc';
+
+/**
+ * Natural BCG Domain Rank Ordering:
+ * STAR (1) -> PLOWHORSE (2) -> PUZZLE (3) -> DOG (4) ->
+ * COSTING_INCOMPLETE (5) -> UNCOSTED (6) -> INELIGIBLE (7) -> null / unclassified (8)
+ */
+const BCG_RANK: Record<string, number> = {
+  STAR: 1,
+  PLOWHORSE: 2,
+  PUZZLE: 3,
+  DOG: 4,
+  COSTING_INCOMPLETE: 5,
+  UNCOSTED: 6,
+  INELIGIBLE: 7,
+};
+
+const UNCLASSIFIED_RANK = 8;
+
+/**
+ * Numeric and financial fields default to 'desc' (highest to lowest) on first click.
+ * Text and domain rank fields default to 'asc' (A-Z or Stars-first) on first click.
+ */
+const NUMERIC_FINANCIAL_SORT_FIELDS: ReadonlySet<MenuSortField> = new Set([
+  'price',
+  'food_cost',
+  'food_cost_pct',
+  'margin',
+  'units_sold',
+  'revenue',
+]);
+
+interface ColumnDefinition {
+  key: MenuSortField;
+  labelKey: string;
+  align: 'left' | 'right';
+  className?: string;
+}
+
+const CATALOG_COLUMNS: ColumnDefinition[] = [
+  { key: 'name', labelKey: 'sops.menu.colItem', align: 'left', className: 'min-w-[180px]' },
+  { key: 'category', labelKey: 'sops.menu.colCategory', align: 'left', className: 'min-w-[130px]' },
+  { key: 'price', labelKey: 'sops.menu.colPrice', align: 'right', className: 'min-w-[100px]' },
+  { key: 'variant', labelKey: 'sops.menu.colVariant', align: 'left', className: 'min-w-[140px]' },
+  { key: 'food_cost', labelKey: 'sops.menu.colFoodCost', align: 'right', className: 'min-w-[100px]' },
+  { key: 'food_cost_pct', labelKey: 'sops.menu.colFoodCostPct', align: 'right', className: 'min-w-[90px]' },
+  { key: 'margin', labelKey: 'sops.menu.colMargin', align: 'right', className: 'min-w-[100px]' },
+  { key: 'units_sold', labelKey: 'sops.menu.colUnitsSold', align: 'right', className: 'min-w-[90px]' },
+  { key: 'revenue', labelKey: 'sops.menu.colNetRevenue', align: 'right', className: 'min-w-[110px]' },
+  { key: 'quadrant', labelKey: 'sops.menu.colQuadrant', align: 'left', className: 'min-w-[110px]' },
+];
+
+/**
+ * Compares two nullable numbers with deterministic NULLS_LAST semantics.
+ * In both 'asc' and 'desc', items with null/undefined values are sorted to the bottom.
+ */
+function compareNullableNumbers(
+  aNum: number | null | undefined,
+  bNum: number | null | undefined,
+  sortOrder: SortOrder
+): number {
+  const aValid = aNum != null && !isNaN(aNum);
+  const bValid = bNum != null && !isNaN(bNum);
+
+  if (!aValid && !bValid) return 0;
+  if (!aValid) return 1;  // nulls sort to the bottom
+  if (!bValid) return -1; // nulls sort to the bottom
+
+  return sortOrder === 'asc' ? aNum - bNum : bNum - aNum;
+}
+
+/**
+ * Compares two nullable strings with deterministic NULLS_LAST semantics.
+ * In both 'asc' and 'desc', items with null/undefined/empty values are sorted to the bottom.
+ */
+function compareNullableStrings(
+  aStr: string | null | undefined,
+  bStr: string | null | undefined,
+  sortOrder: SortOrder,
+  locale?: string
+): number {
+  const aValid = aStr != null && aStr.trim().length > 0;
+  const bValid = bStr != null && bStr.trim().length > 0;
+  if (!aValid && !bValid) return 0;
+  if (!aValid) return 1;  // nulls sort to bottom in both asc and desc
+  if (!bValid) return -1; // nulls sort to bottom in both asc and desc
+  const diff = aStr!.trim().localeCompare(bStr!.trim(), locale || 'en', {
+    sensitivity: 'base',
+    numeric: true,
+  });
+  return sortOrder === 'asc' ? diff : -diff;
+}
+
+/**
+ * Compares two strings with natural collation and locale awareness.
+ */
+function compareStrings(
+  aStr: string | null | undefined,
+  bStr: string | null | undefined,
+  sortOrder: SortOrder,
+  locale?: string
+): number {
+  const aVal = aStr?.trim() || '';
+  const bVal = bStr?.trim() || '';
+  const diff = aVal.localeCompare(bVal, locale || 'en', {
+    sensitivity: 'base',
+    numeric: true,
+  });
+  return sortOrder === 'asc' ? diff : -diff;
+}
+
+/**
+ * Compares categories: Parent Category first, then Subcategory.
+ */
+function compareCategories(
+  a: any,
+  b: any,
+  sortOrder: SortOrder,
+  locale?: string
+): number {
+  const pA = a.parent_category?.trim() || '';
+  const pB = b.parent_category?.trim() || '';
+  let diff = pA.localeCompare(pB, locale || 'en', { sensitivity: 'base' });
+
+  if (diff === 0) {
+    const cA = a.category?.trim() || '';
+    const cB = b.category?.trim() || '';
+    diff = cA.localeCompare(cB, locale || 'en', { sensitivity: 'base' });
+  }
+
+  return sortOrder === 'asc' ? diff : -diff;
+}
+
+/**
+ * Compares BCG Quadrants according to domain hierarchy:
+ * STAR (1) -> PLOWHORSE (2) -> PUZZLE (3) -> DOG (4) ->
+ * COSTING_INCOMPLETE (5) -> UNCOSTED (6) -> INELIGIBLE (7) -> null (8)
+ *
+ * In both 'asc' and 'desc', non-matrix / unclassified items (ranks > 4) sort to the bottom
+ * (preserving their natural secondary order: incomplete -> uncosted -> ineligible -> null).
+ * Only classified matrix items (STAR -> PLOWHORSE -> PUZZLE -> DOG) invert in 'desc'.
+ */
+function compareQuadrants(
+  a: any,
+  b: any,
+  sortOrder: SortOrder
+): number {
+  const rankA = BCG_RANK[a.quadrant] ?? UNCLASSIFIED_RANK;
+  const rankB = BCG_RANK[b.quadrant] ?? UNCLASSIFIED_RANK;
+  const aIsClassified = rankA <= 4;
+  const bIsClassified = rankB <= 4;
+
+  if (!aIsClassified && !bIsClassified) {
+    return rankA - rankB; // secondary natural order (5->6->7->8) at the bottom
+  }
+  if (!aIsClassified) return 1;  // non-matrix sorts to bottom in both asc and desc
+  if (!bIsClassified) return -1; // non-matrix sorts to bottom in both asc and desc
+
+  const diff = rankA - rankB;
+  return sortOrder === 'asc' ? diff : -diff;
+}
+
+/**
+ * Master multi-column item comparator with stable tie-breaking.
+ */
+function compareCatalogItems(
+  a: any,
+  b: any,
+  sortField: MenuSortField,
+  sortOrder: SortOrder,
+  locale?: string
+): number {
+  let diff = 0;
+
+  switch (sortField) {
+    case 'name':
+      diff = compareStrings(a.name, b.name, sortOrder, locale);
+      break;
+
+    case 'category':
+      diff = compareCategories(a, b, sortOrder, locale);
+      break;
+
+    case 'price': {
+      const pA = a.price != null && !isNaN(Number(a.price)) ? Number(a.price) : null;
+      const pB = b.price != null && !isNaN(Number(b.price)) ? Number(b.price) : null;
+      diff = compareNullableNumbers(pA, pB, sortOrder);
+      break;
+    }
+
+    case 'variant':
+      diff = compareNullableStrings(
+        a.defaultVariant?.variant_name,
+        b.defaultVariant?.variant_name,
+        sortOrder,
+        locale
+      );
+      break;
+
+    case 'food_cost':
+      diff = compareNullableNumbers(
+        a.defaultVariant?.food_cost,
+        b.defaultVariant?.food_cost,
+        sortOrder
+      );
+      break;
+
+    case 'food_cost_pct':
+      diff = compareNullableNumbers(
+        a.defaultVariant?.food_cost_pct,
+        b.defaultVariant?.food_cost_pct,
+        sortOrder
+      );
+      break;
+
+    case 'margin':
+      diff = compareNullableNumbers(
+        a.defaultVariant?.margin_amount,
+        b.defaultVariant?.margin_amount,
+        sortOrder
+      );
+      break;
+
+    case 'units_sold':
+      diff = compareNullableNumbers(
+        Number(a.unitsSold) || 0,
+        Number(b.unitsSold) || 0,
+        sortOrder
+      );
+      break;
+
+    case 'revenue':
+      diff = compareNullableNumbers(
+        Number(a.netRevenue) || 0,
+        Number(b.netRevenue) || 0,
+        sortOrder
+      );
+      break;
+
+    case 'quadrant':
+      diff = compareQuadrants(a, b, sortOrder);
+      break;
+  }
+
+  // Stable Tie-Breaker 1: Item Name A-Z
+  if (diff === 0) {
+    diff = (a.name || '').localeCompare(b.name || '', locale || 'en', {
+      sensitivity: 'base',
+      numeric: true,
+    });
+  }
+
+  // Stable Tie-Breaker 2: Item ID (Guarantees 100% strict total order)
+  if (diff === 0) {
+    diff = (a.id || '').localeCompare(b.id || '');
+  }
+
+  return diff;
+}
 
 function MenuMasterContent() {
   const { t, locale } = useI18n();
@@ -48,8 +323,8 @@ function MenuMasterContent() {
   const [channel, setChannel] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
 
   // Date range presets for matrix and sales
-  type DatePreset = 'all' | 'today' | '7d' | '30d' | 'this_month' | 'custom';
-  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  type DatePreset = 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'custom';
+  const [datePreset, setDatePreset] = useState<DatePreset>('yesterday');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
@@ -65,6 +340,19 @@ function MenuMasterContent() {
   const [parentCatFilter, setParentCatFilter] = useState('ALL');
   const [quadrantFilter, setQuadrantFilter] = useState('ALL');
 
+  // Sort state: defaults to Item Name ascending on load
+  const [sortField, setSortField] = useState<MenuSortField>('name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  const handleSort = (field: MenuSortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder(NUMERIC_FINANCIAL_SORT_FIELDS.has(field) ? 'desc' : 'asc');
+    }
+  };
+
   const fetchMenuData = async () => {
     setLoading(true);
     setError(null);
@@ -72,23 +360,25 @@ function MenuMasterContent() {
       const params = new URLSearchParams();
       params.set('channel', channel);
 
-      const now = new Date();
-      if (datePreset === 'today') {
-        const todayStr = now.toISOString().substring(0, 10);
-        params.set('date_from', todayStr);
-        params.set('date_to', todayStr);
+      const yesterday = getYesterdayBusinessDate();
+      if (datePreset === 'yesterday') {
+        params.set('date_from', yesterday);
+        params.set('date_to', yesterday);
       } else if (datePreset === '7d') {
-        const dFrom = new Date(now.getTime() - 7 * 86400000).toISOString().substring(0, 10);
-        params.set('date_from', dFrom);
-        params.set('date_to', now.toISOString().substring(0, 10));
+        const [y, m, d] = yesterday.split('-').map(Number);
+        const dFromObj = new Date(Date.UTC(y, m - 1, d - 6));
+        params.set('date_from', dFromObj.toISOString().substring(0, 10));
+        params.set('date_to', yesterday);
       } else if (datePreset === '30d') {
-        const dFrom = new Date(now.getTime() - 30 * 86400000).toISOString().substring(0, 10);
-        params.set('date_from', dFrom);
-        params.set('date_to', now.toISOString().substring(0, 10));
+        const [y, m, d] = yesterday.split('-').map(Number);
+        const dFromObj = new Date(Date.UTC(y, m - 1, d - 29));
+        params.set('date_from', dFromObj.toISOString().substring(0, 10));
+        params.set('date_to', yesterday);
       } else if (datePreset === 'this_month') {
-        const dFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().substring(0, 10);
-        params.set('date_from', dFrom);
-        params.set('date_to', now.toISOString().substring(0, 10));
+        const [y, m] = yesterday.split('-').map(Number);
+        const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+        params.set('date_from', monthStart <= yesterday ? monthStart : yesterday);
+        params.set('date_to', yesterday);
       } else if (datePreset === 'custom') {
         if (customFrom) params.set('date_from', customFrom);
         if (customTo) params.set('date_to', customTo);
@@ -125,21 +415,11 @@ function MenuMasterContent() {
     return Array.from(set).sort();
   }, [items]);
 
-  // Matrix items map for fast lookup
-  const matrixItemMap = useMemo(() => {
-    const map = new Map<string, any>();
-    if (matrix && Array.isArray(matrix.items)) {
-      matrix.items.forEach((m: any) => map.set(m.menuItemId, m));
-    }
-    return map;
-  }, [matrix]);
-
   // Filtered menu items
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       if (parentCatFilter !== 'ALL' && item.parent_category !== parentCatFilter) return false;
-      const mData = matrixItemMap.get(item.id);
-      if (quadrantFilter !== 'ALL' && mData?.quadrant !== quadrantFilter) return false;
+      if (quadrantFilter !== 'ALL' && item.quadrant !== quadrantFilter) return false;
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase().trim();
         const nameMatch = item.name?.toLowerCase().includes(query);
@@ -148,7 +428,14 @@ function MenuMasterContent() {
       }
       return true;
     });
-  }, [items, parentCatFilter, quadrantFilter, searchTerm, matrixItemMap]);
+  }, [items, parentCatFilter, quadrantFilter, searchTerm]);
+
+  // Stage 2: Sort filtered items (preserves active filters and tie-breaks stably)
+  const sortedItems = useMemo(() => {
+    return [...filteredItems].sort((a, b) => {
+      return compareCatalogItems(a, b, sortField, sortOrder, locale);
+    });
+  }, [filteredItems, sortField, sortOrder, locale]);
 
   const getQuadrantBadge = (quadrant?: string) => {
     switch (quadrant) {
@@ -215,32 +502,8 @@ function MenuMasterContent() {
           </p>
         </div>
 
-        {/* Channel and Refresh Controls */}
+        {/* Header Controls */}
         <div className="flex items-center gap-2">
-          {/* Channel Selector Toggle */}
-          <div className="bg-[#FAF8F5] border border-[#E7E2D8] rounded-lg p-0.5 flex text-xs font-medium">
-            <button
-              onClick={() => setChannel('DINE_IN')}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                channel === 'DINE_IN'
-                  ? 'bg-amber-600 text-white shadow-xs font-semibold'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              {t('sops.menu.channelDineIn')}
-            </button>
-            <button
-              onClick={() => setChannel('TAKEAWAY')}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                channel === 'TAKEAWAY'
-                  ? 'bg-amber-600 text-white shadow-xs font-semibold'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              {t('sops.menu.channelTakeaway')}
-            </button>
-          </div>
-
           <Button
             variant="outline"
             size="sm"
@@ -249,7 +512,7 @@ function MenuMasterContent() {
             className="gap-1.5"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            {locale === 'hi' ? 'रिफ्रेश' : 'Refresh'}
+            {t('common.actions.refresh')}
           </Button>
         </div>
       </div>
@@ -297,7 +560,7 @@ function MenuMasterContent() {
             {locale === 'hi' ? 'अवधि चुनें:' : 'Date Presets:'}
           </span>
           {[
-            { key: 'today', label: locale === 'hi' ? 'आज' : 'Today' },
+            { key: 'yesterday', label: t('common.labels.yesterday') },
             { key: '7d', label: locale === 'hi' ? 'पिछले 7 दिन' : 'Last 7 Days' },
             { key: '30d', label: locale === 'hi' ? 'पिछले 30 दिन' : 'Last 30 Days' },
             { key: 'this_month', label: locale === 'hi' ? 'इस माह' : 'This Month' },
@@ -413,7 +676,7 @@ function MenuMasterContent() {
                   <RefreshCw className="h-6 w-6 animate-spin text-amber-600" />
                   <span>Loading catalog...</span>
                 </div>
-              ) : filteredItems.length === 0 ? (
+              ) : sortedItems.length === 0 ? (
                 <div className="p-12 text-center text-stone-400">
                   {t('sops.menu.noItemsFound')}
                 </div>
@@ -421,35 +684,83 @@ function MenuMasterContent() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
-                        <th className="py-3 px-4">{t('sops.menu.colItem')}</th>
-                        <th className="py-3 px-4">{t('sops.menu.colCategory')}</th>
-                        <th className="py-3 px-4 text-right">{t('sops.menu.colPrice')}</th>
-                        <th className="py-3 px-4">{t('sops.menu.colVariant')}</th>
-                        <th className="py-3 px-4 text-right">{t('sops.menu.colFoodCost')}</th>
-                        <th className="py-3 px-4 text-right">{t('sops.menu.colFoodCostPct')}</th>
-                        <th className="py-3 px-4 text-right">{t('sops.menu.colMargin')}</th>
-                        <th className="py-3 px-4">{t('sops.menu.colQuadrant')}</th>
-                        <th className="py-3 px-4 text-right">{t('sops.menu.colActions')}</th>
+                      <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600 select-none">
+                        {CATALOG_COLUMNS.map((col) => {
+                          const isActive = sortField === col.key;
+                          const ariaSortValue = isActive
+                            ? sortOrder === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : 'none';
+
+                          return (
+                            <th
+                              key={col.key}
+                              scope="col"
+                              aria-sort={ariaSortValue}
+                              onClick={() => handleSort(col.key)}
+                              className={`py-3 px-4 cursor-pointer hover:bg-stone-100 transition-colors group ${
+                                col.align === 'right' ? 'text-right' : 'text-left'
+                              } ${col.className || ''}`}
+                            >
+                              <div
+                                className={`flex items-center gap-1.5 ${
+                                  col.align === 'right' ? 'justify-end' : 'justify-start'
+                                }`}
+                              >
+                                <span>{t(col.labelKey)}</span>
+                                <span
+                                  className={`transition-colors ${
+                                    isActive ? 'text-amber-600' : 'text-stone-400 group-hover:text-stone-600'
+                                  }`}
+                                >
+                                  {isActive ? (
+                                    sortOrder === 'asc' ? (
+                                      <ChevronUp className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <ChevronDown className="h-3.5 w-3.5" />
+                                    )
+                                  ) : (
+                                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-40 group-hover:opacity-100 transition-opacity" />
+                                  )}
+                                </span>
+                              </div>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E7E2D8]">
-                      {filteredItems.map((item) => {
-                        const mData = matrixItemMap.get(item.id);
+                      {sortedItems.map((item) => {
                         const v = item.defaultVariant;
                         const parentColor = getCategoryColor(item.parent_category);
 
                         return (
-                          <tr key={item.id} className="hover:bg-amber-50/20 transition-colors">
+                          <tr
+                            key={item.id}
+                            onClick={() => router.push(`/sops/menu/${item.id}`)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                router.push(`/sops/menu/${item.id}`);
+                              }
+                            }}
+                            tabIndex={0}
+                            role="link"
+                            aria-label={`${item.name} - ${item.parent_category || ''}`}
+                            className="hover:bg-amber-50/50 cursor-pointer transition-colors focus:outline-none focus:bg-amber-50/60 focus:ring-1 focus:ring-amber-500/30 group"
+                          >
+                            {/* 1. Item Name */}
                             <td className="py-3.5 px-4">
-                              <Link href={`/sops/menu/${item.id}`} className="font-medium text-stone-900 hover:text-amber-700">
+                              <span className="font-medium text-stone-900 group-hover:text-amber-700 transition-colors">
                                 {item.name}
-                              </Link>
+                              </span>
                               {item.name_hi && (
                                 <div className="text-xs text-stone-500 font-sans">{item.name_hi}</div>
                               )}
                             </td>
 
+                            {/* 2. Category */}
                             <td className="py-3.5 px-4">
                               <div className="flex items-center gap-1.5">
                                 <span
@@ -463,10 +774,12 @@ function MenuMasterContent() {
                               <div className="text-[11px] text-stone-400 ml-4">{item.category}</div>
                             </td>
 
+                            {/* 3. Selling Price */}
                             <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
                               {item.price ? formatINR(item.price) : '—'}
                             </td>
 
+                            {/* 4. Active Recipe / Variant */}
                             <td className="py-3.5 px-4">
                               {v ? (
                                 <div>
@@ -484,6 +797,7 @@ function MenuMasterContent() {
                               )}
                             </td>
 
+                            {/* 5. Food Cost */}
                             <td className="py-3.5 px-4 text-right font-mono text-sm">
                               {!hasCostAccess ? (
                                 <Lock className="h-3 w-3 inline text-stone-400" />
@@ -496,6 +810,7 @@ function MenuMasterContent() {
                               )}
                             </td>
 
+                            {/* 6. Food Cost % */}
                             <td className="py-3.5 px-4 text-right font-mono text-xs">
                               {!hasCostAccess ? (
                                 <Lock className="h-3 w-3 inline text-stone-400" />
@@ -516,6 +831,7 @@ function MenuMasterContent() {
                               )}
                             </td>
 
+                            {/* 7. Contribution Margin */}
                             <td className="py-3.5 px-4 text-right font-mono text-sm">
                               {!hasCostAccess ? (
                                 <Lock className="h-3 w-3 inline text-stone-400" />
@@ -528,17 +844,19 @@ function MenuMasterContent() {
                               )}
                             </td>
 
-                            <td className="py-3.5 px-4">
-                              {getQuadrantBadge(mData?.quadrant)}
+                            {/* 8. Units Sold */}
+                            <td className="py-3.5 px-4 text-right font-mono text-sm text-stone-900">
+                              {item.unitsSold ? formatNumber(item.unitsSold) : '0'}
                             </td>
 
-                            <td className="py-3.5 px-4 text-right">
-                              <Link href={`/sops/menu/${item.id}`}>
-                                <Button variant="ghost" size="sm" className="h-8 px-2 text-stone-600 hover:text-amber-700">
-                                  <span className="text-xs mr-1">{t('sops.menu.editCosts')}</span>
-                                  <ChevronRight className="h-3.5 w-3.5" />
-                                </Button>
-                              </Link>
+                            {/* 9. Net Revenue */}
+                            <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
+                              {item.netRevenue ? formatINR(item.netRevenue) : '₹0'}
+                            </td>
+
+                            {/* 10. BCG Quadrant */}
+                            <td className="py-3.5 px-4">
+                              {getQuadrantBadge(item.quadrant)}
                             </td>
                           </tr>
                         );

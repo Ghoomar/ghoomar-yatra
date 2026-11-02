@@ -62,6 +62,12 @@ function RecipesContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Lazy loading state for secondary tab data and modal autocomplete
+  const [combosLoaded, setCombosLoaded] = useState(false);
+  const [combosLoading, setCombosLoading] = useState(false);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+
   // Filters
   const [categoryTab, setCategoryTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -91,27 +97,13 @@ function RecipesContent() {
     setLoading(true);
     setError(null);
     try {
-      const [res, menuRes, groupsRes] = await Promise.all([
-        fetch('/api/sops/recipes'),
-        fetch('/api/sops/menu?channel=DINE_IN'),
-        fetch('/api/inventory/groups?class=Food Raw Material'),
-      ]);
+      const res = await fetch('/api/sops/recipes');
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load recipes');
       }
       const data = await res.json();
       setRecipes(data.recipes || []);
-
-      if (menuRes.ok) {
-        const menuData = await menuRes.json();
-        setCombos(menuData.combos || []);
-      }
-      if (groupsRes.ok) {
-        const groupsData = await groupsRes.json();
-        setFoodGroups(groupsData.groups || []);
-        setAliasesMap(groupsData.aliasesMap || {});
-      }
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
       setError(err.message || 'Error fetching recipes');
@@ -120,9 +112,50 @@ function RecipesContent() {
     }
   };
 
+  const fetchCombos = async () => {
+    if (combosLoaded || combosLoading) return;
+    setCombosLoading(true);
+    try {
+      const res = await fetch('/api/sops/menu?channel=DINE_IN');
+      if (res.ok) {
+        const data = await res.json();
+        setCombos(data.combos || []);
+        setCombosLoaded(true);
+      }
+    } catch (err) {
+      console.error('Fetch combos error:', err);
+    } finally {
+      setCombosLoading(false);
+    }
+  };
+
+  const fetchFoodGroups = async () => {
+    if (groupsLoaded || groupsLoading) return;
+    setGroupsLoading(true);
+    try {
+      const res = await fetch('/api/inventory/groups?class=Food Raw Material');
+      if (res.ok) {
+        const data = await res.json();
+        setFoodGroups(data.groups || []);
+        setAliasesMap(data.aliasesMap || {});
+        setGroupsLoaded(true);
+      }
+    } catch (err) {
+      console.error('Fetch food groups error:', err);
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchRecipes();
   }, []);
+
+  useEffect(() => {
+    if (categoryTab === 'COMBOS' && !combosLoaded) {
+      fetchCombos();
+    }
+  }, [categoryTab, combosLoaded]);
 
   // Filtered food groups for Recipe Builder via filterLogicalIngredientGroups
   const matchingFoodGroups = useMemo(() => {
@@ -296,6 +329,9 @@ function RecipesContent() {
                 setGroupSearchQuery('');
                 setInitialQty('');
                 setCreateError(null);
+                if (!groupsLoaded) {
+                  fetchFoodGroups();
+                }
                 setIsModalOpen(true);
               }}
               className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
@@ -384,7 +420,14 @@ function RecipesContent() {
               </Button>
             </div>
           ) : categoryTab === 'COMBOS' ? (
-            combos.length === 0 ? (
+            combosLoading ? (
+              <div className="p-12 text-center text-stone-400 flex flex-col items-center gap-2">
+                <RefreshCw className="h-8 w-8 animate-spin text-amber-600" />
+                <p className="text-sm font-medium text-stone-600">
+                  {locale === 'hi' ? 'कॉम्बो और थाली लोड हो रहे हैं...' : 'Loading combos & thalis...'}
+                </p>
+              </div>
+            ) : combos.length === 0 ? (
               <div className="p-12 text-center text-stone-400 flex flex-col items-center gap-2">
                 <BookOpen className="h-8 w-8 text-stone-300" />
                 <p className="text-sm font-medium text-stone-600">No combos or thalis configured.</p>
@@ -703,7 +746,11 @@ function RecipesContent() {
                 </div>
                 {groupSearchQuery.trim() && (
                   <div className="max-h-36 overflow-y-auto border border-[#E7E2D8] rounded bg-white divide-y divide-[#E7E2D8] text-xs">
-                    {matchingFoodGroups.length === 0 ? (
+                    {groupsLoading ? (
+                      <p className="p-2 text-stone-400 italic">
+                        {locale === 'hi' ? 'सामग्री लोड हो रही है...' : 'Loading food raw materials...'}
+                      </p>
+                    ) : matchingFoodGroups.length === 0 ? (
                       <p className="p-2 text-stone-400 italic">No food raw materials matched.</p>
                     ) : (
                       matchingFoodGroups.map((g: any) => (

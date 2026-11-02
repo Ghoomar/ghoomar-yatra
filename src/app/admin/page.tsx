@@ -21,6 +21,7 @@ import { EditCostRuleModal } from '@/components/admin/EditCostRuleModal';
 import { MenuMasterView } from '@/components/admin/menu/MenuMasterView';
 import { PaymentMethodModal } from '@/components/admin/PaymentMethodModal';
 import { VehiclePrefixMasterModal } from '@/components/admin/VehiclePrefixMasterModal';
+import { LocationModal } from '@/components/admin/LocationModal';
 import { logAuditAction } from '@/lib/audit-logger';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
@@ -46,6 +47,7 @@ import {
   Save,
   Car,
   Activity,
+  MapPin,
 } from 'lucide-react';
 
 export default function AdminSettingsPage() {
@@ -65,6 +67,7 @@ export default function AdminSettingsPage() {
   const [roles, setRoles] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [vehiclePrefixes, setVehiclePrefixes] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [healthBufferInput, setHealthBufferInput] = useState<string>('10');
   const [savingBuffer, setSavingBuffer] = useState(false);
@@ -85,6 +88,7 @@ export default function AdminSettingsPage() {
   const [editingCostRule, setEditingCostRule] = useState<any | null>(null);
   const [paymentMethodModalOpen, setPaymentMethodModalOpen] = useState(false);
   const [prefixModalOpen, setPrefixModalOpen] = useState(false);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -102,6 +106,7 @@ export default function AdminSettingsPage() {
         { data: icData },
         { data: pData },
         { data: vpData },
+        { data: locData },
       ] = await Promise.all([
         supabase.from('departments').select('*').order('name'),
         supabase.from('teams').select('*').order('name'),
@@ -115,6 +120,7 @@ export default function AdminSettingsPage() {
         supabase.from('inventory_categories').select('*').order('name'),
         supabase.from('profiles').select('*, role:roles(id, name, name_hi)').order('full_name'),
         supabase.from('vehicle_registration_prefixes').select('*').order('prefix'),
+        supabase.from('inventory_locations').select('*, department:departments(id, name, name_hi, code)').order('name'),
       ]);
 
       setDepartments(dData || []);
@@ -131,6 +137,7 @@ export default function AdminSettingsPage() {
       setInventoryCategories(icData || []);
       setProfiles(pData || []);
       setVehiclePrefixes(vpData || []);
+      setLocations(locData || []);
     } catch (err: any) {
       console.error('Error loading admin masters:', err);
     } finally {
@@ -355,6 +362,17 @@ export default function AdminSettingsPage() {
               {locale === 'hi'
                 ? `à¤•à¤¾à¤° à¤‘à¤°à¤¿à¤œà¤¿à¤¨ à¤ªà¥à¤°à¥€à¤«à¤¿à¤•à¥à¤¸ (${vehiclePrefixes.length})`
                 : `Car Origins & Prefixes (${vehiclePrefixes.length})`}
+            </Button>
+                      <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocationModalOpen(true)}
+              className="gap-1.5 bg-white text-stone-700 hover:bg-stone-100"
+            >
+              <MapPin className="h-4 w-4 text-amber-600" />{' '}
+              {locale === 'hi'
+                ? `इन्वेंटरी लोकेशन्स (${locations.length})`
+                : `Inventory Locations (${locations.length})`}
             </Button>
           </div>
 
@@ -618,7 +636,78 @@ export default function AdminSettingsPage() {
                 )}
               </CardContent>
             </Card>
-          </div>
+                      {/* Inventory & Storage Locations */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-amber-600" />
+                    {locale === 'hi' ? 'इन्वेंटरी और स्टोरेज लोकेशन्स' : 'Inventory & Storage Locations'}
+                  </CardTitle>
+                  <CardDescription>
+                    {locale === 'hi'
+                      ? 'स्टोरेज रूम, किचन सेक्शन, बार और डाइनिंग हॉल लोकेशन'
+                      : 'Storage rooms, kitchen sections, bars, stalls, and dining points'}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLocationModalOpen(true)}
+                  className="h-7 text-xs font-semibold"
+                >
+                  {locale === 'hi' ? 'प्रबंधित करें' : 'Manage'}
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0 text-xs space-y-3">
+                <div className="grid grid-cols-3 gap-2 bg-stone-50 p-2.5 rounded-lg border border-stone-100 text-center">
+                  <div>
+                    <div className="font-bold text-base text-stone-900">{locations.length}</div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'कुल लोकेशन्स' : 'Total Locations'}</div>
+                  </div>
+                  <div>
+                    <div className="font-bold text-base text-emerald-600">
+                      {locations.filter((l) => l.is_active !== false).length}
+                    </div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'सक्रिय' : 'Active'}</div>
+                  </div>
+                  <div>
+                    <div className="font-bold text-base text-stone-500">
+                      {locations.filter((l) => l.is_active === false).length}
+                    </div>
+                    <div className="text-[10px] text-stone-500">{locale === 'hi' ? 'निष्क्रिय' : 'Inactive'}</div>
+                  </div>
+                </div>
+
+                {locations.length === 0 ? (
+                  <div className="py-6 text-center text-stone-400">
+                    {locale === 'hi' ? 'कोई लोकेशन दर्ज नहीं है।' : 'No locations registered.'}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto py-1">
+                    {locations.map((loc) => (
+                      <div
+                        key={loc.id}
+                        className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                          loc.is_active !== false
+                            ? 'bg-amber-50/60 border-amber-200/80 text-stone-800'
+                            : 'bg-stone-100/50 border-stone-200/50 text-stone-400 line-through'
+                        }`}
+                      >
+                        <span className="font-mono font-bold text-stone-900 text-[11px]">{loc.code}</span>
+                        <span className="text-[11px] font-medium">{getLocalizedMasterName(loc, locale)}</span>
+                        {loc.code === 'STORE' && (
+                          <span className="text-[9px] px-1 py-0.2 bg-amber-200/70 text-amber-900 rounded font-semibold">
+                            {locale === 'hi' ? 'मुख्य' : 'Default'}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+</div>
 
           {/* Master Modals */}
           <OrgHierarchyModal
@@ -649,6 +738,12 @@ export default function AdminSettingsPage() {
           <VehiclePrefixMasterModal
             isOpen={prefixModalOpen}
             onClose={() => setPrefixModalOpen(false)}
+            onUpdated={loadData}
+          />
+          <LocationModal
+            isOpen={locationModalOpen}
+            onClose={() => setLocationModalOpen(false)}
+            departments={departments}
             onUpdated={loadData}
           />
         </div>

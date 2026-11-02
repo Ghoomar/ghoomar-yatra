@@ -25,64 +25,33 @@ export async function GET(
 
     const admin = createAdminClient();
 
-    // 1. Fetch menu item
-    const { data: menuItem, error: menuErr } = await admin
-      .from('pos_menu_items')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (menuErr) throw menuErr;
-    if (!menuItem) {
-      return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
-    }
-
-    // 2. Fetch variants
-    const { data: variants, error: varErr } = await admin
-      .from('yatra_menu_item_variants')
-      .select(`
-        *,
-        recipe:yatra_recipes(
-          *,
-          ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
-            *,
-            ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-            inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-            sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
-          )
-        )
-      `)
-      .eq('menu_item_id', id)
-      .eq('is_active', true);
-
-    if (varErr) throw varErr;
-
-    // 3. Resolve WAC and DAG costs
-    const { data: allRecipes } = await admin
-      .from('yatra_recipes')
-      .select(`
-        *,
-        ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
-          *,
-          ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
-        )
-      `);
-
-    const groupWacMap = await resolveAllGroupWacs(admin);
-    const recipeCalcs = calculateAllRecipes(allRecipes || [], groupWacMap);
-
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
 
-    // 4. Fetch sales aggregation and daily trend
-    const [salesAggRes, dailyTrendRes] = await Promise.all([
-      admin.rpc('get_menu_sales_aggregation', {
-        p_date_from: dateFrom || null,
-        p_date_to: dateTo || null,
-      }),
+    // 1. Concurrently fetch Menu Item, Variants with Recipes, and Scoped Daily Sales Trend
+    const [menuItemRes, variantsRes, dailyTrendRes] = await Promise.all([
+      admin
+        .from('pos_menu_items')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle(),
+      admin
+        .from('yatra_menu_item_variants')
+        .select(`
+          *,
+          recipe:yatra_recipes(
+            *,
+            ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+              *,
+              ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
+            )
+          )
+        `)
+        .eq('menu_item_id', id)
+        .eq('is_active', true),
       admin.rpc('get_menu_item_daily_sales', {
         p_menu_item_id: id,
         p_date_from: dateFrom || null,
@@ -90,16 +59,126 @@ export async function GET(
       }),
     ]);
 
-    const itemSalesRow = (salesAggRes.data || []).find((r: any) => r.menu_item_id === id);
+    if (menuItemRes.error) throw menuItemRes.error;
+    if (!menuItemRes.data) {
+      return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
+    }
+    if (variantsRes.error) throw variantsRes.error;
+    if (dailyTrendRes.error) throw dailyTrendRes.error;
+
+    const menuItem = menuItemRes.data;
+    const variants = variantsRes.data || [];
+    const dailyTrend = dailyTrendRes.data || [];
+
+    // 2. Scoped Sales Metrics: Aggregated directly from trend (eliminates 20k sales scan)
+    const trend = dailyTrend.map((r: any) => ({
+      businessDate: r.business_date,
+      unitsSold: Number(r.units_sold) || 0,
+      netSales: Number(r.net_sales) || 0,
+    }));
     const salesMetrics = {
-      unitsSold: itemSalesRow ? Number(itemSalesRow.units_sold) || 0 : 0,
-      netRevenue: itemSalesRow ? Number(itemSalesRow.net_sales) || 0 : 0,
-      trend: (dailyTrendRes.data || []).map((r: any) => ({
-        businessDate: r.business_date,
-        unitsSold: Number(r.units_sold) || 0,
-        netSales: Number(r.net_sales) || 0,
-      })),
+      unitsSold: trend.reduce((sum: number, r: any) => sum + r.unitsSold, 0),
+      netRevenue: trend.reduce((sum: number, r: any) => sum + r.netSales, 0),
+      trend,
     };
+
+    // 3. Scoped Recipe Dependency Sub-tree & Scoped WAC Resolution
+    let recipeCalcs = new Map();
+
+    if (variants.length > 0) {
+      const allTreeRecipes: any[] = variants.map((v) => v.recipe).filter(Boolean);
+      const recipeMap = new Map<string, any>(allTreeRecipes.map((r) => [r.id, r]));
+      const groupIds = new Set<string>();
+
+      // Record groups from variant recipes
+      for (const recipe of allTreeRecipes) {
+        for (const ing of recipe.ingredients || []) {
+          const gid = ing.ingredient_group_id || ing.ingredient_group?.id;
+          if (gid) groupIds.add(gid);
+        }
+      }
+
+      // Collect transitive sub-preparations (frontier loop handles any depth DAG)
+      let frontier: string[] = [];
+      for (const recipe of allTreeRecipes) {
+        for (const ing of recipe.ingredients || []) {
+          if (ing.ingredient_type === 'PREPARATION' && (ing.sub_recipe_id || ing.sub_recipe?.id)) {
+            const subId = ing.sub_recipe_id || ing.sub_recipe?.id;
+            if (subId && !recipeMap.has(subId)) {
+              frontier.push(subId);
+            }
+          }
+        }
+      }
+
+      while (frontier.length > 0) {
+        const { data: subRecipes, error: subErr } = await admin
+          .from('yatra_recipes')
+          .select(`
+            *,
+            ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+              *,
+              ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
+            )
+          `)
+          .in('id', frontier);
+
+        if (subErr) throw subErr;
+
+        const nextFrontier: string[] = [];
+        for (const sr of subRecipes || []) {
+          if (!recipeMap.has(sr.id)) {
+            recipeMap.set(sr.id, sr);
+            allTreeRecipes.push(sr);
+            for (const ing of sr.ingredients || []) {
+              const gid = ing.ingredient_group_id || ing.ingredient_group?.id;
+              if (gid) groupIds.add(gid);
+              if (ing.ingredient_type === 'PREPARATION' && (ing.sub_recipe_id || ing.sub_recipe?.id)) {
+                const subId = ing.sub_recipe_id || ing.sub_recipe?.id;
+                if (subId && !recipeMap.has(subId)) {
+                  nextFrontier.push(subId);
+                }
+              }
+            }
+          }
+        }
+        frontier = nextFrontier;
+      }
+
+      // Fetch ONLY groups and items required by the scoped sub-tree
+      const arrGroupIds = Array.from(groupIds);
+      let groupWacMap = new Map();
+
+      if (arrGroupIds.length > 0) {
+        const [groupsRes, itemsRes] = await Promise.all([
+          admin
+            .from('logical_ingredient_groups')
+            .select(`
+              id, name, name_hi, group_code, inventory_class, last_valid_wac,
+              base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, name)
+            `)
+            .in('id', arrGroupIds),
+          admin
+            .from('inventory_items')
+            .select(`
+              id, name, name_hi, item_code, group_id, current_stock,
+              current_weighted_average_cost, is_costed, is_active, conversion_factor,
+              unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
+              secondary_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
+            `)
+            .in('group_id', arrGroupIds),
+        ]);
+
+        if (groupsRes.error) throw groupsRes.error;
+        if (itemsRes.error) throw itemsRes.error;
+
+        groupWacMap = resolveAllGroupWacs((groupsRes.data || []) as any, (itemsRes.data || []) as any);
+      }
+
+      recipeCalcs = calculateAllRecipes(allTreeRecipes, groupWacMap);
+    }
 
     // 5. Calculate variant channels (Dine In & Takeaway)
     const enrichedVariants = (variants || []).map((v) => {
@@ -120,11 +199,25 @@ export async function GET(
           total_cost: null,
           contribution_amount: null,
           contribution_pct: null,
+          gas_cost: null,
+          other_operating_cost: null,
+          packaging_cost_dine_in: null,
+          packaging_cost_takeaway: null,
         };
       };
 
+      const baseVariant = caller.hasCostAccess
+        ? v
+        : {
+            ...v,
+            gas_cost: null,
+            other_operating_cost: null,
+            packaging_cost_dine_in: null,
+            packaging_cost_takeaway: null,
+          };
+
       return {
-        ...v,
+        ...baseVariant,
         dine_in: sanitize(dineInCalc),
         takeaway: sanitize(takeawayCalc),
       };

@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
     const groupWacMap = await resolveAllGroupWacs(admin);
     const calculationMap = calculateAllRecipes(recipes || [], groupWacMap);
 
+    const isFull = searchParams.get('full') === 'true';
+
     // 3. Assemble and mask outputs based on permissions
     const assembled = (recipes || []).map((recipe) => {
       const calc = calculationMap.get(recipe.id) || ({
@@ -57,24 +59,47 @@ export async function GET(request: NextRequest) {
         ingredientLineCosts: [],
       } as CostCalculationResult);
 
-      const sanitizedLineCosts = (calc.ingredientLineCosts || []).map((line) => {
-        if (caller.hasCostAccess) return line;
-        return {
-          ...line,
-          lineCost: null,
-          unitRate: null,
-        };
-      });
+      if (isFull) {
+        const sanitizedLineCosts = (calc.ingredientLineCosts || []).map((line) => {
+          if (caller.hasCostAccess) return line;
+          return {
+            ...line,
+            lineCost: null,
+            unitRate: null,
+          };
+        });
 
+        return {
+          ...recipe,
+          costing_status: calc.status,
+          costing_reasons: calc.reasons,
+          total_batch_cost: caller.hasCostAccess ? calc.totalBatchCost : null,
+          batchCost: caller.hasCostAccess ? calc.totalBatchCost : null,
+          cost_per_output_unit: caller.hasCostAccess ? calc.costPerOutputUnit : null,
+          cost_per_serving: caller.hasCostAccess ? calc.costPerServing : null,
+          servings_per_batch: calc.servingsPerBatch,
+          ingredient_line_costs: sanitizedLineCosts,
+        };
+      }
+
+      // Default: Lightweight summary projection for table list view (39 KB)
       return {
-        ...recipe,
+        id: recipe.id,
+        name: recipe.name,
+        name_hi: recipe.name_hi,
+        category: recipe.category,
+        batch_yield_quantity: recipe.batch_yield_quantity,
+        batch_yield_unit: recipe.batch_yield_unit,
+        portion_size_quantity: recipe.portion_size_quantity,
+        portion_size_unit: recipe.portion_size_unit,
         costing_status: calc.status,
         costing_reasons: calc.reasons,
         total_batch_cost: caller.hasCostAccess ? calc.totalBatchCost : null,
+        batchCost: caller.hasCostAccess ? calc.totalBatchCost : null,
         cost_per_output_unit: caller.hasCostAccess ? calc.costPerOutputUnit : null,
         cost_per_serving: caller.hasCostAccess ? calc.costPerServing : null,
         servings_per_batch: calc.servingsPerBatch,
-        ingredient_line_costs: sanitizedLineCosts,
+        is_active: recipe.is_active,
       };
     });
 

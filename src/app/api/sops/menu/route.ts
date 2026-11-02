@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
     const { data: salesRows, error: salesErr } = await admin.rpc('get_menu_sales_aggregation', {
       p_date_from: dateFrom || null,
       p_date_to: dateTo || null,
+      p_channel: channel,
     });
     if (salesErr) throw salesErr;
 
@@ -97,9 +98,9 @@ export async function GET(request: NextRequest) {
       variantsByMenuItem.set(v.menu_item_id, arr);
     });
 
-    // 5. Enrich menu items and prepare matrix inputs
+    // 5. Preprocess items and prepare matrix inputs
     const matrixInputs: RawMenuItemForMatrix[] = [];
-    const enrichedItems = (menuRes.data || []).map((item) => {
+    const preprocessedItems = (menuRes.data || []).map((item) => {
       const itemVariants = variantsByMenuItem.get(item.id) || [];
       const defaultVariant =
         itemVariants.find((v) => v.is_default) || (itemVariants.length > 0 ? itemVariants[0] : null);
@@ -112,9 +113,10 @@ export async function GET(request: NextRequest) {
           defaultVariantCalc = vCalc;
         }
 
-        if (!caller.hasCostAccess && vCalc) {
+        if (!caller.hasCostAccess) {
+          const base = vCalc || v;
           return {
-            ...vCalc,
+            ...base,
             food_cost: null,
             food_cost_pct: null,
             margin_amount: null,
@@ -123,6 +125,10 @@ export async function GET(request: NextRequest) {
             total_cost: null,
             contribution_amount: null,
             contribution_pct: null,
+            gas_cost: null,
+            other_operating_cost: null,
+            packaging_cost_dine_in: null,
+            packaging_cost_takeaway: null,
           };
         }
         return vCalc || v;
@@ -145,6 +151,17 @@ export async function GET(request: NextRequest) {
         netRevenue: sales.netRevenue,
       });
 
+      return { item, enrichedVariants, defaultVariantCalc, sales };
+    });
+
+    // 6. Calculate BCG matrix
+    const matrixResult = calculateMenuEngineeringMatrix(matrixInputs);
+    const matrixMap = new Map<string, any>();
+    (matrixResult.items || []).forEach((m) => matrixMap.set(m.menuItemId, m));
+
+    // 7. Merge matrix properties onto items
+    const enrichedItems = preprocessedItems.map(({ item, enrichedVariants, defaultVariantCalc, sales }) => {
+      const m = matrixMap.get(item.id);
       return {
         ...item,
         variants: enrichedVariants,
@@ -161,45 +178,105 @@ export async function GET(request: NextRequest) {
               total_cost: null,
               contribution_amount: null,
               contribution_pct: null,
+              gas_cost: null,
+              other_operating_cost: null,
+              packaging_cost_dine_in: null,
+              packaging_cost_takeaway: null,
             }
           : null,
         unitsSold: sales.unitsSold,
         netRevenue: sales.netRevenue,
+        // Merged matrix properties:
+        quadrant: m?.quadrant ?? null,
+        salesMixPct: m?.salesMixPct ?? 0,
+        unitContributionMargin: caller.hasCostAccess ? (m?.unitContributionMargin ?? null) : null,
+        foodCostPct: caller.hasCostAccess ? (m?.foodCostPct ?? null) : null,
+        isEligibleForMatrix: m?.isEligibleForMatrix ?? false,
+        costingStatus: m?.costingStatus ?? (defaultVariantCalc ? defaultVariantCalc.costing_status : 'INELIGIBLE'),
       };
     });
 
-    // 6. Calculate BCG matrix
-    const matrixResult = calculateMenuEngineeringMatrix(matrixInputs);
-
-    // 7. Calculate combos
+    // 8. Calculate combos
     const calculatedCombos = (comboRes.data || []).map((combo) => {
       const cCost = calculateComboThaliCost(combo, recipeCalcs, channel);
       if (!caller.hasCostAccess) {
         return {
           ...cCost,
+          total_food_cost: null,
           food_cost: null,
           food_cost_pct: null,
-          margin_amount: null,
+          operating_cost: null,
+          packaging_cost: null,
           total_cost: null,
+          margin_amount: null,
           contribution_amount: null,
+          contribution_pct: null,
+          gas_cost: null,
+          other_operating_cost: null,
+          packaging_cost_dine_in: null,
+          packaging_cost_takeaway: null,
+          components: (cCost.components || []).map((comp: any) => ({
+            ...comp,
+            food_cost: null,
+            unit_rate: null,
+            recipe: comp.recipe
+              ? {
+                  ...comp.recipe,
+                  total_batch_cost: null,
+                  cost_per_output_unit: null,
+                  cost_per_serving: null,
+                  ingredients: (comp.recipe.ingredients || []).map((ing: any) => ({
+                    ...ing,
+                    line_cost: null,
+                    unit_rate: null,
+                  })),
+                }
+              : null,
+            variant: comp.variant
+              ? {
+                  ...comp.variant,
+                  food_cost: null,
+                  food_cost_pct: null,
+                  margin_amount: null,
+                  operating_cost: null,
+                  packaging_cost: null,
+                  total_cost: null,
+                  contribution_amount: null,
+                  contribution_pct: null,
+                  gas_cost: null,
+                  other_operating_cost: null,
+                  packaging_cost_dine_in: null,
+                  packaging_cost_takeaway: null,
+                }
+              : null,
+          })),
         };
       }
       return cCost;
     });
 
-    // 8. Sanitize matrix if unauthorized
-    const sanitizedMatrix = caller.hasCostAccess
-      ? matrixResult
-      : {
-          ...matrixResult,
-          salesWeightedContributionThreshold: null,
-          items: matrixResult.items.map((m) => ({
-            ...m,
-            foodCost: null,
-            foodCostPct: null,
-            unitContributionMargin: null,
-          })),
-        };
+    // 9. Build lightweight backward-compatible matrix projection
+    const sanitizedMatrix = {
+      state: matrixResult.state,
+      totalUnitsSold: matrixResult.totalUnitsSold,
+      totalNetRevenue: matrixResult.totalNetRevenue,
+      popularityThresholdPct: matrixResult.popularityThresholdPct,
+      salesWeightedContributionThreshold: caller.hasCostAccess
+        ? matrixResult.salesWeightedContributionThreshold
+        : null,
+      eligibleItemsCount: matrixResult.eligibleItemsCount,
+      totalItemsCount: matrixResult.totalItemsCount,
+      items: matrixResult.items.map((m) => ({
+        menuItemId: m.menuItemId,
+        name: m.name,
+        quadrant: m.quadrant,
+        unitsSold: m.unitsSold,
+        netRevenue: m.netRevenue,
+        foodCost: caller.hasCostAccess ? m.foodCost : null,
+        foodCostPct: caller.hasCostAccess ? m.foodCostPct : null,
+        unitContributionMargin: caller.hasCostAccess ? m.unitContributionMargin : null,
+      })),
+    };
 
     // Filter items if requested
     let filteredItems = enrichedItems;

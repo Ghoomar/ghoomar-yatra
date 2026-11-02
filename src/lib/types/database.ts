@@ -418,3 +418,77 @@ export interface VehicleRegistrationPrefix {
   updated_at?: string;
 }
 
+// ==========================================
+// INVENTORY LOCATION MANAGEMENT
+// ==========================================
+
+export type LocationType =
+  | 'central_store'
+  | 'kitchen_section'
+  | 'service_bar'
+  | 'dining_hall'
+  | 'customer_fridge'
+  | 'activity_area'
+  | 'restroom'
+  | 'stall_counter'
+  | 'general_storage';
+
+export interface LocationStockSummary {
+  total_items: number;
+  positive_items: number;
+  total_quantity: number;
+}
+
+export interface InventoryLocation {
+  id: string;
+  code: string;
+  name: string;
+  name_hi?: string | null;
+  location_type: LocationType | string;
+  department_id?: string | null;
+  parent_location_id?: string | null;
+  is_active: boolean;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  department?: {
+    id: string;
+    name: string;
+    name_hi?: string | null;
+    code?: string | null;
+  } | null;
+  parent_location?: {
+    id: string;
+    code: string;
+    name: string;
+    name_hi?: string | null;
+  } | null;
+  stock_summary?: LocationStockSummary;
+  has_positive_stock?: boolean;
+  has_historical_records?: boolean;
+  is_system_reserved?: boolean;
+  can_delete?: boolean;
+}
+
+export interface LocationDeletionSafeguardItem {
+  id: string;
+  item_code: string;
+  name: string;
+  name_hi?: string | null;
+  quantity: number;
+  unit: string;
+  unit_hi?: string | null;
+}
+
+export interface LocationDeletionErrorResponse {
+  error: string;
+  rule: 'HAS_STOCK' | 'HAS_HISTORY' | 'RESERVED_STORE';
+  items?: LocationDeletionSafeguardItem[];
+  history_counts?: {
+    stock_movements: number;
+    consumption_issues: number;
+    asset_ledger: number;
+    child_locations: number;
+  };
+}
+
