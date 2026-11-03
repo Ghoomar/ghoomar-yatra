@@ -154,8 +154,9 @@ export function StaffLedgerDrawer({
         const { data: centralLoc } = await supabase
           .from('inventory_locations')
           .select('id')
-          .ilike('name', '%central%')
-          .single();
+          .eq('code', 'STORE')
+          .eq('is_active', true)
+          .maybeSingle();
 
         if (centralLoc) {
           await supabase.from('stock_movements').insert({

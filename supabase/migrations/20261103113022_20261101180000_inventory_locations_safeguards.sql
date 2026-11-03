@@ -1,7 +1,7 @@
 -- Migration: 20261101180000_inventory_locations_safeguards.sql
 -- Description: Enforces deletion safeguards and system invariants on public.inventory_locations
 -- Rules Enforced:
---   1. System Invariant: Location code 'STORE' is permanently protected against deletion and deactivation.
+--   1. System Invariant: Mandatory location codes STORE and KITCHEN-MAIN are protected against deletion and deactivation.
 --   2. Rule 1: Non-zero current stock balance (quantity <> 0) strictly blocks deletion.
 --   3. Rule 2: Locations with historical records in stock_movements, consumption_issues,
 --              physical_asset_status_ledger, or child locations cannot be deleted (must be deactivated).
@@ -20,9 +20,9 @@ DECLARE
     v_asset_count INTEGER;
     v_child_count INTEGER;
 BEGIN
-    -- System Invariant: Central Store (STORE) cannot be deleted
-    IF UPPER(OLD.code) = 'STORE' THEN
-        RAISE EXCEPTION 'Cannot delete system location: Central Store (STORE) is permanently reserved by the system.'
+    -- Mandatory operational locations cannot be deleted
+    IF UPPER(OLD.code) IN ('STORE', 'KITCHEN-MAIN') THEN
+        RAISE EXCEPTION 'Cannot delete mandatory system location: % is permanently reserved.', OLD.code
             USING ERRCODE = 'restrict_violation';
     END IF;
 
@@ -100,14 +100,14 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-    -- Protect STORE code and active status
-    IF UPPER(OLD.code) = 'STORE' THEN
-        IF UPPER(NEW.code) <> 'STORE' THEN
-            RAISE EXCEPTION 'Cannot modify code of system reserved location STORE.'
+    -- Protect mandatory system location codes and active status
+    IF UPPER(OLD.code) IN ('STORE', 'KITCHEN-MAIN') THEN
+        IF UPPER(NEW.code) <> UPPER(OLD.code) THEN
+            RAISE EXCEPTION 'Cannot modify code of mandatory system location %.', OLD.code
                 USING ERRCODE = 'restrict_violation';
         END IF;
         IF NEW.is_active = false THEN
-            RAISE EXCEPTION 'System reserved location STORE cannot be deactivated.'
+            RAISE EXCEPTION 'Mandatory system location % cannot be deactivated.', OLD.code
                 USING ERRCODE = 'restrict_violation';
         END IF;
     END IF;

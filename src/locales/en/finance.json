@@ -325,7 +325,8 @@
       "successRefill": "Transferred {qty} L diesel to Generator. Central Store balance: {balance} L.",
       "successPurchase": "Received {qty} L diesel @ {rate}/L into Central Store. Stock increased to {stock} L.",
       "errorRefill": "Failed to record generator refill.",
-      "errorPurchase": "Failed to record diesel purchase."
+      "errorPurchase": "Failed to record diesel purchase.",
+      "storeLocationUnavailable": "The active Central Store (STORE) location could not be found. No inventory transaction was recorded."
     },
     "lpgTab": {
       "stockTitle": "LPG Stock",
@@ -381,6 +382,8 @@
       "successIssue": "Issued {qty} LPG cylinders to Kitchen. Central Store balance: {balance} cylinders.",
       "successPurchase": "Received {qty} LPG cylinders @ {rate}/cyl into Central Store. Stock increased to {balance} cylinders.",
       "errorIssue": "Failed to issue cylinders to Kitchen.",
+      "kitchenLocationUnavailable": "The active Kitchen Production Area (KITCHEN-MAIN) location could not be found. No inventory transaction was recorded.",
+      "storeLocationUnavailable": "The active Central Store (STORE) location could not be found. No inventory transaction was recorded.",
       "errorPurchase": "Failed to record LPG purchase."
     }
   },

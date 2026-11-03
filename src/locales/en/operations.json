@@ -116,6 +116,8 @@
     "insufficientStock": "Insufficient stock! Only {stock} available in store.",
     "issueSuccess": "Uniform issued successfully ({qty} pcs).",
     "issueError": "Error issuing uniform.",
+    "sourceLocationUnavailable": "No active inventory location is available for this uniform issue.",
+    "sourceLocationInsufficient": "No single active location has enough stock to fulfill this uniform issue.",
     "confirmReturn": "Confirm return of {qty} uniform pcs back to central inventory?",
     "returnSuccess": "Uniform return recorded ({qty} pcs back to store).",
     "returnError": "Error returning uniform.",

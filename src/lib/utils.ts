@@ -38,6 +38,12 @@ export function formatINR(amount: number | null | undefined, compact = false): s
   return `${isNegative ? '-' : ''}₹${formatted}${decPart}`;
 }
 
+export function formatNullablePrice(price: number | string | null | undefined): string {
+  if (price === null || price === undefined || price === '') return '—';
+  const value = Number(price);
+  return Number.isFinite(value) ? formatINR(value) : '—';
+}
+
 export function formatNumber(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '0';
   return new Intl.NumberFormat('en-IN').format(val);

@@ -56,6 +56,11 @@
     "filterParentCategory": "मूल श्रेणी चुनें",
     "channelDineIn": "डाइन इन",
     "channelTakeaway": "टेकअवे",
+    "channelAll": "सभी चैनल",
+    "channelHomeDelivery": "होम डिलीवरी / स्नैक्स स्टॉल",
+    "channelLancho": "लैंचो",
+    "channelUnknown": "अज्ञात / मैप नहीं किया गया",
+    "channelFilter": "बिक्री चैनल फ़िल्टर",
     "colItem": "मेनू आइटम",
     "colCategory": "श्रेणी",
     "colPrice": "बिक्री मूल्य",
@@ -69,6 +74,9 @@
     "colActions": "क्रियाएं",
     "editCosts": "चैनल लागत संपादित करें",
     "noItemsFound": "कोई मेनू आइटम नहीं मिला।",
+    "emptyBusinessMonth": "इस महीने में अभी तक कोई पूरा व्यावसायिक दिन उपलब्ध नहीं है।",
+    "customRangeRequired": "कस्टम अवधि के लिए आरंभ और समाप्ति, दोनों तिथियां चुनें।",
+    "customRangeInvalid": "कस्टम अवधि अमान्य है। तिथियां जांचें और सुनिश्चित करें कि आरंभ तिथि समाप्ति के बाद न हो।",
     "costRestricted": "लागत गोपनीय"
   },
   "matrix": {

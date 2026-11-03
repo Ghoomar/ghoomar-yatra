@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveCallerAuth } from '@/lib/sops/auth';
 import { calculateAllRecipes, calculateVariantCost, resolveAllGroupWacs } from '@/lib/sops/costing';
+import { parseMenuSalesChannel } from '@/lib/sales/menu-channels';
 
 export async function GET(
   request: NextRequest,
@@ -28,6 +29,10 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
+    const channel = parseMenuSalesChannel(searchParams.get('channel') || 'ALL');
+    if (!channel) {
+      return NextResponse.json({ error: 'Unsupported menu sales channel.' }, { status: 400 });
+    }
 
     // 1. Concurrently fetch Menu Item, Variants with Recipes, and Scoped Daily Sales Trend
     const [menuItemRes, variantsRes, dailyTrendRes] = await Promise.all([
@@ -56,6 +61,7 @@ export async function GET(
         p_menu_item_id: id,
         p_date_from: dateFrom || null,
         p_date_to: dateTo || null,
+        p_channel: channel,
       }),
     ]);
 

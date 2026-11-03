@@ -56,6 +56,11 @@
     "filterParentCategory": "Filter Parent Category",
     "channelDineIn": "Dine In",
     "channelTakeaway": "Takeaway",
+    "channelAll": "All Channels",
+    "channelHomeDelivery": "Home Delivery / Snacks Stall",
+    "channelLancho": "Lancho",
+    "channelUnknown": "Unknown / Unmapped",
+    "channelFilter": "Sales channel filter",
     "colItem": "Menu Item",
     "colCategory": "Category",
     "colPrice": "Selling Price",
@@ -69,6 +74,9 @@
     "colActions": "Actions",
     "editCosts": "Edit Channel Costs",
     "noItemsFound": "No menu items found.",
+    "emptyBusinessMonth": "No completed business dates are available in this month yet.",
+    "customRangeRequired": "Choose both a start date and an end date for the custom range.",
+    "customRangeInvalid": "The custom range is invalid. Check the dates and make sure the start is not after the end.",
     "costRestricted": "Cost Protected"
   },
   "matrix": {

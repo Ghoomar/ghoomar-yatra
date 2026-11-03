@@ -120,6 +120,37 @@ export default function UniformsPage() {
     setMessage(null);
 
     try {
+      // Restrict new uniform issues to active locations and resolve the
+      // Central Store fallback by stable code instead of its display name.
+      const { data: activeLocations, error: locationsErr } = await supabase
+        .from('inventory_locations')
+        .select('id, code')
+        .eq('is_active', true);
+      if (locationsErr) throw locationsErr;
+
+      const activeLocationIds = (activeLocations || []).map((location: any) => location.id);
+      if (activeLocationIds.length === 0) {
+        setMessage({ type: 'error', text: t('operations.uniforms.sourceLocationUnavailable') });
+        return;
+      }
+
+      const { data: locationStocks, error: locStockErr } = await supabase
+        .from('item_location_stocks')
+        .select('location_id, quantity')
+        .eq('item_id', selectedUniformId)
+        .in('location_id', activeLocationIds)
+        .gt('quantity', 0)
+        .order('quantity', { ascending: false });
+      if (locStockErr) throw locStockErr;
+
+      const activeLocationStock = locationStocks || [];
+      const sourceStock = activeLocationStock.find((row: any) => Number(row.quantity) >= issueQty);
+      if (!sourceStock) {
+        setMessage({ type: 'error', text: t('operations.uniforms.sourceLocationInsufficient') });
+        return;
+      }
+      const sourceLocId = sourceStock.location_id;
+
       // 1. Create issue header
       const { data: header, error: hErr } = await supabase
         .from('employee_uniform_issues')
@@ -141,27 +172,6 @@ export default function UniformsPage() {
         status: 'Issued',
       });
       if (itemErr) throw itemErr;
-
-      // 3. Find source location with available stock or fallback to Central Store
-      const { data: locStock } = await supabase
-        .from('item_location_stocks')
-        .select('location_id, quantity')
-        .eq('item_id', selectedUniformId)
-        .gt('quantity', 0)
-        .order('quantity', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      let sourceLocId = locStock?.location_id;
-      if (!sourceLocId) {
-        const { data: defLoc } = await supabase
-          .from('inventory_locations')
-          .select('id')
-          .ilike('name', '%Store%')
-          .limit(1)
-          .maybeSingle();
-        sourceLocId = defLoc?.id;
-      }
 
       // 4. Record atomic inventory transaction
       const unitCost = Number(targetUni.current_weighted_average_cost || 0);
@@ -222,7 +232,8 @@ export default function UniformsPage() {
       const { data: defLoc } = await supabase
         .from('inventory_locations')
         .select('id')
-        .ilike('name', '%Store%')
+        .eq('code', 'STORE')
+        .eq('is_active', true)
         .limit(1)
         .maybeSingle();
 

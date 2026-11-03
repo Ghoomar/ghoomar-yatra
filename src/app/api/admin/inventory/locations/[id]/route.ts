@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isMandatoryInventoryLocation } from '@/lib/inventory/location-rules';
 
 async function verifyAdminCaller(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -111,14 +112,14 @@ export async function GET(
     }
 
     // Inspect live dependencies for safeguard modal
-    const isStore = location.code.toUpperCase() === 'STORE';
+    const isStore = isMandatoryInventoryLocation(location.code);
 
     const [
       { data: stockRows, error: stockErr },
-      { count: smCount },
-      { count: ciCount },
-      { count: paslCount },
-      { count: childCount },
+      { count: smCount, error: smErr },
+      { count: ciCount, error: ciErr },
+      { count: paslCount, error: paslErr },
+      { count: childCount, error: childErr },
     ] = await Promise.all([
       admin
         .from('item_location_stocks')
@@ -143,7 +144,8 @@ export async function GET(
         .eq('parent_location_id', id),
     ]);
 
-    if (stockErr) throw stockErr;
+    const dependencyErr = stockErr || smErr || ciErr || paslErr || childErr;
+    if (dependencyErr) throw dependencyErr;
 
     const affectedItems = (stockRows || []).map((s: any) => ({
       itemId: s.item?.id,
@@ -156,9 +158,10 @@ export async function GET(
     }));
 
     const totalReferences = (smCount || 0) + (ciCount || 0) + (paslCount || 0) + (childCount || 0);
-    const hasPositiveStock = affectedItems.length > 0;
+    const hasNonZeroStock = affectedItems.length > 0;
+    const hasPositiveStock = affectedItems.some((item) => item.quantity > 0);
     const hasReferences = totalReferences > 0;
-    const canDelete = !isStore && !hasPositiveStock && !hasReferences;
+    const canDelete = !isStore && !hasNonZeroStock && !hasReferences;
 
     return NextResponse.json({
       locationId: location.id,
@@ -166,9 +169,11 @@ export async function GET(
       name: location.name,
       name_hi: location.name_hi,
       isStore,
+      isMandatoryLocation: isStore,
       canDelete,
       currentStock: {
         hasPositiveStock,
+        hasNonZeroStock,
         totalItemsWithStock: affectedItems.length,
         totalQuantity: affectedItems.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0),
         items: affectedItems,
@@ -222,19 +227,19 @@ export async function PUT(
     const body = await request.json();
     const { code, name, name_hi, location_type, department_id, is_active, notes } = body;
 
-    const isStore = existing.code.toUpperCase() === 'STORE';
+    const isStore = isMandatoryInventoryLocation(existing.code);
 
-    // System Invariant: STORE protections
+    // Mandatory operational locations retain their stable code and active state.
     if (isStore) {
-      if (code && code.trim().toUpperCase() !== 'STORE') {
+      if (code && code.trim().toUpperCase() !== existing.code.toUpperCase()) {
         return NextResponse.json(
-          { error: 'Cannot modify code of system reserved location STORE.' },
+          { error: `Cannot modify the code of mandatory system location ${existing.code}.` },
           { status: 400 }
         );
       }
       if (is_active === false) {
         return NextResponse.json(
-          { error: 'System reserved location STORE cannot be deactivated.' },
+          { error: `Mandatory system location ${existing.code} cannot be deactivated.` },
           { status: 400 }
         );
       }
@@ -256,12 +261,14 @@ export async function PUT(
       }
 
       // Check code uniqueness across other locations
-      const { data: duplicate } = await admin
+      const { data: duplicate, error: duplicateErr } = await admin
         .from('inventory_locations')
         .select('id')
-        .ilike('code', cleanCode)
+        .eq('code', cleanCode)
         .neq('id', id)
         .maybeSingle();
+
+      if (duplicateErr) throw duplicateErr;
 
       if (duplicate) {
         return NextResponse.json(
@@ -342,6 +349,9 @@ export async function PUT(
 
     return NextResponse.json({ success: true, data: updated, location: updated });
   } catch (err: any) {
+    if (err?.code === '23505') {
+      return NextResponse.json({ error: 'A location with this code already exists.' }, { status: 409 });
+    }
     return NextResponse.json({ error: err.message || 'Failed to update inventory location.' }, { status: 500 });
   }
 }
@@ -349,10 +359,11 @@ export async function PUT(
 /**
  * DELETE /api/admin/inventory/locations/[id]
  * Deletes an inventory location subject to mandatory deletion safeguards:
- *   - System Invariant: STORE cannot be deleted.
+ *   - System Invariant: mandatory system locations cannot be deleted.
  *   - Rule 1: Non-zero stock blocks deletion with affected items breakdown.
  *   - Rule 2: Historical references block deletion and require deactivation.
- *   - Rule 3: Pristine zero-stock placeholder rows are safely deleted before location deletion.
+ *   - Rule 3: Pristine zero-stock placeholder rows are removed by the database trigger
+ *     in the same transaction as deletion.
  */
 export async function DELETE(
   request: NextRequest,
@@ -382,12 +393,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Inventory location not found.' }, { status: 404 });
     }
 
-    // 2. System Invariant: STORE cannot be deleted
-    if (location.code.toUpperCase() === 'STORE') {
+    // 2. System Invariant: mandatory operational locations cannot be deleted.
+    if (isMandatoryInventoryLocation(location.code)) {
       return NextResponse.json(
         {
-          error: 'The system reserved location Central Store (STORE) is permanently locked and cannot be deleted.',
-          rule: 'RESERVED_STORE',
+          error: `The mandatory system location ${location.code} is protected and cannot be deleted.`,
+          rule: `RESERVED_${location.code.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`,
         },
         { status: 400 }
       );
@@ -425,10 +436,10 @@ export async function DELETE(
 
     // 4. Rule 2: Check historical records (Movements, Issues, Asset ledger, Child locations)
     const [
-      { count: smCount },
-      { count: ciCount },
-      { count: paslCount },
-      { count: childCount },
+      { count: smCount, error: smErr },
+      { count: ciCount, error: ciErr },
+      { count: paslCount, error: paslErr },
+      { count: childCount, error: childErr },
     ] = await Promise.all([
       admin
         .from('stock_movements')
@@ -448,6 +459,9 @@ export async function DELETE(
         .eq('parent_location_id', id),
     ]);
 
+    const historyErr = smErr || ciErr || paslErr || childErr;
+    if (historyErr) throw historyErr;
+
     const totalHistory = (smCount || 0) + (ciCount || 0) + (paslCount || 0) + (childCount || 0);
 
     if (totalHistory > 0) {
@@ -466,29 +480,36 @@ export async function DELETE(
       );
     }
 
-    // 5. Rule 3: Safe Deletion of Pristine Location
-    // Clean up any zero-quantity placeholder rows in item_location_stocks to satisfy ON DELETE RESTRICT
-    const { error: cleanErr } = await admin
-      .from('item_location_stocks')
-      .delete()
-      .eq('location_id', id)
-      .eq('quantity', 0);
-
-    if (cleanErr) throw cleanErr;
-
-    // Delete the location record
-    const { error: delErr } = await admin
+    // The BEFORE DELETE trigger rechecks stock and history and removes zero-stock
+    // placeholder rows atomically with this location delete.
+    const { data: deleted, error: delErr } = await admin
       .from('inventory_locations')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
 
-    if (delErr) throw delErr;
+    if (delErr) {
+      if (delErr.code === '23001' || delErr.code === '23503') {
+        return NextResponse.json({ error: delErr.message, rule: 'DELETE_PROTECTED' }, { status: 409 });
+      }
+      throw delErr;
+    }
+    if (!deleted) {
+      return NextResponse.json({ error: 'Inventory location was not found.' }, { status: 404 });
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Location deleted successfully.',
     });
   } catch (err: any) {
+    if (err?.code === '23001' || err?.code === '23503') {
+      return NextResponse.json(
+        { error: err.message || 'The location has stock or historical references and cannot be deleted.', rule: 'DELETE_PROTECTED' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: err.message || 'Failed to delete inventory location.' },
       { status: 500 }

@@ -9,6 +9,8 @@ import {
   RawMenuItemForMatrix,
   resolveAllGroupWacs,
 } from '@/lib/sops/costing';
+import { menuSalesCostChannel, parseMenuSalesChannel } from '@/lib/sales/menu-channels';
+import { calculateSalesWeightedVariantCost } from '@/lib/sops/costing/channel-mix';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,14 +27,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
-    const channel = (searchParams.get('channel') || 'DINE_IN') as 'DINE_IN' | 'TAKEAWAY';
+    const channel = parseMenuSalesChannel(searchParams.get('channel') || 'ALL');
+    if (!channel) {
+      return NextResponse.json({ error: 'Unsupported menu sales channel.' }, { status: 400 });
+    }
+    const costingChannel = menuSalesCostChannel(channel);
     const categoryFilter = searchParams.get('category');
     const parentCategoryFilter = searchParams.get('parent_category');
 
     const admin = createAdminClient();
 
-    // 1. Fetch menu items, variants, recipes, combos
-    const [menuRes, variantRes, recipeRes, comboRes] = await Promise.all([
+    // Sales aggregation, menu data, and WAC resolution are independent database reads.
+    // Start them together so the sales scan does not wait for recipe calculations.
+    const [menuRes, variantRes, recipeRes, comboRes, salesRes, groupWacMap] = await Promise.all([
       admin
         .from('pos_menu_items')
         .select('*')
@@ -63,30 +70,40 @@ export async function GET(request: NextRequest) {
           )
         `)
         .eq('is_active', true),
+      admin.rpc('get_menu_sales_aggregation', {
+        p_date_from: dateFrom || null,
+        p_date_to: dateTo || null,
+        p_channel: channel,
+      }),
+      resolveAllGroupWacs(admin),
     ]);
 
     if (menuRes.error) throw menuRes.error;
     if (variantRes.error) throw variantRes.error;
     if (recipeRes.error) throw recipeRes.error;
     if (comboRes.error) throw comboRes.error;
+    if (salesRes.error) throw salesRes.error;
 
     // 2. Resolve WAC and DAG calculations
-    const groupWacMap = await resolveAllGroupWacs(admin);
     const recipeCalcs = calculateAllRecipes(recipeRes.data || [], groupWacMap);
 
-    // 3. Fetch sales aggregation via SQL RPC (eliminates 1,000-row limit truncation & maps aliases)
-    const { data: salesRows, error: salesErr } = await admin.rpc('get_menu_sales_aggregation', {
-      p_date_from: dateFrom || null,
-      p_date_to: dateTo || null,
-      p_channel: channel,
-    });
-    if (salesErr) throw salesErr;
-
-    const salesMap = new Map<string, { unitsSold: number; netRevenue: number }>();
-    (salesRows || []).forEach((row: any) => {
+    // 3. Index the already-fetched sales aggregation for the menu and BCG calculations.
+    const salesMap = new Map<string, {
+      unitsSold: number;
+      netRevenue: number;
+      channelUnits: { dineIn: number; takeaway: number; homeDelivery: number; lancho: number; unknown: number };
+    }>();
+    (salesRes.data || []).forEach((row: any) => {
       salesMap.set(row.menu_item_id, {
         unitsSold: Number(row.units_sold) || 0,
         netRevenue: Number(row.net_sales) || 0,
+        channelUnits: {
+          dineIn: Number(row.units_dine_in) || 0,
+          takeaway: Number(row.units_takeaway) || 0,
+          homeDelivery: Number(row.units_home_delivery) || 0,
+          lancho: Number(row.units_lancho) || 0,
+          unknown: Number(row.units_unknown) || 0,
+        },
       });
     });
 
@@ -104,11 +121,31 @@ export async function GET(request: NextRequest) {
       const itemVariants = variantsByMenuItem.get(item.id) || [];
       const defaultVariant =
         itemVariants.find((v) => v.is_default) || (itemVariants.length > 0 ? itemVariants[0] : null);
+      const sales = salesMap.get(item.id) || {
+        unitsSold: 0,
+        netRevenue: 0,
+        channelUnits: { dineIn: 0, takeaway: 0, homeDelivery: 0, lancho: 0, unknown: 0 },
+      };
 
       let defaultVariantCalc: any = null;
       const enrichedVariants = itemVariants.map((v) => {
         const rCalc = recipeCalcs.get(v.recipe_id);
-        const vCalc = rCalc ? calculateVariantCost({ ...v, menu_item: item }, rCalc, channel) : null;
+        let vCalc: any = null;
+        if (rCalc) {
+          const variantWithMenuItem = { ...v, menu_item: item };
+          if (channel === 'ALL') {
+            const dineInCalc = calculateVariantCost(variantWithMenuItem, rCalc, 'DINE_IN');
+            const takeawayCalc = calculateVariantCost(variantWithMenuItem, rCalc, 'TAKEAWAY');
+            const defaultCalc = calculateVariantCost(variantWithMenuItem, rCalc);
+            vCalc = calculateSalesWeightedVariantCost([
+              { units: sales.channelUnits.dineIn, variant: dineInCalc },
+              { units: sales.channelUnits.takeaway + sales.channelUnits.homeDelivery, variant: takeawayCalc },
+              { units: sales.channelUnits.lancho + sales.channelUnits.unknown, variant: defaultCalc },
+            ], defaultCalc);
+          } else {
+            vCalc = calculateVariantCost(variantWithMenuItem, rCalc, costingChannel);
+          }
+        }
         if (defaultVariant && v.id === defaultVariant.id) {
           defaultVariantCalc = vCalc;
         }
@@ -133,8 +170,6 @@ export async function GET(request: NextRequest) {
         }
         return vCalc || v;
       });
-
-      const sales = salesMap.get(item.id) || { unitsSold: 0, netRevenue: 0 };
 
       // Matrix input record
       matrixInputs.push({
@@ -198,7 +233,7 @@ export async function GET(request: NextRequest) {
 
     // 8. Calculate combos
     const calculatedCombos = (comboRes.data || []).map((combo) => {
-      const cCost = calculateComboThaliCost(combo, recipeCalcs, channel);
+      const cCost = calculateComboThaliCost(combo, recipeCalcs, costingChannel);
       if (!caller.hasCostAccess) {
         return {
           ...cCost,

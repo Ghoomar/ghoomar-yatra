@@ -174,6 +174,31 @@ export default function StockCountPage() {
     setMessage(null);
 
     try {
+      const varianceRows = filteredRows.filter((row) =>
+        calculatePhysicalCountVariance(row.expected_qty, row.physical_qty, row.wac_cost).varianceQuantity !== 0
+      );
+      let targetLocId: string | null = selectedLocationId === 'ALL' ? null : selectedLocationId;
+
+      if (varianceRows.length > 0 && selectedLocationId === 'ALL') {
+        setMessage({ type: 'error', text: t('inventory.count.selectLocationToReconcile') });
+        return;
+      }
+
+      if (varianceRows.length > 0 && targetLocId) {
+        const { data: activeLocation, error: activeLocationErr } = await supabase
+          .from('inventory_locations')
+          .select('id')
+          .eq('id', targetLocId)
+          .eq('is_active', true)
+          .maybeSingle();
+        if (activeLocationErr) throw activeLocationErr;
+        if (!activeLocation) {
+          setMessage({ type: 'error', text: t('inventory.count.selectedLocationUnavailable') });
+          return;
+        }
+        targetLocId = activeLocation.id;
+      }
+
       const locName =
         selectedLocationId === 'ALL'
           ? 'Consolidated (All Locations)'
@@ -219,8 +244,8 @@ export default function StockCountPage() {
           adjustmentsCreated++;
           totalVarianceVal += varianceValue;
 
-          // Determine location target
-          const targetLocId = selectedLocationId !== 'ALL' ? selectedLocationId : 'a89335e9-01b4-4edd-bee5-a894053d798d';
+          // Variances are only posted after a single active location was verified.
+          if (!targetLocId) throw new Error(t('inventory.count.selectedLocationUnavailable'));
 
           const { error: rpcErr } = await supabase.rpc('execute_inventory_transaction', {
             p_item_id: row.item_id,

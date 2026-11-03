@@ -5,6 +5,7 @@ import {
   MenuEngineeringMatrixResult,
   MenuMatrixQuadrant,
 } from './types';
+import { calculateRealizedContribution } from './contribution';
 
 export interface RawMenuItemForMatrix {
   menuItemId: string;
@@ -47,10 +48,17 @@ export function calculateMenuEngineeringMatrix(
   let totalEligibleUnitsSold = 0;
 
   for (const item of costedEligibleItems) {
-    const margin = item.sellingPrice - (item.foodCost || 0);
     const units = Number(item.unitsSold) || 0;
     if (units > 0) {
-      totalEligibleContribution += margin * units;
+      // Use recorded transaction revenue so discounts and channel pricing are
+      // reflected in the period's actual costed contribution benchmark.
+      const contribution = calculateRealizedContribution(
+        units,
+        item.netRevenue,
+        item.sellingPrice,
+        item.foodCost || 0
+      );
+      totalEligibleContribution += contribution.unitContributionMargin * units;
       totalEligibleUnitsSold += units;
     }
   }
@@ -89,8 +97,14 @@ export function calculateMenuEngineeringMatrix(
     } else if (!isCostedEligible) {
       quadrant = 'UNCOSTED';
     } else {
-      unitContributionMargin = item.sellingPrice - item.foodCost!;
-      foodCostPct = (item.foodCost! / item.sellingPrice) * 100;
+      const contribution = calculateRealizedContribution(
+        units,
+        item.netRevenue,
+        item.sellingPrice,
+        item.foodCost!
+      );
+      unitContributionMargin = contribution.unitContributionMargin;
+      foodCostPct = contribution.foodCostPct;
 
       // Assign BCG quadrants only when matrix is ACTIVE and threshold is strictly non-null
       if (matrixState === 'ACTIVE' && salesWeightedContributionThreshold !== null) {

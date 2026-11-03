@@ -17,7 +17,6 @@ interface DieselTabProps {
 }
 
 const DIESEL_ITEM_ID = 'd1e5e100-0001-4000-a000-000000000001';
-const CENTRAL_STORE_ID = 'a89335e9-01b4-4edd-bee5-a894053d798d';
 const GENERATOR_TANK_CAPACITY_L = 160;
 
 export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProps) {
@@ -26,6 +25,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
   const [dieselItem, setDieselItem] = useState<any>(null);
   const [storeStock, setStoreStock] = useState<number>(0);
+  const [centralStoreLocationId, setCentralStoreLocationId] = useState<string | null>(null);
   const [vendors, setVendors] = useState<any[]>([]);
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [todayConsumptionLiters, setTodayConsumptionLiters] = useState<number>(0);
@@ -51,18 +51,39 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
 
   const loadDieselData = async () => {
     setLoading(true);
+    setCentralStoreLocationId(null);
     try {
-      // 1. Fetch Diesel Item Position, Location Stock, Vendors, and Direct Stock Movements
-      const [itemRes, locRes, vRes, movsRes] = await Promise.all([
+      // Resolve the active Central Store by its stable location code.
+      const [itemRes, vRes, movsRes, locationsRes] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('id', DIESEL_ITEM_ID).single(),
-        supabase.from('item_location_stocks').select('quantity').eq('item_id', DIESEL_ITEM_ID).eq('location_id', CENTRAL_STORE_ID).maybeSingle(),
         supabase.from('vendors').select('id, name, name_hi').eq('is_active', true).order('name'),
         supabase.from('stock_movements')
           .select('*')
           .eq('item_id', DIESEL_ITEM_ID)
           .order('created_at', { ascending: false })
           .limit(50),
+        supabase.from('inventory_locations')
+          .select('id')
+          .eq('code', 'STORE')
+          .eq('is_active', true)
+          .maybeSingle(),
       ]);
+
+      if (locationsRes.error) throw locationsRes.error;
+      const resolvedStoreId = locationsRes.data?.id || null;
+      setCentralStoreLocationId(resolvedStoreId);
+      if (!resolvedStoreId) {
+        setMessage({ type: 'error', text: t('finance.utilities.dieselTab.storeLocationUnavailable') });
+      }
+
+      const locRes = resolvedStoreId
+        ? await supabase
+            .from('item_location_stocks')
+            .select('quantity')
+            .eq('item_id', DIESEL_ITEM_ID)
+            .eq('location_id', resolvedStoreId)
+            .maybeSingle()
+        : { data: null, error: null };
 
       if (itemRes.error) {
         console.error('Failed to load diesel item:', itemRes.error);
@@ -70,6 +91,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       }
       if (locRes.error) {
         console.error('Failed to load diesel location stock:', locRes.error);
+        setMessage({ type: 'error', text: `Failed to load diesel location stock: ${locRes.error.message}` });
       }
       if (movsRes.error) {
         console.error('Failed to load diesel movements:', movsRes.error);
@@ -77,7 +99,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       }
 
       setDieselItem(itemRes.data);
-      setStoreStock(Number(locRes.data?.quantity) || Number(itemRes.data?.current_stock) || 0);
+      setStoreStock(locRes.error ? 0 : Number(locRes.data?.quantity) || 0);
       setVendors(vRes.data || []);
       setRecentMovements(movsRes.data || []);
 
@@ -118,6 +140,10 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       alert(t('finance.utilities.dieselTab.alertInsufficientStock', { available: storeStock.toFixed(1), requested: qty.toFixed(1) }));
       return;
     }
+    if (!centralStoreLocationId) {
+      setMessage({ type: 'error', text: t('finance.utilities.dieselTab.storeLocationUnavailable') });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -130,7 +156,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         p_movement_type: 'consumption',
         p_quantity: qty,
         p_unit_cost: currentWac,
-        p_source_location_id: CENTRAL_STORE_ID,
+        p_source_location_id: centralStoreLocationId,
         p_destination_location_id: null,
         p_department_id: null,
         p_responsible_person_id: null,
@@ -174,6 +200,10 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
       alert(t('finance.utilities.dieselTab.alertValidPrice'));
       return;
     }
+    if (!centralStoreLocationId) {
+      setMessage({ type: 'error', text: t('finance.utilities.dieselTab.storeLocationUnavailable') });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -189,7 +219,7 @@ export function DieselTab({ businessDate, onRefresh, setMessage }: DieselTabProp
         p_quantity: qty,
         p_unit_cost: rate,
         p_source_location_id: null,
-        p_destination_location_id: CENTRAL_STORE_ID,
+        p_destination_location_id: centralStoreLocationId,
         p_department_id: null,
         p_responsible_person_id: null,
         p_purpose: 'Diesel Inward',

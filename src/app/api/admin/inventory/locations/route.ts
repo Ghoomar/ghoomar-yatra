@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
+import { isMandatoryInventoryLocation, isNonZeroStockBalance } from '@/lib/inventory/location-rules';
 
 // Helper to authenticate caller and verify system admin permission
 async function verifyAdminCaller(request: Request) {
@@ -125,15 +126,16 @@ export async function GET(request: NextRequest) {
     if (stockErr) throw stockErr;
 
     // Aggregate stock summary per location
-    const stockSummary = new Map<string, { totalItems: number; positiveItems: number; totalQty: number }>();
+    const stockSummary = new Map<string, { totalItems: number; positiveItems: number; nonZeroItems: number; totalQty: number }>();
     (stockRows || []).forEach((r: any) => {
-      const curr = stockSummary.get(r.location_id) || { totalItems: 0, positiveItems: 0, totalQty: 0 };
+      const curr = stockSummary.get(r.location_id) || { totalItems: 0, positiveItems: 0, nonZeroItems: 0, totalQty: 0 };
       curr.totalItems += 1;
       const q = Number(r.quantity) || 0;
       if (q > 0) {
         curr.positiveItems += 1;
-        curr.totalQty += q;
       }
+      if (isNonZeroStockBalance(q)) curr.nonZeroItems += 1;
+      curr.totalQty += q;
       stockSummary.set(r.location_id, curr);
     });
 
@@ -146,20 +148,22 @@ export async function GET(request: NextRequest) {
     childLocs?.forEach((r: any) => r.parent_location_id && locationsWithHistory.add(r.parent_location_id));
 
     const enriched = (locations || []).map((loc: any) => {
-      const st = stockSummary.get(loc.id) || { totalItems: 0, positiveItems: 0, totalQty: 0 };
+      const st = stockSummary.get(loc.id) || { totalItems: 0, positiveItems: 0, nonZeroItems: 0, totalQty: 0 };
       const hasHistory = locationsWithHistory.has(loc.id);
-      const isSystemReserved = loc.code.toUpperCase() === 'STORE';
+      const isSystemReserved = isMandatoryInventoryLocation(loc.code);
       return {
         ...loc,
         stock_summary: {
           total_items: st.totalItems,
           positive_items: st.positiveItems,
+          non_zero_items: st.nonZeroItems,
           total_quantity: st.totalQty,
         },
         has_positive_stock: st.positiveItems > 0,
+        has_non_zero_stock: st.nonZeroItems > 0,
         has_historical_records: hasHistory,
         is_system_reserved: isSystemReserved,
-        can_delete: !isSystemReserved && st.positiveItems === 0 && !hasHistory,
+        can_delete: !isSystemReserved && st.nonZeroItems === 0 && !hasHistory,
       };
     });
 
@@ -225,11 +229,13 @@ export async function POST(request: NextRequest) {
     const admin = auth.adminClient!;
 
     // Check duplicate code
-    const { data: existingCode } = await admin
+    const { data: existingCode, error: existingCodeErr } = await admin
       .from('inventory_locations')
       .select('id, code')
-      .ilike('code', cleanCode)
+      .eq('code', cleanCode)
       .maybeSingle();
+
+    if (existingCodeErr) throw existingCodeErr;
 
     if (existingCode) {
       return NextResponse.json(
@@ -280,12 +286,15 @@ export async function POST(request: NextRequest) {
       stock_summary: { total_items: 0, positive_items: 0, total_quantity: 0 },
       has_positive_stock: false,
       has_historical_records: false,
-      is_system_reserved: inserted.code.toUpperCase() === 'STORE',
-      can_delete: inserted.code.toUpperCase() !== 'STORE',
+      is_system_reserved: isMandatoryInventoryLocation(inserted.code),
+      can_delete: !isMandatoryInventoryLocation(inserted.code),
     };
 
     return NextResponse.json({ success: true, data: enriched, location: enriched }, { status: 201 });
   } catch (err: any) {
+    if (err?.code === '23505') {
+      return NextResponse.json({ error: 'A location with this code already exists.' }, { status: 409 });
+    }
     return NextResponse.json({ error: err.message || 'Failed to create inventory location.' }, { status: 500 });
   }
 }

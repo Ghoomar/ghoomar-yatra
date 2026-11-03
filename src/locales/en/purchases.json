@@ -48,6 +48,7 @@
     "invoiceRecorded": "Purchase invoice {{number}} recorded and stock inwarded to Central Store!",
     "paymentRecorded": "Vendor payment of {{amount}} recorded!",
     "errVendorInactive": "Selected vendor is inactive. Inactive vendors cannot receive new purchase invoices.",
+    "errStoreLocationUnavailable": "The active Central Store (STORE) location could not be found. No purchase was recorded.",
     "cancelInvoice": "Cancel Invoice",
     "cancelInvoiceTitle": "Cancel Purchase Invoice",
     "cancelInvoiceConfirm": "Are you sure you want to cancel this purchase invoice? This will deduct the received stock and reverse the moving average cost.",

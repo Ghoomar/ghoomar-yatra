@@ -22,24 +22,27 @@ export async function GET(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    // 1. Fetch all recipes and ingredients
-    const { data: recipes, error: recErr } = await admin
-      .from('yatra_recipes')
-      .select(`
-        *,
-        ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+    // Recipe data and group WAC rates are independent reads; resolve them together.
+    const [recipeRes, groupWacMap] = await Promise.all([
+      admin
+        .from('yatra_recipes')
+        .select(`
           *,
-          ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
-        )
-      `)
-      .order('name');
+          ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+            *,
+            ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+            inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+            sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
+          )
+        `)
+        .order('name'),
+      resolveAllGroupWacs(admin),
+    ]);
+    const { data: recipes, error: recErr } = recipeRes;
 
     if (recErr) throw recErr;
 
-    // 2. Resolve group WAC rates and calculate multi-tier DAG costs
-    const groupWacMap = await resolveAllGroupWacs(admin);
+    // 2. Calculate multi-tier DAG costs from the current recipe and WAC snapshots.
     const calculationMap = calculateAllRecipes(recipes || [], groupWacMap);
 
     const isFull = searchParams.get('full') === 'true';

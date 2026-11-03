@@ -355,6 +355,8 @@
     "variancesSub": "{shortages} Shortages • {excesses} Excesses",
     "countTarget": "Count Target",
     "consolidated": "Consolidated (All Locations)",
+    "selectLocationToReconcile": "Select one active location before posting count variances. A consolidated count cannot be assigned safely to a single location.",
+    "selectedLocationUnavailable": "The selected location is no longer active. Refresh and choose an active location before posting stock adjustments.",
     "classTarget": "Class: {class}",
     "reconcile": "Post & Adjust Stock",
     "saveAudits": "Post & Adjust All Verified Counts",
@@ -631,7 +633,7 @@
       "deleteModalTitle": "Delete Location",
       "checking": "Checking stock balances and historical transactions...",
       "hasStockTitle": "Cannot Delete: Non-Zero Stock Present",
-      "hasStockDesc": "This location currently holds {count} {count, plural, one {item} other {items}} with positive stock. Locations with active stock cannot be deleted. You must transfer or issue the stock out before this location can be deleted.",
+      "hasStockDesc": "This location currently holds {count} {count, plural, one {item} other {items}} with a non-zero stock balance. Locations with active stock cannot be deleted. You must transfer or issue the stock out before this location can be deleted.",
       "stockTableItem": "Item",
       "stockTableSku": "SKU Code",
       "stockTableQty": "Current Stock",
@@ -659,7 +661,8 @@
       "failedToSave": "Failed to save location.",
       "failedToDelete": "Failed to delete location.",
       "failedToDeactivate": "Failed to deactivate location.",
-      "cannotDeactivateStore": "Central Store Room cannot be deactivated."
+      "cannotDeactivateStore": "Central Store Room cannot be deactivated.",
+      "mandatoryLocationLocked": "This mandatory system location cannot be renamed, deactivated, or deleted."
     },
     "admin": {
       "quickAction": "Inventory Locations ({count})",

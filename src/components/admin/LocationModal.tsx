@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
+import { isMandatoryInventoryLocation } from '@/lib/inventory/location-rules';
 import {
   X,
   Edit2,
@@ -23,6 +24,7 @@ import {
 export interface LocationStockSummary {
   total_items: number;
   positive_items: number;
+  non_zero_items?: number;
   total_quantity: number;
 }
 
@@ -39,6 +41,7 @@ export interface InventoryLocationRecord {
   department?: { id: string; name: string; name_hi?: string | null; code?: string | null };
   stock_summary?: LocationStockSummary;
   has_positive_stock?: boolean;
+  has_non_zero_stock?: boolean;
   has_historical_records?: boolean;
   is_system_reserved?: boolean;
   can_delete?: boolean;
@@ -50,9 +53,11 @@ export interface DependencyCheckResponse {
   name: string;
   name_hi?: string | null;
   isStore: boolean;
+  isMandatoryLocation?: boolean;
   canDelete: boolean;
   currentStock: {
     hasPositiveStock: boolean;
+    hasNonZeroStock?: boolean;
     totalItemsWithStock: number;
     totalQuantity: number;
     items: Array<{
@@ -186,8 +191,8 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
 
   // 2. Active/Inactive Toggle
   const handleToggleActive = async (loc: InventoryLocationRecord) => {
-    if (loc.code.toUpperCase() === 'STORE') {
-      alert(t('inventory.locations.table.cannotDeleteStore'));
+    if (isMandatoryInventoryLocation(loc.code)) {
+      alert(t('inventory.locations.validation.mandatoryLocationLocked'));
       return;
     }
     try {
@@ -223,7 +228,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
     setFormError(null);
 
     const cleanCode = code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-    const isStore = editingLocation?.code.toUpperCase() === 'STORE';
+    const isStore = isMandatoryInventoryLocation(editingLocation?.code);
     const payload = {
       name: name.trim(),
       name_hi: nameHi?.trim() || null,
@@ -267,7 +272,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
 
   // 4. Deletion Safeguard Initiation
   const handleOpenDeleteDialog = (loc: InventoryLocationRecord) => {
-    if (loc.code.toUpperCase() === 'STORE') return;
+    if (isMandatoryInventoryLocation(loc.code)) return;
     setLocationToDelete(loc);
     setDeleteDialogOpen(true);
     setDeleteError(null);
@@ -437,15 +442,15 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                 <input
                   type="text"
                   required
-                  disabled={editingLocation?.code.toUpperCase() === 'STORE'}
+                  disabled={isMandatoryInventoryLocation(editingLocation?.code)}
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
                   placeholder={t('inventory.locations.codePlaceholder')}
                   className="w-full rounded-lg border border-stone-300 p-2 text-stone-900 font-mono uppercase focus:outline-none focus:border-amber-500 bg-white disabled:bg-stone-100 disabled:text-stone-400"
                 />
-                {editingLocation?.code.toUpperCase() === 'STORE' && (
+                {isMandatoryInventoryLocation(editingLocation?.code) && (
                   <span className="text-[10px] text-amber-700 mt-0.5 block">
-                    {t('inventory.locations.safeguards.reservedStoreTitle')}
+                    {t('inventory.locations.validation.mandatoryLocationLocked')}
                   </span>
                 )}
               </div>
@@ -495,7 +500,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                   <input
                     type="checkbox"
                     checked={isActive}
-                    disabled={editingLocation?.code.toUpperCase() === 'STORE'}
+                    disabled={isMandatoryInventoryLocation(editingLocation?.code)}
                     onChange={(e) => setIsActive(e.target.checked)}
                     className="rounded border-stone-300 text-amber-600 focus:ring-amber-500 h-4 w-4"
                   />
@@ -583,8 +588,8 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {filteredLocations.map((loc) => {
-                      const isStore = loc.code.toUpperCase() === 'STORE';
-                      const posItems = loc.stock_summary?.positive_items || 0;
+                      const isStore = isMandatoryInventoryLocation(loc.code);
+                      const nonZeroItems = loc.stock_summary?.non_zero_items ?? loc.stock_summary?.positive_items ?? 0;
                       return (
                         <tr
                           key={loc.id}
@@ -614,9 +619,9 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                             {loc.department ? getLocalizedMasterName(loc.department, locale) : '—'}
                           </td>
                           <td className="px-3 py-2 text-center">
-                            {posItems > 0 ? (
+                            {nonZeroItems > 0 ? (
                               <Badge variant="warning">
-                                {t('inventory.locations.table.activeStockCount', { count: posItems })}
+                                {t('inventory.locations.table.activeStockCount', { count: nonZeroItems })}
                               </Badge>
                             ) : (
                               <span className="text-stone-400 font-mono text-[10px]">
@@ -647,7 +652,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                                 onClick={() => handleToggleActive(loc)}
                                 title={
                                   isStore
-                                    ? t('inventory.locations.validation.cannotDeactivateStore')
+                                    ? t('inventory.locations.validation.mandatoryLocationLocked')
                                     : loc.is_active
                                     ? t('inventory.locations.deactivate')
                                     : t('inventory.locations.activate')
@@ -666,7 +671,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                                 type="button"
                                 disabled={isStore}
                                 onClick={() => handleOpenDeleteDialog(loc)}
-                                title={isStore ? t('inventory.locations.table.cannotDeleteStore') : t('inventory.locations.delete')}
+                                title={isStore ? t('inventory.locations.validation.mandatoryLocationLocked') : t('inventory.locations.delete')}
                                 className={`p-1 rounded cursor-pointer ${
                                   isStore
                                     ? 'opacity-30 cursor-not-allowed text-stone-300'
@@ -758,7 +763,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
               {!checkingDependencies && dependencyData && (
                 <>
                   {/* Scenario 1: Non-Zero Current Stock */}
-                  {dependencyData.currentStock.hasPositiveStock && (
+                  {(dependencyData.currentStock.hasNonZeroStock ?? dependencyData.currentStock.hasPositiveStock) && (
                     <div className="space-y-3">
                       <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-2 text-rose-900">
                         <div className="flex items-center gap-2 font-bold text-rose-900">
@@ -807,7 +812,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                   )}
 
                   {/* Scenario 2: Zero Stock, but Historical References Exist */}
-                  {!dependencyData.currentStock.hasPositiveStock &&
+                  {!(dependencyData.currentStock.hasNonZeroStock ?? dependencyData.currentStock.hasPositiveStock) &&
                     dependencyData.historicalReferences.hasReferences && (
                       <div className="space-y-3">
                         <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-amber-900">
@@ -894,7 +899,7 @@ export function LocationModal({ isOpen, onClose, departments = [], onUpdated }: 
                 {!checkingDependencies && dependencyData && (
                   <>
                     {/* Deactivate Instead button when historical references exist */}
-                    {!dependencyData.currentStock.hasPositiveStock &&
+                    {!(dependencyData.currentStock.hasNonZeroStock ?? dependencyData.currentStock.hasPositiveStock) &&
                       dependencyData.historicalReferences.hasReferences && (
                         <Button
                           type="button"

@@ -485,13 +485,20 @@ function PurchasesContent() {
       return;
     }
 
+    const defaultStoreLoc = locations.find(
+      (location) => location.code?.toUpperCase() === 'STORE' && location.is_active
+    )?.id;
+    if (!defaultStoreLoc) {
+      alert(t('purchases.bills.errStoreLocationUnavailable'));
+      return;
+    }
+
     setPurchaseSaving(true);
     setMessage(null);
 
     try {
       const netTotal = calculatePurchaseTotal();
       const purchaseNumber = `PO-${Date.now().toString().slice(-6)}`;
-      const defaultStoreLoc = locations.find((l) => l.code === 'STORE')?.id || 'a89335e9-01b4-4edd-bee5-a894053d798d';
 
       const { data: header, error: headerErr } = await supabase
         .from('purchase_headers')

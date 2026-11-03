@@ -17,8 +17,6 @@ interface LpgTabProps {
 }
 
 const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
-const CENTRAL_STORE_ID = 'a89335e9-01b4-4edd-bee5-a894053d798d';
-const KITCHEN_LOCATION_ID = 'a05329b1-941f-4d6d-a390-14cb16a7d42f';
 const KITCHEN_DEPT_ID = '6e9e8b3b-0e62-4a4f-bd2c-fb5b7d5aebe1';
 
 export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
@@ -27,6 +25,8 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
   const [lpgItem, setLpgItem] = useState<any>(null);
   const [storeStock, setStoreStock] = useState<number>(0);
+  const [centralStoreLocationId, setCentralStoreLocationId] = useState<string | null>(null);
+  const [kitchenLocationId, setKitchenLocationId] = useState<string | null>(null);
   const [vendors, setVendors] = useState<any[]>([]);
   const [recentMovements, setRecentMovements] = useState<any[]>([]);
   const [todayIssuesCylinders, setTodayIssuesCylinders] = useState<number>(0);
@@ -51,33 +51,60 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
 
   const loadLpgData = async () => {
     setLoading(true);
+    setCentralStoreLocationId(null);
+    setKitchenLocationId(null);
     try {
-      // 1. Fetch LPG Item Position, Location Stock, Vendors, and Direct Stock Movements
-      const [itemRes, locRes, vRes, movsRes] = await Promise.all([
+      // Resolve operational location IDs by stable codes instead of database-specific UUIDs.
+      const [itemRes, vRes, movsRes, locationsRes] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('id', LPG_ITEM_ID).single(),
-        supabase.from('item_location_stocks').select('quantity').eq('item_id', LPG_ITEM_ID).eq('location_id', CENTRAL_STORE_ID).maybeSingle(),
         supabase.from('vendors').select('id, name, name_hi').eq('is_active', true).order('name'),
         supabase.from('stock_movements')
           .select('*')
           .eq('item_id', LPG_ITEM_ID)
           .order('created_at', { ascending: false })
           .limit(50),
+        supabase.from('inventory_locations')
+          .select('id, code')
+          .in('code', ['STORE', 'KITCHEN-MAIN'])
+          .eq('is_active', true),
       ]);
+
+      if (locationsRes.error) throw locationsRes.error;
+      const locationsByCode = new Map((locationsRes.data || []).map((location: any) => [location.code, location.id]));
+      const resolvedStoreId = locationsByCode.get('STORE') || null;
+      const resolvedKitchenId = locationsByCode.get('KITCHEN-MAIN') || null;
+      setCentralStoreLocationId(resolvedStoreId);
+      setKitchenLocationId(resolvedKitchenId);
+
+      if (!resolvedStoreId) {
+        setMessage({ type: 'error', text: t('finance.utilities.lpgTab.storeLocationUnavailable') });
+        setStoreStock(0);
+      }
+
+      const locRes = resolvedStoreId
+        ? await supabase
+            .from('item_location_stocks')
+            .select('quantity')
+            .eq('item_id', LPG_ITEM_ID)
+            .eq('location_id', resolvedStoreId)
+            .maybeSingle()
+        : { data: null, error: null };
 
       if (itemRes.error) {
         console.error('Failed to load LPG item:', itemRes.error);
         setMessage({ type: 'error', text: `Failed to load LPG master: ${itemRes.error.message}` });
       }
-      if (locRes.error) {
-        console.error('Failed to load LPG location stock:', locRes.error);
-      }
       if (movsRes.error) {
         console.error('Failed to load LPG movements:', movsRes.error);
         setMessage({ type: 'error', text: `Failed to load stock movements: ${movsRes.error.message}` });
       }
+      if (locRes.error) {
+        console.error('Failed to load LPG location stock:', locRes.error);
+        setMessage({ type: 'error', text: `Failed to load LPG location stock: ${locRes.error.message}` });
+      }
 
       setLpgItem(itemRes.data);
-      setStoreStock(Number(locRes.data?.quantity) || Number(itemRes.data?.current_stock) || 0);
+      setStoreStock(locRes.error ? 0 : Number(locRes.data?.quantity) || 0);
       setVendors(vRes.data || []);
       setRecentMovements(movsRes.data || []);
 
@@ -118,6 +145,14 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       alert(t('finance.utilities.lpgTab.alertInsufficientStock', { available: storeStock, requested: qty }));
       return;
     }
+    if (!centralStoreLocationId) {
+      setMessage({ type: 'error', text: t('finance.utilities.lpgTab.storeLocationUnavailable') });
+      return;
+    }
+    if (!kitchenLocationId) {
+      setMessage({ type: 'error', text: t('finance.utilities.lpgTab.kitchenLocationUnavailable') });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -127,8 +162,8 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         p_movement_type: 'consumption',
         p_quantity: qty,
         p_unit_cost: currentWac,
-        p_source_location_id: CENTRAL_STORE_ID,
-        p_destination_location_id: KITCHEN_LOCATION_ID,
+        p_source_location_id: centralStoreLocationId,
+        p_destination_location_id: kitchenLocationId,
         p_department_id: KITCHEN_DEPT_ID,
         p_responsible_person_id: null,
         p_purpose: 'Kitchen Gas',
@@ -170,6 +205,10 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       alert(t('finance.utilities.lpgTab.alertValidPrice'));
       return;
     }
+    if (!centralStoreLocationId) {
+      setMessage({ type: 'error', text: t('finance.utilities.lpgTab.storeLocationUnavailable') });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -185,7 +224,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         p_quantity: qty,
         p_unit_cost: rate,
         p_source_location_id: null,
-        p_destination_location_id: CENTRAL_STORE_ID,
+        p_destination_location_id: centralStoreLocationId,
         p_department_id: null,
         p_responsible_person_id: null,
         p_purpose: 'LPG Inward',

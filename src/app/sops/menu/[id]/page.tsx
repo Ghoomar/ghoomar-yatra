@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, use, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
 import { canViewCosting } from '@/lib/rbac';
-import { formatINR } from '@/lib/utils';
+import { formatINR, formatNullablePrice } from '@/lib/utils';
+import { getBusinessDateRange } from '@/lib/business-date-ranges';
+import { MENU_SALES_CHANNELS, menuSalesChannelTranslationKey, parseMenuSalesChannel, type MenuSalesChannel } from '@/lib/sales/menu-channels';
 import { getCategoryColor } from '@/lib/constants/category-colors';
 import {
   ArrowLeft,
@@ -35,11 +37,24 @@ interface MenuItemDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
+type DatePreset = 'all' | 'yesterday' | '7d' | '30d' | 'this_month' | 'custom';
+const DATE_PRESETS: DatePreset[] = ['all', 'yesterday', '7d', '30d', 'this_month', 'custom'];
+
+function parseDatePreset(value: string | null, dateFrom: string | null, dateTo: string | null): DatePreset {
+  if (value && DATE_PRESETS.includes(value as DatePreset)) return value as DatePreset;
+  return dateFrom || dateTo ? 'custom' : 'all';
+}
+
 export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) {
   const { id } = use(params);
   const { t, locale } = useI18n();
   const { hasPermission, role: activeRole, permissions } = useAppRole();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const channel = parseMenuSalesChannel(searchParams.get('channel')) || 'ALL';
+  const datePreset = parseDatePreset(searchParams.get('date_preset'), searchParams.get('date_from'), searchParams.get('date_to'));
+  const customFrom = searchParams.get('date_from') || '';
+  const customTo = searchParams.get('date_to') || '';
 
   const canManage = hasPermission('sops.recipes.manage');
   const hasCostAccess = canViewCosting(activeRole, permissions);
@@ -51,45 +66,33 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
   const [menuItem, setMenuItem] = useState<any>(null);
   const [variants, setVariants] = useState<any[]>([]);
   const [salesMetrics, setSalesMetrics] = useState<any>(null);
+  const fetchSequence = useRef(0);
 
-  // Date range presets
-  type DatePreset = 'all' | 'today' | '7d' | '30d' | 'this_month' | 'custom';
-  const [datePreset, setDatePreset] = useState<DatePreset>('all');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  // Date and channel filters are derived from a single URL state.
+  const [dateRangeStatus, setDateRangeStatus] = useState<'ready' | 'empty' | 'needs-range' | 'invalid'>('ready');
 
   // Editing state for variant costs
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
 
   const fetchMenuItemDetail = async () => {
+    const sequence = ++fetchSequence.current;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      const now = new Date();
-      if (datePreset === 'today') {
-        const todayStr = now.toISOString().substring(0, 10);
-        params.set('date_from', todayStr);
-        params.set('date_to', todayStr);
-      } else if (datePreset === '7d') {
-        const dFrom = new Date(now.getTime() - 7 * 86400000).toISOString().substring(0, 10);
-        params.set('date_from', dFrom);
-        params.set('date_to', now.toISOString().substring(0, 10));
-      } else if (datePreset === '30d') {
-        const dFrom = new Date(now.getTime() - 30 * 86400000).toISOString().substring(0, 10);
-        params.set('date_from', dFrom);
-        params.set('date_to', now.toISOString().substring(0, 10));
-      } else if (datePreset === 'this_month') {
-        const dFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().substring(0, 10);
-        params.set('date_from', dFrom);
-        params.set('date_to', now.toISOString().substring(0, 10));
-      } else if (datePreset === 'custom') {
-        if (customFrom) params.set('date_from', customFrom);
-        if (customTo) params.set('date_to', customTo);
+      const dateRange = getBusinessDateRange(datePreset, new Date(), customFrom, customTo);
+      setDateRangeStatus(dateRange.status);
+      if (dateRange.status !== 'ready') {
+        setSalesMetrics(null);
+        return;
       }
+      if (dateRange.from) params.set('date_from', dateRange.from);
+      if (dateRange.to) params.set('date_to', dateRange.to);
+      params.set('channel', channel);
 
       const res = await fetch(`/api/sops/menu/${id}?${params.toString()}`);
+      if (sequence !== fetchSequence.current) return;
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to fetch menu item details');
@@ -99,16 +102,35 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
       setVariants(data.variants || []);
       setSalesMetrics(data.salesMetrics || null);
     } catch (err: any) {
+      if (sequence !== fetchSequence.current) return;
       console.error('Fetch menu item error:', err);
       setError(err.message || 'Error fetching menu item');
     } finally {
-      setLoading(false);
+      if (sequence === fetchSequence.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (id) fetchMenuItemDetail();
-  }, [id, datePreset, customFrom, customTo]);
+  }, [id, datePreset, customFrom, customTo, channel]);
+
+  const handleChannelChange = (nextChannel: MenuSalesChannel) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set('channel', nextChannel);
+    router.replace(`/sops/menu/${id}?${nextParams.toString()}`, { scroll: false });
+  };
+
+  const updateDateFilter = (nextPreset: DatePreset, nextFrom = customFrom, nextTo = customTo) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set('channel', channel);
+    nextParams.set('date_preset', nextPreset);
+    const range = getBusinessDateRange(nextPreset, new Date(), nextFrom, nextTo);
+    if (range.from) nextParams.set('date_from', range.from);
+    else nextParams.delete('date_from');
+    if (range.to) nextParams.set('date_to', range.to);
+    else nextParams.delete('date_to');
+    router.replace(`/sops/menu/${id}?${nextParams.toString()}`, { scroll: false });
+  };
 
   const handleStartEdit = (v: any) => {
     setEditingVariantId(v.id);
@@ -223,7 +245,7 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
             POS Selling Price
           </div>
           <div className="text-2xl font-bold font-mono text-stone-900">
-            {menuItem.price ? formatINR(menuItem.price) : '—'}
+            {formatNullablePrice(menuItem.price)}
           </div>
         </div>
       </div>
@@ -236,7 +258,7 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
             {locale === 'hi' ? 'अवधि चुनें:' : 'Date Presets:'}
           </span>
           {[
-            { key: 'today', label: locale === 'hi' ? 'आज' : 'Today' },
+            { key: 'yesterday', label: t('common.labels.yesterday') },
             { key: '7d', label: locale === 'hi' ? 'पिछले 7 दिन' : 'Last 7 Days' },
             { key: '30d', label: locale === 'hi' ? 'पिछले 30 दिन' : 'Last 30 Days' },
             { key: 'this_month', label: locale === 'hi' ? 'इस माह' : 'This Month' },
@@ -245,7 +267,10 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
           ].map((preset) => (
             <button
               key={preset.key}
-              onClick={() => setDatePreset(preset.key as DatePreset)}
+              onClick={() => {
+                const nextPreset = preset.key as DatePreset;
+                updateDateFilter(nextPreset);
+              }}
               className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
                 datePreset === preset.key
                   ? 'bg-amber-600 text-white shadow-2xs font-semibold'
@@ -260,20 +285,53 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
               <input
                 type="date"
                 value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
+                onChange={(e) => {
+                  updateDateFilter('custom', e.target.value, customTo);
+                }}
                 className="px-2 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
               />
               <span className="text-stone-400">to</span>
               <input
                 type="date"
                 value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
+                onChange={(e) => {
+                  updateDateFilter('custom', customFrom, e.target.value);
+                }}
                 className="px-2 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
               />
             </div>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-lg border border-[#E7E2D8]" aria-label={t('sops.menu.channelFilter')}>
+          {MENU_SALES_CHANNELS.map((salesChannel) => (
+            <button
+              key={salesChannel}
+              type="button"
+              aria-pressed={channel === salesChannel}
+              onClick={() => handleChannelChange(salesChannel)}
+              className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
+                channel === salesChannel
+                  ? 'bg-amber-600 text-white font-semibold'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {t(menuSalesChannelTranslationKey(salesChannel))}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {dateRangeStatus !== 'ready' && (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {t(
+            dateRangeStatus === 'empty'
+              ? 'sops.menu.emptyBusinessMonth'
+              : dateRangeStatus === 'needs-range'
+              ? 'sops.menu.customRangeRequired'
+              : 'sops.menu.customRangeInvalid',
+          )}
+        </div>
+      )}
 
       {/* Sales Volume, Net Revenue & Historical Trend Card */}
       <Card className="border-[#E7E2D8]">
@@ -547,7 +605,7 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
                           <div className="flex justify-between">
                             <span className="text-stone-500">Selling Price</span>
                             <span className="font-mono font-medium text-stone-900">
-                              {menuItem.price ? formatINR(menuItem.price) : '—'}
+                              {formatNullablePrice(menuItem.price)}
                             </span>
                           </div>
 
@@ -637,7 +695,7 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
                           <div className="flex justify-between">
                             <span className="text-stone-500">Selling Price</span>
                             <span className="font-mono font-medium text-stone-900">
-                              {menuItem.price ? formatINR(menuItem.price) : '—'}
+                              {formatNullablePrice(menuItem.price)}
                             </span>
                           </div>
 

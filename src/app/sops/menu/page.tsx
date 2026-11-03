@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -9,7 +9,10 @@ import { Badge } from '@/components/ui/Badge';
 import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
 import { canViewCosting } from '@/lib/rbac';
-import { formatINR, formatNumber, getYesterdayBusinessDate } from '@/lib/utils';
+import { formatINR, formatNumber, formatNullablePrice } from '@/lib/utils';
+import { getBusinessDateRange } from '@/lib/business-date-ranges';
+import { compareNullableNumbers } from '@/lib/sops/menu-sort';
+import { MENU_SALES_CHANNELS, menuSalesChannelTranslationKey, type MenuSalesChannel } from '@/lib/sales/menu-channels';
 import { getCategoryColor } from '@/lib/constants/category-colors';
 import {
   UtensilsCrossed,
@@ -103,21 +106,6 @@ const CATALOG_COLUMNS: ColumnDefinition[] = [
  * Compares two nullable numbers with deterministic NULLS_LAST semantics.
  * In both 'asc' and 'desc', items with null/undefined values are sorted to the bottom.
  */
-function compareNullableNumbers(
-  aNum: number | null | undefined,
-  bNum: number | null | undefined,
-  sortOrder: SortOrder
-): number {
-  const aValid = aNum != null && !isNaN(aNum);
-  const bValid = bNum != null && !isNaN(bNum);
-
-  if (!aValid && !bValid) return 0;
-  if (!aValid) return 1;  // nulls sort to the bottom
-  if (!bValid) return -1; // nulls sort to the bottom
-
-  return sortOrder === 'asc' ? aNum - bNum : bNum - aNum;
-}
-
 /**
  * Compares two nullable strings with deterministic NULLS_LAST semantics.
  * In both 'asc' and 'desc', items with null/undefined/empty values are sorted to the bottom.
@@ -320,13 +308,14 @@ function MenuMasterContent() {
   const [activeTab, setActiveTab] = useState<'catalog' | 'matrix' | 'combos'>('catalog');
 
   // Channel toggle: DINE_IN vs TAKEAWAY
-  const [channel, setChannel] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
+  const [channel, setChannel] = useState<MenuSalesChannel>('ALL');
 
   // Date range presets for matrix and sales
   type DatePreset = 'yesterday' | '7d' | '30d' | 'this_month' | 'all' | 'custom';
   const [datePreset, setDatePreset] = useState<DatePreset>('yesterday');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [dateRangeStatus, setDateRangeStatus] = useState<'ready' | 'empty' | 'needs-range' | 'invalid'>('ready');
 
   // Data state
   const [loading, setLoading] = useState(true);
@@ -343,6 +332,7 @@ function MenuMasterContent() {
   // Sort state: defaults to Item Name ascending on load
   const [sortField, setSortField] = useState<MenuSortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const fetchSequence = useRef(0);
 
   const handleSort = (field: MenuSortField) => {
     if (sortField === field) {
@@ -353,36 +343,34 @@ function MenuMasterContent() {
     }
   };
 
+  const openMenuItem = (menuItemId: string) => {
+    const params = new URLSearchParams();
+    params.set('channel', channel);
+    params.set('date_preset', datePreset);
+    const dateRange = getBusinessDateRange(datePreset, new Date(), customFrom, customTo);
+    if (dateRange.from) params.set('date_from', dateRange.from);
+    if (dateRange.to) params.set('date_to', dateRange.to);
+    router.push(`/sops/menu/${menuItemId}?${params.toString()}`);
+  };
+
   const fetchMenuData = async () => {
+    const sequence = ++fetchSequence.current;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       params.set('channel', channel);
 
-      const yesterday = getYesterdayBusinessDate();
-      if (datePreset === 'yesterday') {
-        params.set('date_from', yesterday);
-        params.set('date_to', yesterday);
-      } else if (datePreset === '7d') {
-        const [y, m, d] = yesterday.split('-').map(Number);
-        const dFromObj = new Date(Date.UTC(y, m - 1, d - 6));
-        params.set('date_from', dFromObj.toISOString().substring(0, 10));
-        params.set('date_to', yesterday);
-      } else if (datePreset === '30d') {
-        const [y, m, d] = yesterday.split('-').map(Number);
-        const dFromObj = new Date(Date.UTC(y, m - 1, d - 29));
-        params.set('date_from', dFromObj.toISOString().substring(0, 10));
-        params.set('date_to', yesterday);
-      } else if (datePreset === 'this_month') {
-        const [y, m] = yesterday.split('-').map(Number);
-        const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
-        params.set('date_from', monthStart <= yesterday ? monthStart : yesterday);
-        params.set('date_to', yesterday);
-      } else if (datePreset === 'custom') {
-        if (customFrom) params.set('date_from', customFrom);
-        if (customTo) params.set('date_to', customTo);
+      const dateRange = getBusinessDateRange(datePreset, new Date(), customFrom, customTo);
+      setDateRangeStatus(dateRange.status);
+      if (dateRange.status !== 'ready') {
+        setItems([]);
+        setCombos([]);
+        setMatrix(null);
+        return;
       }
+      if (dateRange.from) params.set('date_from', dateRange.from);
+      if (dateRange.to) params.set('date_to', dateRange.to);
 
       const res = await fetch(`/api/sops/menu?${params.toString()}`);
       if (!res.ok) {
@@ -391,14 +379,16 @@ function MenuMasterContent() {
       }
 
       const data = await res.json();
+      if (sequence !== fetchSequence.current) return;
       setItems(data.items || []);
       setCombos(data.combos || []);
       setMatrix(data.matrix || null);
     } catch (err: any) {
+      if (sequence !== fetchSequence.current) return;
       console.error('Fetch menu data error:', err);
       setError(err.message || 'Error fetching menu master');
     } finally {
-      setLoading(false);
+      if (sequence === fetchSequence.current) setLoading(false);
     }
   };
 
@@ -598,29 +588,36 @@ function MenuMasterContent() {
           )}
         </div>
 
-        <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[#E7E2D8]">
-          <button
-            onClick={() => setChannel('DINE_IN')}
-            className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
-              channel === 'DINE_IN'
-                ? 'bg-amber-600 text-white font-semibold'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            {t('sops.menu.channelDineIn')}
-          </button>
-          <button
-            onClick={() => setChannel('TAKEAWAY')}
-            className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
-              channel === 'TAKEAWAY'
-                ? 'bg-amber-600 text-white font-semibold'
-                : 'text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            {t('sops.menu.channelTakeaway')}
-          </button>
+        <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-lg border border-[#E7E2D8]" aria-label={t('sops.menu.channelFilter')}>
+          {MENU_SALES_CHANNELS.map((salesChannel) => (
+            <button
+              key={salesChannel}
+              type="button"
+              aria-pressed={channel === salesChannel}
+              onClick={() => setChannel(salesChannel)}
+              className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
+                channel === salesChannel
+                  ? 'bg-amber-600 text-white font-semibold'
+                  : 'text-stone-600 hover:text-stone-900'
+              }`}
+            >
+              {t(menuSalesChannelTranslationKey(salesChannel))}
+            </button>
+          ))}
         </div>
       </div>
+
+      {dateRangeStatus !== 'ready' && (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {t(
+            dateRangeStatus === 'empty'
+              ? 'sops.menu.emptyBusinessMonth'
+              : dateRangeStatus === 'needs-range'
+              ? 'sops.menu.customRangeRequired'
+              : 'sops.menu.customRangeInvalid',
+          )}
+        </div>
+      )}
 
       {/* TAB 1: MENU CATALOG & CHANNEL COSTS */}
       {activeTab === 'catalog' && (
@@ -738,11 +735,11 @@ function MenuMasterContent() {
                         return (
                           <tr
                             key={item.id}
-                            onClick={() => router.push(`/sops/menu/${item.id}`)}
+                            onClick={() => openMenuItem(item.id)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                router.push(`/sops/menu/${item.id}`);
+                                openMenuItem(item.id);
                               }
                             }}
                             tabIndex={0}
@@ -776,7 +773,7 @@ function MenuMasterContent() {
 
                             {/* 3. Selling Price */}
                             <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
-                              {item.price ? formatINR(item.price) : '—'}
+                              {formatNullablePrice(item.price)}
                             </td>
 
                             {/* 4. Active Recipe / Variant */}
@@ -1249,7 +1246,7 @@ function MenuMasterContent() {
                         </td>
 
                         <td className="py-3.5 px-4 text-right font-mono font-medium text-stone-900">
-                          {combo.selling_price ? formatINR(combo.selling_price) : '—'}
+                              {formatNullablePrice(combo.selling_price)}
                         </td>
 
                         <td className="py-3.5 px-4 text-right font-mono text-sm">
