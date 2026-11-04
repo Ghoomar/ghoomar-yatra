@@ -50,18 +50,21 @@ export async function resolveCallerAuth(request: NextRequest): Promise<CallerAut
     const admin = createAdminClient();
     const { data: profile } = await admin
       .from('profiles')
-      .select('*, role:roles(id, name)')
+      .select(`
+        role:roles!profiles_role_id_fkey(
+          name,
+          role_permissions:role_permissions!role_permissions_role_id_fkey(
+            permissions:permissions!role_permissions_permission_id_fkey(code)
+          )
+        )
+      `)
       .eq('id', user.id)
       .maybeSingle();
 
     if (profile) {
-      roleName = profile.role?.name || null;
-      const { data: rolePerms } = await admin
-        .from('role_permissions')
-        .select('permissions(code)')
-        .eq('role_id', profile.role_id);
-
-      permissionCodes = (rolePerms || [])
+      const role = Array.isArray(profile.role) ? profile.role[0] : profile.role;
+      roleName = role?.name || null;
+      permissionCodes = (role?.role_permissions || [])
         .map((rp: any) => rp.permissions?.code)
         .filter(Boolean);
     }

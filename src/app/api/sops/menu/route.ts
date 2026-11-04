@@ -11,6 +11,87 @@ import {
 } from '@/lib/sops/costing';
 import { menuSalesCostChannel, parseMenuSalesChannel } from '@/lib/sales/menu-channels';
 import { calculateSalesWeightedVariantCost } from '@/lib/sops/costing/channel-mix';
+import type { CostCalculationResult, ServiceChannel, YatraComboThali } from '@/lib/sops/costing/types';
+
+const COMBO_SELECT = `
+  *,
+  components:yatra_combo_components(
+    *,
+    recipe:yatra_recipes(*),
+    variant:yatra_menu_item_variants(*)
+  )
+`;
+
+function fetchActiveCombos(admin: ReturnType<typeof createAdminClient>) {
+  return admin
+    .from('yatra_combos_thalis')
+    .select(COMBO_SELECT)
+    .eq('is_active', true);
+}
+
+function calculateCombos(
+  comboRows: YatraComboThali[] | null,
+  recipeCalcs: Map<string, CostCalculationResult>,
+  costingChannel: ServiceChannel | undefined,
+  hasCostAccess: boolean
+) {
+  return (comboRows || []).map((combo) => {
+    const cCost = calculateComboThaliCost(combo, recipeCalcs, costingChannel);
+    if (hasCostAccess) return cCost;
+
+    return {
+      ...cCost,
+      total_food_cost: null,
+      food_cost: null,
+      food_cost_pct: null,
+      operating_cost: null,
+      packaging_cost: null,
+      total_cost: null,
+      margin_amount: null,
+      contribution_amount: null,
+      contribution_pct: null,
+      gas_cost: null,
+      other_operating_cost: null,
+      packaging_cost_dine_in: null,
+      packaging_cost_takeaway: null,
+      components: (cCost.components || []).map((comp: any) => ({
+        ...comp,
+        food_cost: null,
+        unit_rate: null,
+        recipe: comp.recipe
+          ? {
+              ...comp.recipe,
+              total_batch_cost: null,
+              cost_per_output_unit: null,
+              cost_per_serving: null,
+              ingredients: (comp.recipe.ingredients || []).map((ing: any) => ({
+                ...ing,
+                line_cost: null,
+                unit_rate: null,
+              })),
+            }
+          : null,
+        variant: comp.variant
+          ? {
+              ...comp.variant,
+              food_cost: null,
+              food_cost_pct: null,
+              margin_amount: null,
+              operating_cost: null,
+              packaging_cost: null,
+              total_cost: null,
+              contribution_amount: null,
+              contribution_pct: null,
+              gas_cost: null,
+              other_operating_cost: null,
+              packaging_cost_dine_in: null,
+              packaging_cost_takeaway: null,
+            }
+          : null,
+      })),
+    };
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,6 +109,7 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
     const channel = parseMenuSalesChannel(searchParams.get('channel') || 'ALL');
+    const view = searchParams.get('view');
     if (!channel) {
       return NextResponse.json({ error: 'Unsupported menu sales channel.' }, { status: 400 });
     }
@@ -36,6 +118,34 @@ export async function GET(request: NextRequest) {
     const parentCategoryFilter = searchParams.get('parent_category');
 
     const admin = createAdminClient();
+
+    if (view === 'combos') {
+      const [recipeRes, comboRes, groupWacMap] = await Promise.all([
+        admin
+          .from('yatra_recipes')
+          .select(`
+            *,
+            ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+              *,
+              ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
+          )
+        `),
+        fetchActiveCombos(admin),
+        resolveAllGroupWacs(admin),
+      ]);
+
+      if (recipeRes.error) throw recipeRes.error;
+      if (comboRes.error) throw comboRes.error;
+
+      const recipeCalcs = calculateAllRecipes(recipeRes.data || [], groupWacMap);
+      const combos = calculateCombos(comboRes.data, recipeCalcs, costingChannel, caller.hasCostAccess);
+
+      return NextResponse.json({ combos, channel, hasCostAccess: caller.hasCostAccess });
+    }
+
+    const includeCombos = view !== 'catalog';
 
     // Sales aggregation, menu data, and WAC resolution are independent database reads.
     // Start them together so the sales scan does not wait for recipe calculations.
@@ -59,17 +169,9 @@ export async function GET(request: NextRequest) {
             sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
           )
         `),
-      admin
-        .from('yatra_combos_thalis')
-        .select(`
-          *,
-          components:yatra_combo_components(
-            *,
-            recipe:yatra_recipes(*),
-            variant:yatra_menu_item_variants(*)
-          )
-        `)
-        .eq('is_active', true),
+      includeCombos
+        ? fetchActiveCombos(admin)
+        : Promise.resolve({ data: [], error: null }),
       admin.rpc('get_menu_sales_aggregation', {
         p_date_from: dateFrom || null,
         p_date_to: dateTo || null,
@@ -106,7 +208,6 @@ export async function GET(request: NextRequest) {
         },
       });
     });
-
     // 4. Map variants by menu_item_id
     const variantsByMenuItem = new Map<string, any[]>();
     (variantRes.data || []).forEach((v) => {
@@ -114,7 +215,6 @@ export async function GET(request: NextRequest) {
       arr.push(v);
       variantsByMenuItem.set(v.menu_item_id, arr);
     });
-
     // 5. Preprocess items and prepare matrix inputs
     const matrixInputs: RawMenuItemForMatrix[] = [];
     const preprocessedItems = (menuRes.data || []).map((item) => {
@@ -170,7 +270,6 @@ export async function GET(request: NextRequest) {
         }
         return vCalc || v;
       });
-
       // Matrix input record
       matrixInputs.push({
         menuItemId: item.id,
@@ -188,7 +287,6 @@ export async function GET(request: NextRequest) {
 
       return { item, enrichedVariants, defaultVariantCalc, sales };
     });
-
     // 6. Calculate BCG matrix
     const matrixResult = calculateMenuEngineeringMatrix(matrixInputs);
     const matrixMap = new Map<string, any>();
@@ -232,63 +330,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 8. Calculate combos
-    const calculatedCombos = (comboRes.data || []).map((combo) => {
-      const cCost = calculateComboThaliCost(combo, recipeCalcs, costingChannel);
-      if (!caller.hasCostAccess) {
-        return {
-          ...cCost,
-          total_food_cost: null,
-          food_cost: null,
-          food_cost_pct: null,
-          operating_cost: null,
-          packaging_cost: null,
-          total_cost: null,
-          margin_amount: null,
-          contribution_amount: null,
-          contribution_pct: null,
-          gas_cost: null,
-          other_operating_cost: null,
-          packaging_cost_dine_in: null,
-          packaging_cost_takeaway: null,
-          components: (cCost.components || []).map((comp: any) => ({
-            ...comp,
-            food_cost: null,
-            unit_rate: null,
-            recipe: comp.recipe
-              ? {
-                  ...comp.recipe,
-                  total_batch_cost: null,
-                  cost_per_output_unit: null,
-                  cost_per_serving: null,
-                  ingredients: (comp.recipe.ingredients || []).map((ing: any) => ({
-                    ...ing,
-                    line_cost: null,
-                    unit_rate: null,
-                  })),
-                }
-              : null,
-            variant: comp.variant
-              ? {
-                  ...comp.variant,
-                  food_cost: null,
-                  food_cost_pct: null,
-                  margin_amount: null,
-                  operating_cost: null,
-                  packaging_cost: null,
-                  total_cost: null,
-                  contribution_amount: null,
-                  contribution_pct: null,
-                  gas_cost: null,
-                  other_operating_cost: null,
-                  packaging_cost_dine_in: null,
-                  packaging_cost_takeaway: null,
-                }
-              : null,
-          })),
-        };
-      }
-      return cCost;
-    });
+    const calculatedCombos = calculateCombos(comboRes.data, recipeCalcs, costingChannel, caller.hasCostAccess);
 
     // 9. Build lightweight backward-compatible matrix projection
     const sanitizedMatrix = {
@@ -301,7 +343,7 @@ export async function GET(request: NextRequest) {
         : null,
       eligibleItemsCount: matrixResult.eligibleItemsCount,
       totalItemsCount: matrixResult.totalItemsCount,
-      items: matrixResult.items.map((m) => ({
+      items: view === 'catalog' ? [] : matrixResult.items.map((m) => ({
         menuItemId: m.menuItemId,
         name: m.name,
         quadrant: m.quadrant,
@@ -321,7 +363,6 @@ export async function GET(request: NextRequest) {
     if (parentCategoryFilter) {
       filteredItems = filteredItems.filter((i) => i.parent_category === parentCategoryFilter);
     }
-
     return NextResponse.json({
       items: filteredItems,
       combos: calculatedCombos,

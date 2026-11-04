@@ -9,6 +9,7 @@
     "lint": "eslint",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:r1-remediation": "node --experimental-strip-types --test scripts/test-functional-remediation-round1.mjs",
+    "test:r2-performance": "node --experimental-strip-types --test scripts/test-round2-where-used.mjs scripts/test-round2-telemetry.mjs scripts/test-round2-auth.mjs",
     "test": "node scripts/test-costing-security.mjs && node scripts/test-dag-costing-and-migration.mjs && npx tsx scripts/test-inventory-locations-http.mjs"
   },
   "dependencies": {

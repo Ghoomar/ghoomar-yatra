@@ -116,7 +116,7 @@ function RecipesContent() {
     if (combosLoaded || combosLoading) return;
     setCombosLoading(true);
     try {
-      const res = await fetch('/api/sops/menu?channel=DINE_IN');
+      const res = await fetch('/api/sops/menu?channel=DINE_IN&view=combos');
       if (res.ok) {
         const data = await res.json();
         setCombos(data.combos || []);

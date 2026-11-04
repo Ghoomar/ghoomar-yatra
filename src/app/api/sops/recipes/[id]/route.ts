@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveCallerAuth } from '@/lib/sops/auth';
 import { calculateAllRecipes, resolveAllGroupWacs, CostCalculationResult } from '@/lib/sops/costing';
+import { getWhereUsedRecipes } from '@/lib/sops/recipes/where-used';
 
 export async function GET(
   request: NextRequest,
@@ -25,41 +26,31 @@ export async function GET(
 
     const admin = createAdminClient();
 
-    // 1. Fetch the target recipe with ingredients
-    const { data: recipe, error: recErr } = await admin
-      .from('yatra_recipes')
-      .select(`
-        *,
-        ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+    // The full recipe graph is also the source for the selected recipe and its where-used parents.
+    const [recipeRes, groupWacMap] = await Promise.all([
+      admin
+        .from('yatra_recipes')
+        .select(`
           *,
-          ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
-        )
-      `)
-      .eq('id', id)
-      .maybeSingle();
+          ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
+            *,
+            ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+            inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+            sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
+          )
+        `),
+      resolveAllGroupWacs(admin),
+    ]);
 
-    if (recErr) throw recErr;
+    if (recipeRes.error) throw recipeRes.error;
+
+    const allRecipes = recipeRes.data || [];
+    const recipe = allRecipes.find((candidate: any) => candidate.id === id);
     if (!recipe) {
       return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
     }
 
-    // 2. Fetch full DAG to compute cost breakdown
-    const { data: allRecipes } = await admin
-      .from('yatra_recipes')
-      .select(`
-        *,
-        ingredients:yatra_recipe_ingredients!yatra_recipe_ingredients_recipe_id_fkey(
-          *,
-          ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
-        )
-      `);
-
-    const groupWacMap = await resolveAllGroupWacs(admin);
-    const calculationsMap = calculateAllRecipes(allRecipes || [], groupWacMap);
+    const calculationsMap = calculateAllRecipes(allRecipes, groupWacMap);
     const calc = calculationsMap.get(id) || ({
       recipe,
       totalBatchCost: null,
@@ -73,48 +64,8 @@ export async function GET(
       ingredientLineCosts: [],
     } as CostCalculationResult);
 
-    // 3. Fetch transitive where-used dependencies (cycle-safe, max depth 10)
-    const visitedRecipeIds = new Set<string>([id]);
-    let frontierRecipeIds = [id];
-    const parentRecipeMap = new Map<string, any>();
-
-    for (let depth = 1; depth <= 10 && frontierRecipeIds.length > 0; depth++) {
-      const { data: parentRows, error: parentErr } = await admin
-        .from('yatra_recipe_ingredients')
-        .select(`
-          quantity,
-          unit,
-          sub_recipe_id,
-          recipe:yatra_recipes!yatra_recipe_ingredients_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
-        `)
-        .in('sub_recipe_id', frontierRecipeIds)
-        .eq('ingredient_type', 'PREPARATION');
-
-      if (parentErr) throw parentErr;
-
-      const nextFrontier: string[] = [];
-      for (const row of parentRows || []) {
-        const pRec = row.recipe as any;
-        if (pRec && !visitedRecipeIds.has(pRec.id)) {
-          visitedRecipeIds.add(pRec.id);
-          nextFrontier.push(pRec.id);
-          parentRecipeMap.set(pRec.id, {
-            id: pRec.id,
-            name: pRec.name,
-            name_hi: pRec.name_hi,
-            category: pRec.category,
-            depth,
-            quantity: row.quantity,
-            unit: row.unit,
-            status: calculationsMap.get(pRec.id)?.status || 'UNCOSTED',
-            costing_status: calculationsMap.get(pRec.id)?.status || 'UNCOSTED',
-          });
-        }
-      }
-      frontierRecipeIds = nextFrontier;
-    }
-
-    const allTracedRecipeIds = Array.from(visitedRecipeIds);
+    const whereUsedRecipes = getWhereUsedRecipes(allRecipes, id, calculationsMap);
+    const allTracedRecipeIds = [id, ...whereUsedRecipes.map((parent) => parent.id)];
 
     // Fetch linked menu item variants and combos for all traced recipes (including self)
     const [variantRes, comboRes] = await Promise.all([
@@ -163,7 +114,7 @@ export async function GET(
       recipe,
       calculation: sanitizedCalc,
       whereUsed: {
-        recipes: Array.from(parentRecipeMap.values()),
+        recipes: whereUsedRecipes,
         menuItems: (variantRes.data || [])
           .filter((v: any) => v.menu_item)
           .map((v: any) => ({

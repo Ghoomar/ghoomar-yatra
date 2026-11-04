@@ -13,6 +13,7 @@ import { formatINR, formatNumber, formatNullablePrice } from '@/lib/utils';
 import { getBusinessDateRange } from '@/lib/business-date-ranges';
 import { compareNullableNumbers } from '@/lib/sops/menu-sort';
 import { MENU_SALES_CHANNELS, menuSalesChannelTranslationKey, type MenuSalesChannel } from '@/lib/sales/menu-channels';
+import type { YatraComboThali } from '@/lib/sops/costing/types';
 import { getCategoryColor } from '@/lib/constants/category-colors';
 import {
   UtensilsCrossed,
@@ -51,6 +52,17 @@ type MenuSortField =
   | 'quadrant';
 
 type SortOrder = 'asc' | 'desc';
+
+interface MenuCatalogMatrixSource {
+  id: string;
+  name: string;
+  quadrant?: string | null;
+  unitsSold?: number | null;
+  netRevenue?: number | null;
+  defaultVariant?: { food_cost?: number | null } | null;
+  foodCostPct?: number | null;
+  unitContributionMargin?: number | null;
+}
 
 /**
  * Natural BCG Domain Rank Ordering:
@@ -321,8 +333,15 @@ function MenuMasterContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<any[]>([]);
-  const [combos, setCombos] = useState<any[]>([]);
+  const [combos, setCombos] = useState<YatraComboThali[]>([]);
+  const [combosErrorChannel, setCombosErrorChannel] = useState<MenuSalesChannel | null>(null);
+  const [combosLoadedChannel, setCombosLoadedChannel] = useState<MenuSalesChannel | null>(null);
   const [matrix, setMatrix] = useState<any>(null);
+  const combosLoading = activeTab === 'combos'
+    && dateRangeStatus === 'ready'
+    && combosLoadedChannel !== channel
+    && combosErrorChannel !== channel;
+  const combosError = combosErrorChannel === channel;
 
   // Search & filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -333,6 +352,7 @@ function MenuMasterContent() {
   const [sortField, setSortField] = useState<MenuSortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const fetchSequence = useRef(0);
+  const combosFetchSequence = useRef(0);
 
   const handleSort = (field: MenuSortField) => {
     if (sortField === field) {
@@ -364,13 +384,17 @@ function MenuMasterContent() {
       const dateRange = getBusinessDateRange(datePreset, new Date(), customFrom, customTo);
       setDateRangeStatus(dateRange.status);
       if (dateRange.status !== 'ready') {
+        combosFetchSequence.current++;
         setItems([]);
         setCombos([]);
+        setCombosErrorChannel(null);
+        setCombosLoadedChannel(null);
         setMatrix(null);
         return;
       }
       if (dateRange.from) params.set('date_from', dateRange.from);
       if (dateRange.to) params.set('date_to', dateRange.to);
+      params.set('view', 'catalog');
 
       const res = await fetch(`/api/sops/menu?${params.toString()}`);
       if (!res.ok) {
@@ -380,9 +404,21 @@ function MenuMasterContent() {
 
       const data = await res.json();
       if (sequence !== fetchSequence.current) return;
-      setItems(data.items || []);
-      setCombos(data.combos || []);
-      setMatrix(data.matrix || null);
+      const loadedItems = (data.items || []) as MenuCatalogMatrixSource[];
+      setItems(loadedItems);
+      setMatrix(data.matrix ? {
+        ...data.matrix,
+        items: loadedItems.map((item) => ({
+          menuItemId: item.id,
+          name: item.name,
+          quadrant: item.quadrant,
+          unitsSold: item.unitsSold,
+          netRevenue: item.netRevenue,
+          foodCost: item.defaultVariant?.food_cost ?? null,
+          foodCostPct: item.foodCostPct ?? null,
+          unitContributionMargin: item.unitContributionMargin ?? null,
+        })),
+      } : null);
     } catch (err: any) {
       if (sequence !== fetchSequence.current) return;
       console.error('Fetch menu data error:', err);
@@ -395,6 +431,41 @@ function MenuMasterContent() {
   useEffect(() => {
     fetchMenuData();
   }, [channel, datePreset, customFrom, customTo]);
+
+  useEffect(() => {
+    if (
+      activeTab !== 'combos'
+      || dateRangeStatus !== 'ready'
+      || combosLoadedChannel === channel
+      || combosErrorChannel === channel
+    ) return;
+
+    const sequence = ++combosFetchSequence.current;
+    const controller = new AbortController();
+
+    const fetchCombos = async () => {
+      try {
+        const params = new URLSearchParams({ channel, view: 'combos' });
+        const res = await fetch(`/api/sops/menu?${params.toString()}`, { signal: controller.signal });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to fetch combos');
+        if (sequence !== combosFetchSequence.current) return;
+        setCombos(data.combos || []);
+        setCombosErrorChannel(null);
+        setCombosLoadedChannel(channel);
+      } catch (err: unknown) {
+        if (sequence !== combosFetchSequence.current) return;
+        console.error('Fetch menu combos error:', err);
+        setCombosErrorChannel(channel);
+      }
+    };
+
+    void fetchCombos();
+    return () => {
+      controller.abort();
+      if (sequence === combosFetchSequence.current) combosFetchSequence.current++;
+    };
+  }, [activeTab, channel, dateRangeStatus, combosLoadedChannel, combosErrorChannel]);
 
   // Unique parent categories for filtering
   const parentCategories = useMemo(() => {
@@ -531,14 +602,17 @@ function MenuMasterContent() {
           {t('sops.menu.tabMatrix')}
         </button>
         <button
-          onClick={() => setActiveTab('combos')}
+          onClick={() => {
+            setCombosErrorChannel(null);
+            setActiveTab('combos');
+          }}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
             activeTab === 'combos'
               ? 'border-amber-600 text-amber-700 font-semibold'
               : 'border-transparent text-stone-600 hover:text-stone-900 hover:border-stone-300'
           }`}
         >
-          {t('sops.menu.tabCombos')} ({combos.length})
+          {t('sops.menu.tabCombos')}{combosLoadedChannel === channel ? ` (${combos.length})` : ''}
         </button>
       </div>
 
@@ -594,7 +668,10 @@ function MenuMasterContent() {
               key={salesChannel}
               type="button"
               aria-pressed={channel === salesChannel}
-              onClick={() => setChannel(salesChannel)}
+              onClick={() => {
+                setCombosErrorChannel(null);
+                setChannel(salesChannel);
+              }}
               className={`px-3 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
                 channel === salesChannel
                   ? 'bg-amber-600 text-white font-semibold'
@@ -1199,7 +1276,11 @@ function MenuMasterContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {combos.length === 0 ? (
+            {combosLoading ? (
+              <div className="p-8 text-center text-stone-400 text-sm">{t('common.loading')}</div>
+            ) : combosError ? (
+              <div className="p-8 text-center text-rose-600 text-sm">{t('common.error')}</div>
+            ) : combos.length === 0 ? (
               <div className="p-8 text-center text-stone-400 text-sm">
                 No combos or thalis configured.
               </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { suppressProfilingTelemetry } from '@/lib/telemetry/profiling';
 
 export async function POST(request: Request) {
   try {
@@ -10,6 +11,10 @@ export async function POST(request: Request) {
     // Only record for authenticated users
     if (!user) {
       return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
+    }
+
+    if (suppressProfilingTelemetry(request.url)) {
+      return NextResponse.json({ success: true, suppressed: true });
     }
 
     const body = await request.json().catch(() => null);
