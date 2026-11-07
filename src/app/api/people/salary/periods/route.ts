@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     const body = await request.json();
-    const { action, salary_month, period_id, employee_id, manual_deductions, notes } = body;
+    const { action, salary_month, period_id, employee_id, manual_deductions, notes, allotted_weekly_off } = body;
 
     // Action 1: Sync attendance and allotments for a month
     if (action === 'sync') {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(syncResult);
     }
 
-    // Action 2: Update manual deductions/notes for a draft period
+    // Action 2: Update manual deductions/notes/allotted_weekly_off for a draft period
     if (action === 'update') {
       if (!period_id) {
         return NextResponse.json({ error: 'period_id is required for update.' }, { status: 400 });
@@ -96,13 +96,16 @@ export async function POST(request: NextRequest) {
       }
 
       const updatedManualDeductions = manual_deductions !== undefined ? Number(manual_deductions) : Number(period.manual_deductions);
+      const updatedAllottedWeeklyOff = allotted_weekly_off !== undefined
+        ? (allotted_weekly_off === null ? null : Number(allotted_weekly_off))
+        : (period.allotted_weekly_off !== null && period.allotted_weekly_off !== undefined ? Number(period.allotted_weekly_off) : null);
       const updatedNotes = notes !== undefined ? notes : period.notes;
 
       const calc = calculateEmployeeSalaryPeriod({
         monthlySalary: Number(period.monthly_salary),
         daysInMonth: Number(period.days_in_month),
         presentDays: Number(period.present_days),
-        allottedWeeklyOff: Number(period.allotted_weekly_off),
+        allottedWeeklyOff: updatedAllottedWeeklyOff,
         attendancePenalties: Number(period.attendance_penalties),
         manualDeductions: updatedManualDeductions,
         previousPendingSalary: Number(period.previous_pending_salary),
@@ -111,6 +114,9 @@ export async function POST(request: NextRequest) {
       const { data: updated, error: uErr } = await supabase
         .from('employee_salary_periods')
         .update({
+          allotted_weekly_off: calc.allottedWeeklyOff,
+          pay_days: calc.payDays,
+          gross_earned_salary: calc.grossEarnedSalary,
           manual_deductions: calc.manualDeductions,
           total_deductions: calc.totalDeductions,
           net_earned_salary: calc.netEarnedSalary,
@@ -189,7 +195,10 @@ export async function POST(request: NextRequest) {
             monthlySalary: Number(nextPeriod.monthly_salary),
             daysInMonth: nextDaysInMonth,
             presentDays: Number(nextPeriod.present_days),
-            allottedWeeklyOff: Number(nextPeriod.allotted_weekly_off),
+            allottedWeeklyOff:
+              nextPeriod.allotted_weekly_off !== null && nextPeriod.allotted_weekly_off !== undefined
+                ? Number(nextPeriod.allotted_weekly_off)
+                : null,
             attendancePenalties: Number(nextPeriod.attendance_penalties),
             manualDeductions: Number(nextPeriod.manual_deductions),
             previousPendingSalary: closingPending,
@@ -204,12 +213,12 @@ export async function POST(request: NextRequest) {
             })
             .eq('id', nextPeriod.id);
         } else if (!nextPeriod) {
-          // Initialize next month's draft period
+          // Initialize next month's draft period - weekly off is unconfirmed (null) until manager enters it for that new month
           const calc = calculateEmployeeSalaryPeriod({
             monthlySalary: Number(p.monthly_salary),
             daysInMonth: nextDaysInMonth,
             presentDays: 0,
-            allottedWeeklyOff: Number(p.allotted_weekly_off),
+            allottedWeeklyOff: null,
             attendancePenalties: 0,
             manualDeductions: 0,
             previousPendingSalary: closingPending,
@@ -221,7 +230,7 @@ export async function POST(request: NextRequest) {
             monthly_salary: Number(p.monthly_salary),
             days_in_month: nextDaysInMonth,
             present_days: 0,
-            allotted_weekly_off: Number(p.allotted_weekly_off),
+            allotted_weekly_off: null,
             pay_days: calc.payDays,
             per_day_salary: calc.perDaySalary,
             gross_earned_salary: calc.grossEarnedSalary,

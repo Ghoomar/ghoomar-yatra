@@ -5,7 +5,7 @@ export interface SalaryCalculationInput {
   monthlySalary: number;
   daysInMonth: number;
   presentDays: number;
-  allottedWeeklyOff: number;
+  allottedWeeklyOff?: number | null;
   attendancePenalties?: number;
   manualDeductions?: number;
   previousPendingSalary?: number;
@@ -13,7 +13,7 @@ export interface SalaryCalculationInput {
 
 export interface SalaryCalculationResult {
   presentDays: number;
-  allottedWeeklyOff: number;
+  allottedWeeklyOff: number | null;
   perDaySalary: number;
   payDays: number;
   grossEarnedSalary: number;
@@ -43,7 +43,8 @@ export function calculateEmployeeSalaryPeriod(input: SalaryCalculationInput): Sa
 
   const validDaysInMonth = daysInMonth > 0 ? daysInMonth : 30;
   const perDaySalary = Number((monthlySalary / validDaysInMonth).toFixed(2));
-  const payDays = Number((presentDays + allottedWeeklyOff).toFixed(2));
+  const weeklyOffToAdd = (allottedWeeklyOff !== null && allottedWeeklyOff !== undefined) ? Number(allottedWeeklyOff) : 0;
+  const payDays = Number((presentDays + weeklyOffToAdd).toFixed(2));
   const grossEarnedSalary = Math.round(payDays * perDaySalary * 100) / 100;
 
   const totalDeductions = Math.round((attendancePenalties + manualDeductions) * 100) / 100;
@@ -52,7 +53,7 @@ export function calculateEmployeeSalaryPeriod(input: SalaryCalculationInput): Sa
 
   return {
     presentDays,
-    allottedWeeklyOff,
+    allottedWeeklyOff: (allottedWeeklyOff !== null && allottedWeeklyOff !== undefined) ? Number(allottedWeeklyOff) : null,
     perDaySalary,
     payDays,
     grossEarnedSalary,
@@ -159,10 +160,10 @@ export async function syncMonthAttendanceToPeriods(
     const startDate = `${salaryMonth}-01`;
     const endDate = `${salaryMonth}-${String(daysInMonth).padStart(2, '0')}`;
 
-    // 1. Fetch active employees
+    // 1. Fetch active employees (strictly exclude allotted_weekly_off from employees master)
     const { data: employees, error: empErr } = await supabase
       .from('employees')
-      .select('id, name, monthly_salary, allotted_weekly_off, employment_status')
+      .select('id, name, monthly_salary, employment_status')
       .eq('employment_status', 'Active');
 
     if (empErr || !employees) {
@@ -201,15 +202,17 @@ export async function syncMonthAttendanceToPeriods(
           if (att.shift_multiplier !== null && att.shift_multiplier !== undefined) {
             presentDays += Number(att.shift_multiplier);
           } else {
-            // Default shift multiplier based on status
-            if (att.status === 'P' || att.status === 'Present') {
+            // Biometric canonical statuses: FD = 1.0, HD = 0.5, Absent = 0.0
+            if (att.status === 'FD' || att.status === 'P' || att.status === 'Present') {
               presentDays += 1.0;
             } else if (att.status === 'HD' || att.status === 'Half Day') {
               presentDays += 0.5;
             } else if (att.status === '2P') {
-              presentDays += 2.0;
+              // Extended shifts remain 1 attendance day
+              presentDays += 1.0;
             }
           }
+          // Preserve historical penalties if already attached to legacy attendance row
           if (att.penalty_amount) {
             attendancePenalties += Number(att.penalty_amount);
           }
@@ -219,9 +222,12 @@ export async function syncMonthAttendanceToPeriods(
         presentDays = Number(existingPeriod.present_days) || 0;
       }
 
-      const allottedWeeklyOff = emp.allotted_weekly_off !== null && emp.allotted_weekly_off !== undefined
-        ? Number(emp.allotted_weekly_off)
-        : (existingPeriod ? Number(existingPeriod.allotted_weekly_off) : 4);
+      // Authoritative source of truth: manager-entered monthly entitlement on the salary period ONLY.
+      // Must NOT fall back to employees.allotted_weekly_off, and must NOT silently default to 4.
+      // If unconfirmed by manager, allottedWeeklyOff is null.
+      const allottedWeeklyOff = existingPeriod?.allotted_weekly_off !== null && existingPeriod?.allotted_weekly_off !== undefined
+        ? Number(existingPeriod.allotted_weekly_off)
+        : null;
 
       const manualDeductions = existingPeriod ? Number(existingPeriod.manual_deductions) || 0 : 0;
       const prevPending = existingPeriod

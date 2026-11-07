@@ -63,6 +63,7 @@ export default function StaffFinancialsPage() {
   const [drawerEmployeeId, setDrawerEmployeeId] = useState<string | null>(null);
   const [editingPeriod, setEditingPeriod] = useState<EmployeeSalarySummaryRow | null>(null);
   const [editDeductions, setEditDeductions] = useState<number>(0);
+  const [editWeeklyOff, setEditWeeklyOff] = useState<number | null>(null);
   const [editNotes, setEditNotes] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -176,6 +177,7 @@ export default function StaffFinancialsPage() {
           action: 'update',
           period_id: editingPeriod.period_id,
           manual_deductions: editDeductions,
+          allotted_weekly_off: editWeeklyOff,
           notes: editNotes,
         }),
       });
@@ -496,7 +498,9 @@ export default function StaffFinancialsPage() {
                         <td className="p-3 text-center whitespace-nowrap">
                           <span className="font-semibold text-stone-800">{r.pay_days}</span>
                           <span className="text-[10px] text-stone-400 block">
-                            ({r.present_days}P + {r.allotted_weekly_off}WO)
+                            {r.allotted_weekly_off !== null && r.allotted_weekly_off !== undefined
+                              ? `(${r.present_days}P + ${r.allotted_weekly_off}WO)`
+                              : `(${r.present_days}P + ? WO)`}
                           </span>
                         </td>
 
@@ -579,6 +583,11 @@ export default function StaffFinancialsPage() {
                                 onClick={() => {
                                   setEditingPeriod(r);
                                   setEditDeductions(Number(r.manual_deductions) || 0);
+                                  setEditWeeklyOff(
+                                    r.allotted_weekly_off !== null && r.allotted_weekly_off !== undefined
+                                      ? Number(r.allotted_weekly_off)
+                                      : null
+                                  );
                                   setEditNotes(r.notes || '');
                                 }}
                                 className="h-7 w-7 p-0 text-stone-500 hover:text-stone-800"
@@ -664,6 +673,28 @@ export default function StaffFinancialsPage() {
                 />
                 <p className="text-[11px] text-stone-400 mt-1">
                   {t('people.financials.editDeductionModal.penaltyDesc')}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  {t('people.financials.editDeductionModal.weeklyOff')}
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="31"
+                  value={editWeeklyOff !== null && editWeeklyOff !== undefined ? editWeeklyOff : ''}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    setEditWeeklyOff(val === '' ? null : Number(val));
+                  }}
+                  placeholder={t('people.financials.editDeductionModal.weeklyOffPlaceholder')}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold"
+                />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  {t('people.financials.editDeductionModal.weeklyOffDesc')}
                 </p>
               </div>
 

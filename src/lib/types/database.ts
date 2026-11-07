@@ -128,6 +128,70 @@ export interface EmployeeRole {
   team?: { id: string; name: string; name_hi?: string | null; department_id: string; department?: { id: string; name: string; name_hi?: string | null } };
 }
 
+export interface Employee {
+  id: string;
+  petpooja_emp_id?: number | null;
+  employee_code?: string | null;
+  name: string;
+  phone?: string | null;
+  department_id?: string | null;
+  team_id?: string | null;
+  role_id?: string | null;
+  joining_date: string;
+  employment_status: EmploymentStatus;
+  monthly_salary: number;
+  allotted_weekly_off?: number | null;
+  contractor_name?: string | null;
+  bank_details?: any;
+  leaving_date?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  department?: Department | null;
+  team?: Team | null;
+  role?: EmployeeRole | null;
+}
+
+export interface Attendance {
+  id: string;
+  employee_id: string;
+  business_date: string;
+  status: 'FD' | 'HD' | 'Absent' | 'Present' | 'Half Day' | 'Weekly Off' | 'Leave';
+  shift_multiplier: number;
+  source: 'petpooja_biometric' | 'manual';
+  petpooja_emp_id?: number | null;
+  punch_in?: string | null;
+  punch_out?: string | null;
+  working_hours?: string | null;
+  break_hours?: string | null;
+  import_batch_id?: string | null;
+  overtime_hours?: number;
+  penalty_amount?: number;
+  notes?: string | null;
+  marked_by?: string | null;
+  raw_metadata?: any;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AttendanceImportBatch {
+  id: string;
+  business_date: string;
+  file_name: string;
+  file_checksum: string;
+  record_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  fd_count: number;
+  hd_count: number;
+  absent_count: number;
+  report_structure?: string;
+  source: string;
+  imported_by?: string | null;
+  raw_metadata?: any;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface InventoryItemMaster {
   id: string;
   item_code: string;
@@ -254,7 +318,7 @@ export interface EmployeeSalaryPeriod {
   monthly_salary: number;
   days_in_month: number;
   present_days: number;
-  allotted_weekly_off: number;
+  allotted_weekly_off: number | null;
   pay_days: number;
   per_day_salary: number;
   gross_earned_salary: number;
@@ -301,7 +365,7 @@ export interface EmployeeSalarySummaryRow {
   monthly_salary: number;
   days_in_month: number;
   present_days: number;
-  allotted_weekly_off: number;
+  allotted_weekly_off: number | null;
   pay_days: number;
   per_day_salary: number;
   gross_earned_salary: number;
@@ -358,7 +422,7 @@ export interface MTDFinancialSummary {
   mtd_investor_share?: number;
 }
 
-export type EmploymentStatus = 'Active' | 'On Leave' | 'Resigned' | 'Terminated';
+export type EmploymentStatus = 'Active' | 'Inactive' | 'Left' | 'On Leave' | 'Resigned' | 'Terminated';
 
 export type InventoryStorageType = 'Ambient' | 'Refrigerated' | 'Frozen' | 'Fresh' | 'Other';
 

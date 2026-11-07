@@ -1,6 +1,6 @@
 {
-  "title": "Daily Staff Attendance",
-  "subtitle": "Record daily attendance, overtime, and shift status.",
+  "title": "Biometric Staff Attendance",
+  "subtitle": "Attendance is imported from Petpooja biometric attendance.",
   "statusLabel": "Attendance Status:",
   "recorded": "RECORDED",
   "notSubmitted": "NOT SUBMITTED FOR TODAY",
@@ -12,7 +12,11 @@
     "absent": "Absent",
     "weeklyOff": "Weekly Off",
     "leave": "Leave",
-    "overtimeHours": "Overtime Hours"
+    "overtimeHours": "Overtime Hours",
+    "totalStaff": "Total Staff",
+    "fullDay": "Full Day (FD)",
+    "halfDay": "Half Day (HD)",
+    "totalDays": "Attendance Days"
   },
   "rosterTitle": "Staff Attendance ({count})",
   "rosterSubtitle": "Log daily attendance, overtime, and deductions",
@@ -24,7 +28,14 @@
     "otHours": "OT (Hrs)",
     "penalty": "Penalty (₹)",
     "notes": "Notes",
-    "remarksPlaceholder": "Remarks..."
+    "remarksPlaceholder": "Remarks...",
+    "petpoojaId": "Petpooja ID",
+    "punchIn": "Punch In",
+    "punchOut": "Punch Out",
+    "workingHours": "Working Hours",
+    "breakHours": "Break",
+    "attendance": "Attendance",
+    "source": "Source"
   },
   "statusOptions": {
     "present": "Present",
@@ -32,11 +43,48 @@
     "weeklyOff": "Weekly Off",
     "halfDay": "Half Day",
     "doubleShift": "Double Shift",
-    "leave": "Leave"
+    "leave": "Leave",
+    "fd": "Full Day (FD)",
+    "hd": "Half Day (HD)"
   },
   "messages": {
     "savedSuccess": "Attendance for {count} staff members saved successfully.",
     "loadFailed": "Failed to load attendance register.",
-    "saveFailed": "Failed to save attendance: {error}"
+    "saveFailed": "Failed to save attendance: {error}",
+    "importSuccess": "Biometric attendance for {date} successfully imported ({count} staff).",
+    "importFailed": "Import failed: {error}",
+    "notReported": "No attendance imported for {date} yet.",
+    "searchPlaceholder": "Search by employee name or department..."
+  },
+  "biometric": {
+    "sourceNotice": "Attendance is imported from Petpooja biometric attendance.",
+    "readOnlyBanner": "This screen is review-only. Attendance records are imported directly from daily Petpooja fingerprint machine exports.",
+    "sourceBadge": "Petpooja Biometric",
+    "unrecorded": "Unrecorded"
+  },
+  "import": {
+    "title": "Upload Petpooja Attendance",
+    "subtitle": "Import daily single-date export (.xlsx, .xls, .csv)",
+    "dropzoneText": "Drag and drop Petpooja attendance file here, or click to browse",
+    "dropzoneHint": "Single-day Petpooja Attendance Master file (.xlsx, .xls, .csv)",
+    "uploadButton": "Upload & Import",
+    "uploading": "Importing Biometric Data...",
+    "viewHistory": "Import History",
+    "hideHistory": "Hide History",
+    "overwriteTitle": "Date Already Imported",
+    "overwriteWarning": "Biometric attendance for this date was previously imported. Confirm overwrite to replace.",
+    "overwriteConfirm": "Overwrite & Replace",
+    "cancel": "Cancel",
+    "unmappedTitle": "Unmapped Employees Detected",
+    "unmappedDesc": "The file contains employee IDs that are not mapped to any staff member in Yatra. All employees must be registered with their Petpooja Employee ID in People -> Employees first.",
+    "history": {
+      "title": "Petpooja Attendance Import Batches",
+      "date": "Attendance Date",
+      "fileName": "File Name",
+      "records": "Records",
+      "breakdown": "FD / HD / Absent",
+      "importedAt": "Imported At",
+      "checksum": "Checksum"
+    }
   }
 }

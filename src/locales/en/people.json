@@ -30,6 +30,7 @@
     },
     "table": {
       "code": "Code",
+      "petpoojaId": "Petpooja ID",
       "name": "Employee",
       "department": "Department / Team",
       "role": "Role",
@@ -40,8 +41,12 @@
       "viewLedger": "Ledger",
       "edit": "Edit"
     },
+    "connected": "Connected",
+    "notConnected": "Not Connected",
     "statuses": {
       "Active": "Active",
+      "Inactive": "Inactive",
+      "Left": "Left",
       "On Leave": "On Leave",
       "Resigned": "Resigned",
       "Terminated": "Terminated"
@@ -55,6 +60,9 @@
     "fullNamePlaceholder": "e.g. Ramesh Kumar",
     "empCode": "Employee Code",
     "empCodePlaceholder": "e.g. GY-EMP-104",
+    "petpoojaId": "Petpooja Employee ID",
+    "petpoojaIdPlaceholder": "e.g. 51",
+    "petpoojaIdHelp": "Numeric ID from Petpooja Biometric machine. Used for automatic attendance mapping.",
     "phone": "Contact Phone",
     "phonePlaceholder": "+91 98765 43210",
     "joiningDate": "Joining Date",
@@ -177,8 +185,11 @@
     "editDeductionModal": {
       "title": "Adjust Period Deductions",
       "employeeSubtitle": "{name} â€¢ {month}",
-      "penalty": "Manual Deductions (â‚¹)",
+      "penalty": "Manual Deductions (₹)",
       "penaltyDesc": "Manager adjustments, damages, or fines. (Attendance penalties are separate).",
+      "weeklyOff": "Weekly Off Entitlement (Days)",
+      "weeklyOffDesc": "Manager-approved weekly off entitlement for this month. Total Pay Days = Present Days + Weekly Off.",
+      "weeklyOffPlaceholder": "Unconfirmed (leave blank)",
       "notes": "Notes / Reason",
       "notesPlaceholder": "Reason for deduction adjustment...",
       "save": "Save Adjustments",

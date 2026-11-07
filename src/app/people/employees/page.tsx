@@ -15,6 +15,7 @@ import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface Employee {
   id: string;
+  petpooja_emp_id?: number | null;
   employee_code?: string;
   name: string;
   phone?: string;
@@ -258,7 +259,7 @@ export default function EmployeesPage() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           {/* Status Filter */}
           <div className="flex items-center gap-1 bg-stone-100 p-0.5 rounded-lg border border-stone-200 shrink-0 overflow-x-auto max-w-full scrollbar-none">
-            {(['ALL', 'Active', 'On Leave', 'Resigned', 'Terminated'] as const).map((st) => (
+            {(['ALL', 'Active', 'Inactive', 'Left', 'On Leave', 'Resigned', 'Terminated'] as const).map((st) => (
               <button
                 key={st}
                 type="button"
@@ -304,6 +305,7 @@ export default function EmployeesPage() {
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
                     <th className="py-2.5 px-3">{t('people.employees.table.code')}</th>
+                    <th className="py-2.5 px-3">{t('people.employees.table.petpoojaId')}</th>
                     <th className="py-2.5 px-3">{t('people.employees.table.name')}</th>
                     <th className="py-2.5 px-3">{t('people.employees.table.department')}</th>
                     <th className="py-2.5 px-3">{t('people.employees.table.role')}</th>
@@ -325,6 +327,20 @@ export default function EmployeesPage() {
                       >
                         <td className="py-3 px-3 font-mono text-stone-500 font-medium">
                           {e.employee_code || 'EMP'}
+                        </td>
+                        <td className="py-3 px-3">
+                          {e.petpooja_emp_id ? (
+                            <div className="flex items-center gap-1.5" title={`${t('people.modal.petpoojaId')}: ${e.petpooja_emp_id}`}>
+                              <span className="font-mono text-xs font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded border border-stone-200">
+                                #{e.petpooja_emp_id}
+                              </span>
+                              <span className="h-2 w-2 rounded-full bg-emerald-500" title={t('people.employees.connected')} />
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-stone-400 bg-stone-50 px-2 py-0.5 rounded border border-stone-200">
+                              {t('people.employees.notConnected')}
+                            </span>
+                          )}
                         </td>
                         <td
                           className="py-3 px-3 font-medium text-stone-900 cursor-pointer hover:text-amber-700 hover:underline"

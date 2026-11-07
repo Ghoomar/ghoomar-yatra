@@ -17,7 +17,7 @@ interface EmployeeModalProps {
   onSaved?: (emp: any) => void;
 }
 
-const EMPLOYMENT_STATUSES: EmploymentStatus[] = ['Active', 'On Leave', 'Resigned', 'Terminated'];
+const EMPLOYMENT_STATUSES: EmploymentStatus[] = ['Active', 'Inactive', 'Left', 'On Leave', 'Resigned', 'Terminated'];
 
 export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeModalProps) {
   const supabase = createClient();
@@ -25,6 +25,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
   const isEdit = Boolean(employee?.id);
 
   const [employeeCode, setEmployeeCode] = useState('');
+  const [petpoojaEmpId, setPetpoojaEmpId] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [joiningDate, setJoiningDate] = useState(getTodayBusinessDate());
@@ -76,6 +77,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
     if (employee) {
       setEmployeeCode(employee.employee_code || '');
+      setPetpoojaEmpId(employee.petpooja_emp_id !== null && employee.petpooja_emp_id !== undefined ? String(employee.petpooja_emp_id) : '');
       setName(employee.name || '');
       setPhone(employee.phone || '');
       setJoiningDate(employee.joining_date || getTodayBusinessDate());
@@ -92,6 +94,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
       setBankIfsc(bank.ifsc_code || '');
       setBankName(bank.bank_name || '');
     } else {
+      setPetpoojaEmpId('');
       setName('');
       setPhone('');
       setJoiningDate(getTodayBusinessDate());
@@ -147,6 +150,7 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
     try {
       const payload = {
         employee_code: employeeCode.trim() || null,
+        petpooja_emp_id: petpoojaEmpId.trim() ? parseInt(petpoojaEmpId.trim(), 10) : null,
         name: name.trim(),
         phone: phone.trim() || null,
         joining_date: joiningDate,
@@ -156,12 +160,13 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
         monthly_salary: salary,
         allotted_weekly_off: Number(allottedWeeklyOff) || 0,
         contractor_name: contractorName.trim() || null,
-        employment_status: employmentStatus,
-        bank_details: {
-          account_number: bankAccount.trim() || null,
-          ifsc_code: bankIfsc.trim() || null,
-          bank_name: bankName.trim() || null,
-        },
+        bank_details: (bankAccount.trim() || bankIfsc.trim() || bankName.trim())
+          ? {
+              account_number: bankAccount.trim() || null,
+              ifsc_code: bankIfsc.trim() || null,
+              bank_name: bankName.trim() || null,
+            }
+          : null,
         updated_at: new Date().toISOString(),
       };
 
@@ -282,6 +287,36 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
                     className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
                   />
                 </div>
+              </div>
+
+              {/* Petpooja Biometric Identity Bridge */}
+              <div className="rounded-lg border border-stone-200 bg-stone-50/70 p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-stone-800">
+                    {t('people.modal.petpoojaId')}
+                  </label>
+                  {petpoojaEmpId ? (
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
+                      ● {t('people.employees.connected')}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full font-medium">
+                      ○ {t('people.employees.notConnected')}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={petpoojaEmpId}
+                  onChange={(e) => setPetpoojaEmpId(e.target.value)}
+                  placeholder={t('people.modal.petpoojaIdPlaceholder')}
+                  className="w-full rounded-md border border-stone-300 bg-white p-2 text-xs font-mono text-stone-900 focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[11px] text-stone-500 mt-1">
+                  {t('people.modal.petpoojaIdHelp')}
+                </p>
               </div>
             </div>
 
