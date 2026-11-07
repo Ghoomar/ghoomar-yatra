@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveCallerAuth } from '@/lib/sops/auth';
 import { calculateAllRecipes, resolveAllGroupWacs, CostCalculationResult, CostingStatus } from '@/lib/sops/costing';
+import { getUnitDimension, normalizeUnit } from '@/lib/sops/costing/units';
 
 export async function GET(request: NextRequest) {
   try {
@@ -170,6 +171,38 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient();
+
+    // Helper to validate unit compatibility with active central master and engine
+    const isValidUnit = async (u: string | null | undefined): Promise<boolean> => {
+      if (!u) return true;
+      const clean = u.trim();
+      if (!clean) return true;
+      if (getUnitDimension(clean) !== 'UNKNOWN') return true;
+      const { data } = await admin
+        .from('units')
+        .select('id')
+        .eq('symbol', clean)
+        .eq('is_active', true)
+        .maybeSingle();
+      return Boolean(data);
+    };
+
+    if (batch_yield_unit && !(await isValidUnit(batch_yield_unit))) {
+      return NextResponse.json({ error: `Invalid or unrecognized batch yield unit: '${batch_yield_unit}'` }, { status: 400 });
+    }
+
+    if (portion_size_unit && !(await isValidUnit(portion_size_unit))) {
+      return NextResponse.json({ error: `Invalid or unrecognized portion size unit: '${portion_size_unit}'` }, { status: 400 });
+    }
+
+    if (Array.isArray(ingredients) && ingredients.length > 0) {
+      for (let i = 0; i < ingredients.length; i++) {
+        const ing = ingredients[i];
+        if (!ing.unit || !(await isValidUnit(ing.unit))) {
+          return NextResponse.json({ error: `Ingredient line ${i + 1} has an invalid or unrecognized unit: '${ing.unit || ''}'` }, { status: 400 });
+        }
+      }
+    }
 
     // Insert recipe header
     const { data: recipe, error: insertErr } = await admin

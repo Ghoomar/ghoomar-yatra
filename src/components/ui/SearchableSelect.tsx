@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { Search, ChevronDown, Check, X } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
+import { normalizeSearchTokens, buildSearchableText } from '@/lib/inventory/search';
 
 export interface SearchableSelectProps<T = any> {
   options: T[];
@@ -60,6 +61,7 @@ export function SearchableSelect<T = any>({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +76,23 @@ export function SearchableSelect<T = any>({
     media.addEventListener('change', updateMobile);
     return () => media.removeEventListener('change', updateMobile);
   }, []);
+
+  // Track visualViewport for Android virtual keyboard resilience
+  useEffect(() => {
+    if (!isOpen || !isMobile || typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleResize = () => {
+      setViewportHeight(vv.height);
+    };
+    handleResize();
+    vv.addEventListener('resize', handleResize);
+    return () => {
+      vv.removeEventListener('resize', handleResize);
+      setViewportHeight(null);
+    };
+  }, [isOpen, isMobile]);
 
   // Helper to extract value
   const getOptValue = useCallback(
@@ -110,24 +129,33 @@ export function SearchableSelect<T = any>({
     return options.find((opt) => getOptValue(opt) === value) || null;
   }, [options, value, getOptValue]);
 
-  // Multi-token search filtering
+  // Multi-token search filtering with family alias normalization and substring matching
   const filteredOptions = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
+    const trimmed = query.trim();
     if (!trimmed) return options;
 
-    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    const tokens = normalizeSearchTokens(trimmed);
+    if (tokens.length === 0) return options;
+
     return options.filter((opt) => {
       let searchable = '';
       if (getSearchableText) {
-        searchable = getSearchableText(opt).toLowerCase();
+        searchable = getSearchableText(opt);
       } else {
-        const primary = getOptLabel(opt).toLowerCase();
-        const secondary = getOptSecondary(opt)?.toLowerCase() || '';
+        const primary = getOptLabel(opt);
+        const secondary = getOptSecondary(opt) || '';
         const rawCode = (opt as any).item_code || (opt as any).code || (opt as any).employee_code || '';
         const rawNameHi = (opt as any).name_hi || '';
-        searchable = `${primary} ${secondary} ${rawCode} ${rawNameHi}`.toLowerCase();
+        const rawSearchFamily = (opt as any).search_family || '';
+        searchable = buildSearchableText({
+          name: `${primary} ${secondary}`.trim(),
+          name_hi: rawNameHi,
+          item_code: rawCode,
+          search_family: rawSearchFamily,
+        });
       }
-      return tokens.every((token) => searchable.includes(token));
+      const lowerSearchable = searchable.toLowerCase();
+      return tokens.every((token) => lowerSearchable.includes(token));
     });
   }, [options, query, getSearchableText, getOptLabel, getOptSecondary]);
 
@@ -322,7 +350,7 @@ export function SearchableSelect<T = any>({
                 onMouseEnter={() => setHighlightedIndex(idx)}
                 onClick={() => !isDisabled && handleSelect(opt)}
                 className={`
-                  flex items-center justify-between px-3 py-2 text-xs rounded-md transition-colors cursor-pointer select-none
+                  min-h-[44px] sm:min-h-[36px] flex items-center justify-between px-3 py-2.5 sm:py-2 text-xs rounded-md transition-colors cursor-pointer select-none
                   ${isDisabled ? 'opacity-40 cursor-not-allowed bg-stone-50' : ''}
                   ${!isDisabled && isHighlighted ? 'bg-amber-50 text-amber-950 font-medium' : 'text-stone-800'}
                   ${!isDisabled && isSelected ? 'bg-amber-100/70 text-amber-950 font-semibold' : ''}
@@ -424,7 +452,10 @@ export function SearchableSelect<T = any>({
               if (e.target === e.currentTarget) setIsOpen(false);
             }}
           >
-            <div className="w-full max-h-[85vh] rounded-t-2xl bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
+            <div
+              style={viewportHeight ? { maxHeight: `${Math.min(viewportHeight * 0.85, 600)}px` } : undefined}
+              className="w-full max-h-[85dvh] rounded-t-2xl bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200"
+            >
               {/* Mobile Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200">
                 <span className="font-bold text-sm text-stone-900">{effectivePlaceholder}</span>

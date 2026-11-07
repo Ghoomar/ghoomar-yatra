@@ -343,12 +343,33 @@ export function calculateVariantCost(
   } else if (recipeCalc.status === 'UNCOSTED' || recipeCalc.totalBatchCost === null) {
     incompleteReasons.push('Recipe contains uncosted ingredients');
   } else {
-    // Determine serving quantity & unit
-    const servingQty = variant.serving_quantity != null ? Number(variant.serving_quantity) : Number(recipe.portion_size_quantity || 0);
-    const servingUnit = variant.serving_unit || recipe.portion_size_unit;
+    // Paired-Null Contract:
+    // Case 1: Both null -> inherit recipe default
+    // Case 2: Both provided -> explicit variant override
+    // Case 3: Partial null -> invalid state error
+    const hasVariantQty = variant.serving_quantity !== null && variant.serving_quantity !== undefined;
+    const hasVariantUnit = variant.serving_unit !== null && variant.serving_unit !== undefined && String(variant.serving_unit).trim() !== '';
 
-    if (servingQty <= 0 || !servingUnit) {
-      incompleteReasons.push('Missing variant serving quantity or unit');
+    let servingQty: number | null = null;
+    let servingUnit: string | null = null;
+
+    if (!hasVariantQty && !hasVariantUnit) {
+      // Inherit recipe defaults
+      servingQty = recipe.portion_size_quantity != null ? Number(recipe.portion_size_quantity) : null;
+      servingUnit = recipe.portion_size_unit || null;
+    } else if (hasVariantQty && hasVariantUnit) {
+      // Explicit override
+      servingQty = Number(variant.serving_quantity);
+      servingUnit = String(variant.serving_unit).trim();
+    } else {
+      // Inconsistent partial null
+      incompleteReasons.push(
+        'Variant has an inconsistent partial portion specification (quantity and unit must both be provided or both omitted)'
+      );
+    }
+
+    if (servingQty === null || servingQty <= 0 || !servingUnit) {
+      incompleteReasons.push('Missing or invalid variant serving specification');
     } else if (recipe.batch_yield_quantity && recipe.batch_yield_unit) {
       const conv = convertDirectQuantity(servingQty, servingUnit, recipe.batch_yield_unit);
       if (!conv.possible || conv.converted === undefined) {

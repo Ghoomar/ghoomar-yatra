@@ -128,6 +128,21 @@ export interface UnitConversionOptions {
   itemName?: string;               // Optional label for error diagnostics ONLY (never for logic branching)
 }
 
+export interface CentralUnit {
+  id?: string;
+  name: string;
+  name_hi?: string | null;
+  symbol: string;
+  symbol_hi?: string | null;
+  is_active?: boolean;
+}
+
+export interface UnitOption {
+  value: string;
+  label: string;
+  dimension?: Dimension;
+}
+
 export function areUnitsCompatible(
   unitA: string,
   unitB: string,
@@ -294,3 +309,86 @@ export function convertDirectQuantity(
     error: `Incompatible container units without packaging conversion: '${fromUnit}' and '${toUnit}'.`,
   };
 }
+
+/**
+ * Checks whether a proposed unit is compatible with an ingredient's base unit.
+ */
+export function isUnitCompatibleWithIngredient(
+  proposedUnit: string,
+  baseUnitSymbol: string | null | undefined,
+  options?: UnitConversionOptions
+): boolean {
+  if (!proposedUnit || !baseUnitSymbol) return false;
+  return areUnitsCompatible(proposedUnit, baseUnitSymbol, options);
+}
+
+/**
+ * Derives dynamic, context-sensitive unit options for an ingredient.
+ * Derives strictly from active central units in public.units and conversion engine capabilities.
+ */
+export function getCompatibleUnitOptions(
+  baseUnitSymbol: string | null | undefined,
+  centralUnits?: CentralUnit[],
+  options?: UnitConversionOptions,
+  locale: 'en' | 'hi' = 'en'
+): UnitOption[] {
+  const normBase = normalizeUnit(baseUnitSymbol);
+  const baseDim = normBase ? getUnitDimension(normBase) : 'UNKNOWN';
+
+  const seenSymbols = new Set<string>();
+  const results: UnitOption[] = [];
+
+  const addOption = (value: string, label: string, dimension?: Dimension) => {
+    const norm = normalizeUnit(value);
+    if (!seenSymbols.has(norm)) {
+      seenSymbols.add(norm);
+      results.push({ value, label, dimension });
+    }
+  };
+
+  // If central units master list is supplied, filter active and compatible
+  if (centralUnits && centralUnits.length > 0) {
+    const activeUnits = centralUnits.filter(u => u.is_active !== false);
+
+    for (const u of activeUnits) {
+      if (!normBase || areUnitsCompatible(u.symbol, normBase, options)) {
+        const displaySymbol = u.symbol === 'kg' ? 'Kg' : (locale === 'hi' && u.symbol_hi ? u.symbol_hi : u.symbol);
+        const displayName = locale === 'hi' && u.name_hi ? u.name_hi : u.name;
+        const label = `${displaySymbol} (${displayName})`;
+        addOption(u.symbol, label, getUnitDimension(u.symbol));
+      }
+    }
+  } else {
+    // Fallback: derive from engine dimensions if central master is omitted
+    if (baseDim === 'MASS' || baseDim === 'VOLUME' || !normBase) {
+      addOption('kg', locale === 'hi' ? 'Kg (किलोग्राम)' : 'Kg (Kilogram)', 'MASS');
+      addOption('g', locale === 'hi' ? 'g (ग्राम)' : 'g (Gram)', 'MASS');
+      addOption('mg', locale === 'hi' ? 'mg (मिलीग्राम)' : 'mg (Milligram)', 'MASS');
+    }
+    if (baseDim === 'VOLUME' || baseDim === 'MASS' || !normBase) {
+      addOption('L', locale === 'hi' ? 'L (लीटर)' : 'L (Liter)', 'VOLUME');
+      addOption('ml', locale === 'hi' ? 'ml (मिलीलीटर)' : 'ml (Milliliter)', 'VOLUME');
+    }
+    if (baseDim === 'COUNT' || !normBase) {
+      addOption('pcs', locale === 'hi' ? 'pcs (पीस)' : 'pcs (Pieces)', 'COUNT');
+    }
+  }
+
+  // Engine special culinary unit: chutki (pinch = 0.36g) for mass-compatible items
+  if (baseDim === 'MASS' || (normBase && areUnitsCompatible('chutki', normBase, options))) {
+    const chutkiLabel = locale === 'hi' ? 'चुटकी (chutki ~0.36g)' : 'chutki (Pinch ~0.36g)';
+    addOption('chutki', chutkiLabel, 'MASS');
+  }
+
+  // Packaging units from item metadata
+  if (options?.packagingUnits && options.packagingUnits.length > 0) {
+    for (const pkg of options.packagingUnits) {
+      if (areUnitsCompatible(pkg.packUnit, normBase || 'pcs', options)) {
+        addOption(pkg.packUnit, `${pkg.packUnit} (${pkg.packSize} ${normBase || 'base'})`, 'CONTAINER');
+      }
+    }
+  }
+
+  return results;
+}
+

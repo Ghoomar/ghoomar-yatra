@@ -222,8 +222,21 @@ export async function GET(
             packaging_cost_takeaway: null,
           };
 
+      const isPortionOverridden = v.serving_quantity !== null && v.serving_unit !== null;
+      const isPortionInvalid = (v.serving_quantity !== null) !== (v.serving_unit !== null);
+      const effectiveServingQty = v.serving_quantity ?? v.recipe?.portion_size_quantity ?? null;
+      const effectiveServingUnit = v.serving_unit ?? v.recipe?.portion_size_unit ?? null;
+      const recipeDefaultPortionDisplay = `${v.recipe?.portion_size_quantity || '—'} ${v.recipe?.portion_size_unit || ''}`.trim();
+
       return {
         ...baseVariant,
+        is_portion_overridden: isPortionOverridden,
+        is_portion_invalid: isPortionInvalid,
+        raw_serving_quantity: v.serving_quantity,
+        raw_serving_unit: v.serving_unit,
+        effective_serving_quantity: effectiveServingQty,
+        effective_serving_unit: effectiveServingUnit,
+        recipe_default_portion_display: recipeDefaultPortionDisplay,
         dine_in: sanitize(dineInCalc),
         takeaway: sanitize(takeawayCalc),
       };
@@ -293,9 +306,31 @@ export async function PUT(
     }
 
     const updatePayload: any = { updated_at: new Date().toISOString() };
-    if (serving_quantity !== undefined)
-      updatePayload.serving_quantity = serving_quantity != null ? Number(serving_quantity) : null;
-    if (serving_unit !== undefined) updatePayload.serving_unit = serving_unit?.trim() || null;
+
+    // Paired-Null Contract Validation for variant portion specification
+    if (serving_quantity !== undefined || serving_unit !== undefined) {
+      const hasQty = serving_quantity !== undefined && serving_quantity !== null && serving_quantity !== '';
+      const hasUnit = serving_unit !== undefined && serving_unit !== null && String(serving_unit).trim() !== '';
+
+      if (hasQty !== hasUnit) {
+        return NextResponse.json({
+          error: 'Invalid portion specification: serving_quantity and serving_unit must both be provided together for an override, or both set to null to inherit from the recipe default.',
+        }, { status: 400 });
+      }
+
+      if (!hasQty && !hasUnit) {
+        updatePayload.serving_quantity = null;
+        updatePayload.serving_unit = null;
+      } else {
+        const qty = Number(serving_quantity);
+        if (isNaN(qty) || qty <= 0) {
+          return NextResponse.json({ error: 'Serving quantity must be a positive number' }, { status: 400 });
+        }
+        updatePayload.serving_quantity = qty;
+        updatePayload.serving_unit = String(serving_unit).trim();
+      }
+    }
+
     if (gas_cost !== undefined) updatePayload.gas_cost = gas_cost != null ? Number(gas_cost) : 0;
     if (other_operating_cost !== undefined)
       updatePayload.other_operating_cost = other_operating_cost != null ? Number(other_operating_cost) : 0;

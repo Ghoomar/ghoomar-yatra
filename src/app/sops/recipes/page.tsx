@@ -12,6 +12,8 @@ import { canViewCosting } from '@/lib/rbac';
 import { formatINR } from '@/lib/utils';
 import { filterLogicalIngredientGroups } from '@/lib/inventory/search';
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
+import { createClient } from '@/lib/supabase/client';
+import { getCompatibleUnitOptions, CentralUnit } from '@/lib/sops/costing/units';
 import {
   UtensilsCrossed,
   Plus,
@@ -26,6 +28,7 @@ import {
   X,
   BookOpen,
   ArrowRight,
+  Zap,
 } from 'lucide-react';
 
 interface RecipeListItem {
@@ -72,6 +75,17 @@ function RecipesContent() {
   const [categoryTab, setCategoryTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Units Master Data
+  const [centralUnits, setCentralUnits] = useState<CentralUnit[]>([]);
+
+  // Quick Add Preparation Modal State
+  const [isQuickPrepOpen, setIsQuickPrepOpen] = useState(false);
+  const [quickPrepName, setQuickPrepName] = useState('');
+  const [quickPrepNameHi, setQuickPrepNameHi] = useState('');
+  const [isQuickCustomHindi, setIsQuickCustomHindi] = useState(false);
+  const [quickPrepCreating, setQuickPrepCreating] = useState(false);
+  const [quickPrepError, setQuickPrepError] = useState<string | null>(null);
 
   // New Recipe Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -149,7 +163,55 @@ function RecipesContent() {
 
   useEffect(() => {
     fetchRecipes();
+    const supabase = createClient();
+    supabase
+      .from('units')
+      .select('id, name, name_hi, symbol, symbol_hi, is_active')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => {
+        if (data) setCentralUnits(data as CentralUnit[]);
+      });
   }, []);
+
+  const handleQuickAddPrep = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickPrepName.trim()) {
+      setQuickPrepError(locale === 'hi' ? 'रेसिपी का नाम आवश्यक है' : 'Recipe name is required');
+      return;
+    }
+
+    setQuickPrepCreating(true);
+    setQuickPrepError(null);
+    try {
+      const res = await fetch('/api/sops/recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: quickPrepName.trim(),
+          name_hi: quickPrepNameHi?.trim() || null,
+          category: 'PREPARATION',
+          ingredients: [],
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to create preparation');
+      }
+
+      const data = await res.json();
+      setIsQuickPrepOpen(false);
+      setQuickPrepName('');
+      setQuickPrepNameHi('');
+      setIsQuickCustomHindi(false);
+      router.push(`/sops/recipes/${data.recipe.id}`);
+    } catch (err: any) {
+      setQuickPrepError(err.message || 'Error creating preparation');
+    } finally {
+      setQuickPrepCreating(false);
+    }
+  };
 
   useEffect(() => {
     if (categoryTab === 'COMBOS' && !combosLoaded) {
@@ -310,6 +372,24 @@ function RecipesContent() {
 
           {canManage && (
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setQuickPrepName('');
+                setQuickPrepNameHi('');
+                setIsQuickCustomHindi(false);
+                setQuickPrepError(null);
+                setIsQuickPrepOpen(true);
+              }}
+              className="gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-50 cursor-pointer"
+            >
+              <Zap className="h-4 w-4 text-amber-600" />
+              {t('sops.recipes.quickAddPrep')}
+            </Button>
+          )}
+
+          {canManage && (
+            <Button
               variant="primary"
               size="sm"
               onClick={() => {
@@ -334,10 +414,10 @@ function RecipesContent() {
                 }
                 setIsModalOpen(true);
               }}
-              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+              className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-sm cursor-pointer"
             >
               <Plus className="h-4 w-4" />
-              {t('sops.recipes.newRecipe')}
+              {t('sops.recipes.createFullRecipe')}
             </Button>
           )}
         </div>
@@ -618,6 +698,80 @@ function RecipesContent() {
         </CardContent>
       </Card>
 
+      {/* Quick Add Preparation Modal */}
+      {isQuickPrepOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-[#E7E2D8] animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E2D8] bg-[#FAF8F5]">
+              <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-600" />
+                {t('sops.recipes.quickAddPrep')}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsQuickPrepOpen(false)}
+                className="text-stone-400 hover:text-stone-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddPrep} className="p-6 space-y-4">
+              <p className="text-xs text-stone-500">
+                {t('sops.recipes.quickAddDescription')}
+              </p>
+
+              {quickPrepError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs">
+                  {quickPrepError}
+                </div>
+              )}
+
+              <BilingualNameInput
+                englishName={quickPrepName}
+                onChangeEnglish={setQuickPrepName}
+                hindiName={quickPrepNameHi}
+                onChangeHindi={setQuickPrepNameHi}
+                isCustomHindi={isQuickCustomHindi}
+                onCustomHindiChange={setIsQuickCustomHindi}
+                entityType="recipe"
+                englishLabel={locale === 'hi' ? 'रेसिपी का नाम (अंग्रेज़ी) *' : 'Recipe Name (English) *'}
+                hindiLabel={locale === 'hi' ? 'रेसिपी का नाम (हिंदी) - वैकल्पिक' : 'Recipe Name (Hindi) — Optional'}
+                placeholderEnglish="e.g. Tomato Gravy Base"
+                placeholderHindi="उदा. टमाटर ग्रेवी बेस"
+                required
+              />
+
+              <div className="text-xs text-stone-500 bg-stone-50 p-2.5 rounded-lg border border-[#E7E2D8] flex items-center gap-2">
+                <Badge variant="info" className="text-[10px]">
+                  {t('sops.recipes.preparations')}
+                </Badge>
+                <span>{locale === 'hi' ? 'श्रेणी स्वतः बेस तैयारी (PREPARATION) पर सेट होगी' : 'Category automatically set to Base Preparation'}</span>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsQuickPrepOpen(false)}
+                  disabled={quickPrepCreating}
+                >
+                  {t('sops.recipes.cancel')}
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={quickPrepCreating || !quickPrepName.trim()}
+                  className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                >
+                  {quickPrepCreating ? (locale === 'hi' ? 'सहेजा जा रहा है...' : 'Creating...') : (locale === 'hi' ? 'तैयारी बनाएं' : 'Create Preparation')}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Create Recipe Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -689,22 +843,26 @@ function RecipesContent() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    Yield Unit
+                    {t('sops.recipes.yieldUnit')}
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newForm.batch_yield_unit}
                     onChange={(e) => setNewForm({ ...newForm, batch_yield_unit: e.target.value })}
-                    placeholder="kg, L, pcs..."
-                    className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                  />
+                    className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 cursor-pointer"
+                  >
+                    {getCompatibleUnitOptions(newForm.category === 'FINAL_DISH' ? 'pcs' : 'kg', centralUnits, undefined, locale).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    Portion Size Quantity
+                    {t('sops.recipes.portionQuantity')}
                   </label>
                   <input
                     type="number"
@@ -717,15 +875,20 @@ function RecipesContent() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    Portion Unit
+                    {t('sops.recipes.portionUnit')}
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newForm.portion_size_unit}
                     onChange={(e) => setNewForm({ ...newForm, portion_size_unit: e.target.value })}
-                    placeholder="g, ml, pcs..."
-                    className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                  />
+                    className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">{t('sops.recipes.selectUnit')}</option>
+                    {getCompatibleUnitOptions('g', centralUnits, undefined, locale).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

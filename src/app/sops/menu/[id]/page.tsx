@@ -13,6 +13,8 @@ import { formatINR, formatNullablePrice } from '@/lib/utils';
 import { getBusinessDateRange } from '@/lib/business-date-ranges';
 import { MENU_SALES_CHANNELS, menuSalesChannelTranslationKey, parseMenuSalesChannel, type MenuSalesChannel } from '@/lib/sales/menu-channels';
 import { getCategoryColor } from '@/lib/constants/category-colors';
+import { createClient } from '@/lib/supabase/client';
+import { getCompatibleUnitOptions, CentralUnit } from '@/lib/sops/costing/units';
 import {
   ArrowLeft,
   UtensilsCrossed,
@@ -74,6 +76,20 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
   // Editing state for variant costs
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
+  const [overridePortion, setOverridePortion] = useState(false);
+  const [centralUnits, setCentralUnits] = useState<CentralUnit[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from('units')
+      .select('id, name, name_hi, symbol, symbol_hi, is_active')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => {
+        if (data) setCentralUnits(data as CentralUnit[]);
+      });
+  }, []);
 
   const fetchMenuItemDetail = async () => {
     const sequence = ++fetchSequence.current;
@@ -134,9 +150,11 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
 
   const handleStartEdit = (v: any) => {
     setEditingVariantId(v.id);
+    const hasOverride = v.is_portion_overridden ?? Boolean(v.serving_quantity !== null && v.serving_unit !== null);
+    setOverridePortion(hasOverride);
     setEditForm({
       serving_quantity: v.serving_quantity != null ? v.serving_quantity : '',
-      serving_unit: v.serving_unit || '',
+      serving_unit: v.serving_unit || v.recipe?.portion_size_unit || 'g',
       gas_cost: v.gas_cost != null ? v.gas_cost : 0,
       other_operating_cost: v.other_operating_cost != null ? v.other_operating_cost : 0,
       packaging_cost_dine_in: v.packaging_cost_dine_in != null ? v.packaging_cost_dine_in : 0,
@@ -147,6 +165,18 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
   };
 
   const handleSaveVariant = async (variantId: string) => {
+    const payloadServingQty = overridePortion
+      ? editForm.serving_quantity ? Number(editForm.serving_quantity) : null
+      : null;
+    const payloadServingUnit = overridePortion
+      ? editForm.serving_unit?.trim() || null
+      : null;
+
+    if (overridePortion && (!payloadServingQty || !payloadServingUnit)) {
+      alert(locale === 'hi' ? 'ओवरराइड के लिए मात्रा और इकाई दोनों अनिवार्य हैं' : 'Both quantity and unit are required when overriding the recipe default portion.');
+      return;
+    }
+
     setSavingVariantId(variantId);
     try {
       const res = await fetch(`/api/sops/menu/${id}`, {
@@ -154,8 +184,8 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           variant_id: variantId,
-          serving_quantity: editForm.serving_quantity ? Number(editForm.serving_quantity) : null,
-          serving_unit: editForm.serving_unit || null,
+          serving_quantity: payloadServingQty,
+          serving_unit: payloadServingUnit,
           gas_cost: Number(editForm.gas_cost) || 0,
           other_operating_cost: Number(editForm.other_operating_cost) || 0,
           packaging_cost_dine_in: Number(editForm.packaging_cost_dine_in) || 0,
@@ -478,31 +508,65 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
                           {t('sops.variantEditor.title')}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-stone-700 mb-1">
-                              {t('sops.variantEditor.servingQuantity')}
-                            </label>
+                        {/* Portion Size Inheritance vs Override Toggle */}
+                        <div className="bg-white p-3.5 rounded-xl border border-amber-200 space-y-2.5">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
                             <input
-                              type="number"
-                              step="any"
-                              value={editForm.serving_quantity}
-                              onChange={(e) => setEditForm({ ...editForm, serving_quantity: e.target.value })}
-                              className="w-full px-3 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
+                              type="checkbox"
+                              checked={overridePortion}
+                              onChange={(e) => setOverridePortion(e.target.checked)}
+                              className="rounded border-[#E7E2D8] text-amber-600 focus:ring-amber-500 h-4 w-4 cursor-pointer"
                             />
-                          </div>
+                            <span className="text-xs font-semibold text-stone-800">
+                              {t('sops.variantEditor.overrideRecipePortion')}
+                            </span>
+                          </label>
 
-                          <div>
-                            <label className="block text-xs font-semibold text-stone-700 mb-1">
-                              {t('sops.variantEditor.servingUnit')}
-                            </label>
-                            <input
-                              type="text"
-                              value={editForm.serving_unit}
-                              onChange={(e) => setEditForm({ ...editForm, serving_unit: e.target.value })}
-                              className="w-full px-3 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
-                            />
-                          </div>
+                          {!overridePortion ? (
+                            <div className="text-xs text-stone-600 flex items-center gap-2 bg-stone-50 p-2.5 rounded-lg border border-stone-200">
+                              <span>{t('sops.variantEditor.inheritedFromRecipe')}</span>
+                              <Badge variant="outline" className="font-mono text-stone-800 bg-white text-xs">
+                                {v.recipe_default_portion_display || `${v.recipe?.portion_size_quantity || '—'} ${v.recipe?.portion_size_unit || ''}`}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                                  {t('sops.variantEditor.servingQuantity')} *
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={editForm.serving_quantity}
+                                  onChange={(e) => setEditForm({ ...editForm, serving_quantity: e.target.value })}
+                                  placeholder="e.g. 250"
+                                  className="w-full px-3 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                                  {t('sops.variantEditor.servingUnit')} *
+                                </label>
+                                <select
+                                  value={editForm.serving_unit}
+                                  onChange={(e) => setEditForm({ ...editForm, serving_unit: e.target.value })}
+                                  className="w-full px-3 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
+                                  required
+                                >
+                                  {getCompatibleUnitOptions(v.recipe?.portion_size_unit || v.recipe?.batch_yield_unit || 'g', centralUnits, undefined, locale).map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
                           <div>
                             <label className="block text-xs font-semibold text-stone-700 mb-1">

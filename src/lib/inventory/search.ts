@@ -27,7 +27,7 @@ export interface LogicalIngredientGroup {
   [key: string]: any;
 }
 
-export const CHILLI_FAMILY_TOKENS = new Set(['chilli', 'chili', 'chilly', 'mirch', 'mirchi', 'मिर्च', 'मिर्ची']);
+export const CHILLI_FAMILY_TOKENS = new Set(['chilli', 'chili', 'chilly', 'chily', 'mirch', 'mirchi', 'मिर्च', 'मिर्ची']);
 export const CANONICAL_CHILLI_TOKEN = '__chilli_family__';
 
 /**

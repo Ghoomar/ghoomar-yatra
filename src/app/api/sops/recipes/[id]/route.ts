@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveCallerAuth } from '@/lib/sops/auth';
 import { calculateAllRecipes, resolveAllGroupWacs, CostCalculationResult } from '@/lib/sops/costing';
 import { getWhereUsedRecipes } from '@/lib/sops/recipes/where-used';
+import { getUnitDimension, areUnitsCompatible } from '@/lib/sops/costing/units';
 
 export async function GET(
   request: NextRequest,
@@ -189,56 +190,229 @@ export async function PUT(
 
     const admin = createAdminClient();
 
-    // 1. Update recipe header
-    const updatePayload: any = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updatePayload.name = name.trim();
-    if (name_hi !== undefined) updatePayload.name_hi = name_hi?.trim() || null;
-    if (category !== undefined) updatePayload.category = category;
-    if (batch_yield_quantity !== undefined)
-      updatePayload.batch_yield_quantity = batch_yield_quantity ? Number(batch_yield_quantity) : null;
-    if (batch_yield_unit !== undefined) updatePayload.batch_yield_unit = batch_yield_unit?.trim() || null;
-    if (portion_size_quantity !== undefined)
-      updatePayload.portion_size_quantity = portion_size_quantity ? Number(portion_size_quantity) : null;
-    if (portion_size_unit !== undefined) updatePayload.portion_size_unit = portion_size_unit?.trim() || null;
-    if (instructions !== undefined) updatePayload.instructions = instructions;
-    if (notes !== undefined) updatePayload.notes = notes;
-    if (is_active !== undefined) updatePayload.is_active = Boolean(is_active);
+    // Helper to validate unit compatibility with active central master and engine
+    const isValidUnit = async (u: string | null | undefined): Promise<boolean> => {
+      if (!u) return true;
+      const clean = u.trim();
+      if (!clean) return true;
+      if (getUnitDimension(clean) !== 'UNKNOWN') return true;
+      const { data } = await admin
+        .from('units')
+        .select('id')
+        .eq('symbol', clean)
+        .eq('is_active', true)
+        .maybeSingle();
+      return Boolean(data);
+    };
 
-    const { data: updatedRecipe, error: updateErr } = await admin
-      .from('yatra_recipes')
-      .update(updatePayload)
-      .eq('id', id)
-      .select()
-      .single();
+    if (batch_yield_unit && !(await isValidUnit(batch_yield_unit))) {
+      return NextResponse.json({ error: `Invalid or unrecognized batch yield unit: '${batch_yield_unit}'` }, { status: 400 });
+    }
 
-    if (updateErr) throw updateErr;
+    if (portion_size_unit && !(await isValidUnit(portion_size_unit))) {
+      return NextResponse.json({ error: `Invalid or unrecognized portion size unit: '${portion_size_unit}'` }, { status: 400 });
+    }
 
-    // 2. Synchronize ingredients if provided
-    if (Array.isArray(ingredients)) {
-      // Remove previous ingredients for this recipe
-      const { error: delErr } = await admin
-        .from('yatra_recipe_ingredients')
-        .delete()
-        .eq('recipe_id', id);
-
-      if (delErr) throw delErr;
-
-      if (ingredients.length > 0) {
-        const rows = ingredients.map((ing: any, idx: number) => ({
-          recipe_id: id,
-          ingredient_type: ing.ingredient_type,
-          ingredient_group_id: ing.ingredient_type === 'RAW_MATERIAL' ? ing.ingredient_group_id : null,
-          inventory_item_id: ing.ingredient_type === 'RAW_MATERIAL' ? ing.inventory_item_id || null : null,
-          sub_recipe_id: ing.ingredient_type === 'PREPARATION' ? ing.sub_recipe_id : null,
-          quantity: Number(ing.quantity),
-          unit: ing.unit,
-          sort_order: ing.sort_order ?? idx + 1,
-          notes: ing.notes || null,
-        }));
-
-        const { error: insErr } = await admin.from('yatra_recipe_ingredients').insert(rows);
-        if (insErr) throw insErr;
+    if (Array.isArray(ingredients) && ingredients.length > 0) {
+      for (let i = 0; i < ingredients.length; i++) {
+        const ing = ingredients[i];
+        if (!ing.unit || !(await isValidUnit(ing.unit))) {
+          return NextResponse.json({ error: `Ingredient line ${i + 1} has an invalid or unrecognized unit: '${ing.unit || ''}'` }, { status: 400 });
+        }
       }
+    }
+
+    // Validate costing compatibility whenever category, batch yield, or portion size changes
+    const costingFieldProvided =
+      category !== undefined ||
+      batch_yield_quantity !== undefined ||
+      batch_yield_unit !== undefined ||
+      portion_size_quantity !== undefined ||
+      portion_size_unit !== undefined;
+
+    if (costingFieldProvided) {
+      const { data: currentRecipe } = await admin
+        .from('yatra_recipes')
+        .select('category, portion_size_quantity, portion_size_unit, batch_yield_quantity, batch_yield_unit')
+        .eq('id', id)
+        .single();
+
+      if (currentRecipe) {
+        const curCat = currentRecipe.category;
+        const targetCat = category !== undefined ? category : curCat;
+
+        const effPortionQty = portion_size_quantity !== undefined ? (portion_size_quantity != null && portion_size_quantity !== '' ? Number(portion_size_quantity) : null) : currentRecipe.portion_size_quantity;
+        const effPortionUnit = portion_size_unit !== undefined ? (portion_size_unit?.trim() || null) : currentRecipe.portion_size_unit;
+        const effYieldQty = batch_yield_quantity !== undefined ? (batch_yield_quantity != null && batch_yield_quantity !== '' ? Number(batch_yield_quantity) : null) : currentRecipe.batch_yield_quantity;
+        const effYieldUnit = batch_yield_unit !== undefined ? (batch_yield_unit?.trim() || null) : currentRecipe.batch_yield_unit;
+
+        const categoryChanged = curCat !== targetCat;
+        const yieldQtyChanged = effYieldQty !== currentRecipe.batch_yield_quantity;
+        const yieldUnitChanged = effYieldUnit !== currentRecipe.batch_yield_unit;
+        const portionQtyChanged = effPortionQty !== currentRecipe.portion_size_quantity;
+        const portionUnitChanged = effPortionUnit !== currentRecipe.portion_size_unit;
+
+        const costingChanged = categoryChanged || yieldQtyChanged || yieldUnitChanged || portionQtyChanged || portionUnitChanged;
+
+        if (costingChanged) {
+          // Fetch active dependencies
+          const [parentsRes, variantsRes, combosRes] = await Promise.all([
+            admin.from('yatra_recipe_ingredients').select('quantity, unit, yatra_recipes!recipe_id(name)').eq('sub_recipe_id', id),
+            admin.from('yatra_menu_item_variants').select('id, variant_name, serving_quantity, serving_unit').eq('recipe_id', id).eq('is_active', true),
+            admin.from('yatra_combo_components').select('id, component_name, portion_quantity, portion_unit, yatra_combos_thalis(name)').eq('recipe_id', id),
+          ]);
+
+          const parentIngredients = parentsRes.data || [];
+          const parentCount = parentIngredients.length;
+          const activeVariants = variantsRes.data || [];
+          const comboComponents = combosRes.data || [];
+          const variantCount = activeVariants.length;
+          const comboCount = comboComponents.length;
+
+          // DEPENDENCY 1: Parent Recipes
+          if (parentCount > 0) {
+            if (targetCat === 'FINAL_DISH') {
+              return NextResponse.json({
+                error: `Cannot change category to FINAL_DISH: recipe is referenced as a sub-recipe in ${parentCount} parent recipe(s). Remove sub-recipe references before changing category.`
+              }, { status: 400 });
+            }
+            if (!effYieldQty || effYieldQty <= 0) {
+              return NextResponse.json({
+                error: `Cannot update batch yield: ${parentCount} parent recipe(s) depend on this recipe and require a positive batch yield quantity for sub-recipe costing.`
+              }, { status: 400 });
+            }
+            if (!effYieldUnit) {
+              return NextResponse.json({
+                error: `Cannot remove batch yield unit: ${parentCount} parent recipe(s) depend on this recipe for sub-recipe costing.`
+              }, { status: 400 });
+            }
+            if (yieldUnitChanged && effYieldUnit) {
+              for (const parentIng of parentIngredients) {
+                if (!areUnitsCompatible(parentIng.unit, effYieldUnit)) {
+                  const pName = (parentIng.yatra_recipes as any)?.name || 'parent recipe';
+                  return NextResponse.json({
+                    error: `Cannot change batch yield unit to "${effYieldUnit}": parent recipe "${pName}" consumes this sub-recipe in "${parentIng.unit}" which cannot be converted to "${effYieldUnit}".`
+                  }, { status: 400 });
+                }
+              }
+            }
+          }
+
+          // DEPENDENCY 2: Active Menu Item Variants
+          if (variantCount > 0) {
+            if (['PREPARATION', 'COMBO_PORTION', 'BULK_CATERING'].includes(targetCat)) {
+              if (!effYieldQty || effYieldQty <= 0 || !effYieldUnit) {
+                return NextResponse.json({
+                  error: `Cannot update recipe: category is ${targetCat} and recipe is linked to ${variantCount} active menu item variant(s), requiring finished batch yield quantity and unit for variant costing.`
+                }, { status: 400 });
+              }
+            }
+
+            for (const v of activeVariants) {
+              const effVarQty = v.serving_quantity ?? effPortionQty;
+              const effVarUnit = v.serving_unit || effPortionUnit;
+
+              if (!effVarQty || effVarQty <= 0 || !effVarUnit) {
+                return NextResponse.json({
+                  error: `Cannot update costing specifications: active variant "${v.variant_name}" has no effective serving quantity or unit.`
+                }, { status: 400 });
+              }
+
+              if (['PREPARATION', 'COMBO_PORTION', 'BULK_CATERING'].includes(targetCat)) {
+                if (effYieldUnit && !areUnitsCompatible(effVarUnit, effYieldUnit)) {
+                  return NextResponse.json({
+                    error: `Cannot update recipe: active variant "${v.variant_name}" uses effective serving unit "${effVarUnit}" which cannot be converted to the recipe finished batch yield unit "${effYieldUnit}".`
+                  }, { status: 400 });
+                }
+              } else if (targetCat === 'FINAL_DISH') {
+                if (effYieldUnit && !areUnitsCompatible(effVarUnit, effYieldUnit)) {
+                  return NextResponse.json({
+                    error: `Cannot update recipe: active variant "${v.variant_name}" uses effective serving unit "${effVarUnit}" which cannot be converted to recipe batch yield unit "${effYieldUnit}".`
+                  }, { status: 400 });
+                }
+              }
+            }
+          }
+
+          // DEPENDENCY 3: Combo / Thali Components
+          if (comboCount > 0) {
+            if (['PREPARATION', 'COMBO_PORTION', 'BULK_CATERING'].includes(targetCat)) {
+              if (!effYieldQty || effYieldQty <= 0 || !effYieldUnit) {
+                return NextResponse.json({
+                  error: `Cannot update recipe: category is ${targetCat} and recipe is linked to ${comboCount} combo/thali component(s), requiring finished batch yield quantity and unit for component costing.`
+                }, { status: 400 });
+              }
+              for (const comp of comboComponents) {
+                if (effYieldUnit && !areUnitsCompatible(comp.portion_unit, effYieldUnit)) {
+                  const cName = (comp.yatra_combos_thalis as any)?.name || 'combo';
+                  return NextResponse.json({
+                    error: `Cannot update recipe: combo/thali component "${comp.component_name}" in "${cName}" uses portion unit "${comp.portion_unit}" which cannot be converted to the recipe batch yield unit "${effYieldUnit}".`
+                  }, { status: 400 });
+                }
+              }
+            } else if (targetCat === 'FINAL_DISH') {
+              if (!effPortionQty || effPortionQty <= 0 || !effPortionUnit) {
+                return NextResponse.json({
+                  error: 'Cannot update FINAL_DISH recipe: recipe requires a positive portion size quantity and valid portion size unit.'
+                }, { status: 400 });
+              }
+              for (const comp of comboComponents) {
+                const compDim = getUnitDimension(comp.portion_unit);
+                if (compDim !== 'COUNT' && !areUnitsCompatible(comp.portion_unit, effPortionUnit)) {
+                  const cName = (comp.yatra_combos_thalis as any)?.name || 'combo';
+                  return NextResponse.json({
+                    error: `Cannot update recipe: combo/thali component "${comp.component_name}" in "${cName}" uses portion unit "${comp.portion_unit}" which is incompatible with the recipe portion unit "${effPortionUnit}".`
+                  }, { status: 400 });
+                }
+              }
+            }
+          }
+
+          if (targetCat === 'FINAL_DISH' && (!effPortionQty || effPortionQty <= 0 || !effPortionUnit)) {
+            return NextResponse.json({
+              error: 'Cannot update FINAL_DISH recipe: recipe requires a positive portion size quantity and valid portion size unit.'
+            }, { status: 400 });
+          }
+        }
+      }
+    }
+
+    // Build partial header update payload
+    const updateHeader: Record<string, any> = {};
+    if (name !== undefined) updateHeader.name = name.trim();
+    if (name_hi !== undefined) updateHeader.name_hi = name_hi?.trim() || null;
+    if (category !== undefined) updateHeader.category = category;
+    if (batch_yield_quantity !== undefined)
+      updateHeader.batch_yield_quantity = batch_yield_quantity != null && batch_yield_quantity !== '' ? Number(batch_yield_quantity) : null;
+    if (batch_yield_unit !== undefined) updateHeader.batch_yield_unit = batch_yield_unit?.trim() || null;
+    if (portion_size_quantity !== undefined)
+      updateHeader.portion_size_quantity = portion_size_quantity != null && portion_size_quantity !== '' ? Number(portion_size_quantity) : null;
+    if (portion_size_unit !== undefined) updateHeader.portion_size_unit = portion_size_unit?.trim() || null;
+    if (instructions !== undefined) updateHeader.instructions = instructions;
+    if (notes !== undefined) updateHeader.notes = notes;
+    if (is_active !== undefined) updateHeader.is_active = Boolean(is_active);
+
+    // Call atomic transactional function
+    const { data: updatedRecipe, error: rpcErr } = await admin.rpc('fn_sync_yatra_recipe_atomic', {
+      p_recipe_id: id,
+      p_header: updateHeader,
+      p_ingredients: Array.isArray(ingredients) ? ingredients : null,
+    });
+
+    if (rpcErr) {
+      const msg = rpcErr.message || 'Database error during recipe update';
+      if (
+        msg.includes('Cannot change category') ||
+        msg.includes('Invalid') ||
+        msg.includes('requires') ||
+        msg.includes('cannot specify') ||
+        msg.includes('strictly greater than 0') ||
+        msg.includes('missing') ||
+        msg.includes('cycle')
+      ) {
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
+      throw rpcErr;
     }
 
     return NextResponse.json({ success: true, recipe: updatedRecipe });

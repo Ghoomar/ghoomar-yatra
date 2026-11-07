@@ -10,6 +10,15 @@ import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
 import { canViewCosting } from '@/lib/rbac';
 import { formatINR } from '@/lib/utils';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
+import { getSearchableItemText } from '@/lib/inventory/search';
+import { createClient } from '@/lib/supabase/client';
+import {
+  getCompatibleUnitOptions,
+  getUnitDimension,
+  areUnitsCompatible,
+  CentralUnit,
+} from '@/lib/sops/costing/units';
 import {
   ArrowLeft,
   UtensilsCrossed,
@@ -28,6 +37,9 @@ import {
   Plus,
   Trash2,
   ExternalLink,
+  ArrowUp,
+  ArrowDown,
+  Info,
 } from 'lucide-react';
 
 interface RecipeDetailPageProps {
@@ -58,6 +70,53 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  const [editableIngredients, setEditableIngredients] = useState<any[]>([]);
+
+  // Master data for editing
+  const [foodGroups, setFoodGroups] = useState<any[]>([]);
+  const [aliasesMap, setAliasesMap] = useState<Record<string, string[]>>({});
+  const [allRecipes, setAllRecipes] = useState<any[]>([]);
+  const [centralUnits, setCentralUnits] = useState<CentralUnit[]>([]);
+  const [mastersLoaded, setMastersLoaded] = useState(false);
+  const [mastersLoading, setMastersLoading] = useState(false);
+
+  // Dialog states for category transitions
+  const [blockerDialog, setBlockerDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    items: string[];
+  } | null>(null);
+
+  const [warningDialog, setWarningDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    items: string[];
+    onConfirm: () => void;
+  } | null>(null);
+
+  const loadMasters = async () => {
+    if (mastersLoaded || mastersLoading) return;
+    setMastersLoading(true);
+    try {
+      const supabase = createClient();
+      const [grpRes, recRes, unitRes] = await Promise.all([
+        fetch('/api/inventory/groups?class=Food Raw Material').then((r) => r.ok ? r.json() : { groups: [], aliasesMap: {} }),
+        fetch('/api/sops/recipes').then((r) => r.ok ? r.json() : { recipes: [] }),
+        supabase.from('units').select('id, name, name_hi, symbol, symbol_hi, is_active').eq('is_active', true).order('name'),
+      ]);
+      setFoodGroups(grpRes.groups || []);
+      setAliasesMap(grpRes.aliasesMap || {});
+      setAllRecipes(recRes.recipes || []);
+      if (unitRes.data) setCentralUnits(unitRes.data as CentralUnit[]);
+      setMastersLoaded(true);
+    } catch (err) {
+      console.error('Failed to load recipe masters:', err);
+    } finally {
+      setMastersLoading(false);
+    }
+  };
 
   const fetchRecipeDetail = async () => {
     setLoading(true);
@@ -95,7 +154,163 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
     if (id) fetchRecipeDetail();
   }, [id]);
 
+  const handleStartEdit = () => {
+    loadMasters();
+    const rows = (recipe?.ingredients || []).map((ing: any, idx: number) => ({
+      tempId: ing.id || `ing_${idx}_${Date.now()}`,
+      ingredient_type: ing.ingredient_type,
+      ingredient_group_id: ing.ingredient_group_id || ing.ingredient_group?.id || null,
+      sub_recipe_id: ing.sub_recipe_id || ing.sub_recipe?.id || null,
+      quantity: ing.quantity,
+      unit: ing.unit,
+      sort_order: ing.sort_order ?? idx + 1,
+      notes: ing.notes || '',
+      base_unit_symbol: ing.ingredient_group?.base_unit?.symbol || ing.sub_recipe?.batch_yield_unit || ing.unit,
+      selected_item_name: ing.ingredient_type === 'PREPARATION' ? ing.sub_recipe?.name : ing.ingredient_group?.name,
+      selected_item_name_hi: ing.ingredient_type === 'PREPARATION' ? ing.sub_recipe?.name_hi : ing.ingredient_group?.name_hi,
+    }));
+    setEditableIngredients(rows);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditForm({
+      name: recipe?.name || '',
+      name_hi: recipe?.name_hi || '',
+      category: recipe?.category || 'PREPARATION',
+      batch_yield_quantity: recipe?.batch_yield_quantity || '',
+      batch_yield_unit: recipe?.batch_yield_unit || '',
+      portion_size_quantity: recipe?.portion_size_quantity || '',
+      portion_size_unit: recipe?.portion_size_unit || '',
+      instructions: recipe?.instructions || '',
+      notes: recipe?.notes || '',
+    });
+  };
+
+  const handleAddIngredient = (type: 'RAW_MATERIAL' | 'PREPARATION') => {
+    loadMasters();
+    setEditableIngredients((prev) => [
+      ...prev,
+      {
+        tempId: `new_${Date.now()}_${Math.random()}`,
+        ingredient_type: type,
+        ingredient_group_id: null,
+        sub_recipe_id: null,
+        quantity: '',
+        unit: type === 'PREPARATION' ? 'kg' : 'g',
+        sort_order: prev.length + 1,
+        notes: '',
+        base_unit_symbol: type === 'PREPARATION' ? 'kg' : 'g',
+      },
+    ]);
+  };
+
+  const handleRemoveIngredient = (index: number) => {
+    setEditableIngredients((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleMoveIngredient = (index: number, direction: 'up' | 'down') => {
+    setEditableIngredients((prev) => {
+      const next = [...prev];
+      const targetIdx = direction === 'up' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= next.length) return prev;
+      const temp = next[index];
+      next[index] = next[targetIdx];
+      next[targetIdx] = temp;
+      return next.map((row, idx) => ({ ...row, sort_order: idx + 1 }));
+    });
+  };
+
+  const handleUpdateIngredient = (index: number, updates: any) => {
+    setEditableIngredients((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
+  };
+
   const handleSaveRecipe = async () => {
+    // 1. Check yield unit for invalid unit
+    if (editForm.batch_yield_unit && getUnitDimension(editForm.batch_yield_unit) === 'UNKNOWN') {
+      alert(`Invalid Batch Yield Unit: '${editForm.batch_yield_unit}'. Please select a valid unit from the dropdown.`);
+      return;
+    }
+
+    // 2. Check category transitions across all 12 transitions
+    if (recipe.category !== editForm.category) {
+      // RULE A: Transitions TO FINAL_DISH
+      if (editForm.category === 'FINAL_DISH') {
+        if (whereUsed.recipes.length > 0) {
+          setBlockerDialog({
+            open: true,
+            title: t('sops.recipeDetail.categoryChangeBlockTitle'),
+            message: t('sops.recipeDetail.categoryChangeBlockDesc'),
+            items: whereUsed.recipes.map((r: any) => r.name),
+          });
+          return;
+        }
+        if (!editForm.portion_size_quantity || Number(editForm.portion_size_quantity) <= 0 || !editForm.portion_size_unit) {
+          alert('Cannot change category to FINAL_DISH: recipe requires a positive portion size quantity and a valid portion size unit.');
+          return;
+        }
+      }
+
+      // RULE B: Transitions FROM FINAL_DISH
+      if (recipe.category === 'FINAL_DISH' && editForm.category !== 'FINAL_DISH') {
+        const hasYield = editForm.batch_yield_quantity && Number(editForm.batch_yield_quantity) > 0 && editForm.batch_yield_unit;
+        if (whereUsed.menuItems.length > 0 && !hasYield) {
+          alert(`Cannot change category from FINAL_DISH to ${editForm.category}: recipe is linked to ${whereUsed.menuItems.length} active menu item variant(s) and requires finished batch yield quantity and unit for variant costing.`);
+          return;
+        }
+        if (whereUsed.combos.length > 0 && !hasYield) {
+          alert(`Cannot change category from FINAL_DISH to ${editForm.category}: recipe is linked to ${whereUsed.combos.length} combo/thali component(s) and requires finished batch yield quantity and unit for component costing.`);
+          return;
+        }
+      }
+
+      // RULE C: Transitions between yield-based categories
+      if (recipe.category !== 'FINAL_DISH' && editForm.category !== 'FINAL_DISH') {
+        const hasYield = editForm.batch_yield_quantity && Number(editForm.batch_yield_quantity) > 0 && editForm.batch_yield_unit;
+        if ((whereUsed.combos.length > 0 || whereUsed.recipes.length > 0) && !hasYield) {
+          alert(`Cannot change category to ${editForm.category}: recipe has active dependencies and requires finished batch yield quantity and unit.`);
+          return;
+        }
+      }
+    }
+
+    // 3. Check ingredient validation
+    for (let i = 0; i < editableIngredients.length; i++) {
+      const row = editableIngredients[i];
+      if (row.ingredient_type === 'RAW_MATERIAL' && !row.ingredient_group_id) {
+        alert(`Ingredient line ${i + 1}: Please select a Raw Material.`);
+        return;
+      }
+      if (row.ingredient_type === 'PREPARATION' && !row.sub_recipe_id) {
+        alert(`Ingredient line ${i + 1}: Please select a Sub-Preparation.`);
+        return;
+      }
+      const qty = Number(row.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        alert(`Ingredient line ${i + 1}: Quantity must be greater than 0.`);
+        return;
+      }
+      if (!row.unit || !row.unit.trim()) {
+        alert(`Ingredient line ${i + 1}: Please select a Unit.`);
+        return;
+      }
+    }
+
+    const sanitizedIngredients = editableIngredients.map((row, idx) => ({
+      ingredient_type: row.ingredient_type,
+      ingredient_group_id: row.ingredient_type === 'RAW_MATERIAL' ? row.ingredient_group_id : null,
+      sub_recipe_id: row.ingredient_type === 'PREPARATION' ? row.sub_recipe_id : null,
+      quantity: Number(row.quantity),
+      unit: row.unit.trim(),
+      sort_order: idx + 1,
+      notes: row.notes?.trim() || null,
+    }));
+
     setSaving(true);
     try {
       const res = await fetch(`/api/sops/recipes/${id}`, {
@@ -111,6 +326,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
           portion_size_unit: editForm.portion_size_unit || null,
           instructions: editForm.instructions || null,
           notes: editForm.notes || null,
+          ingredients: sanitizedIngredients,
         }),
       });
 
@@ -215,7 +431,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
           <div className="flex items-center gap-2">
             {isEditing ? (
               <>
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={saving}>
+                <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
                   <X className="h-3.5 w-3.5 mr-1" />
                   {t('sops.recipes.cancel')}
                 </Button>
@@ -231,7 +447,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="gap-1.5">
+              <Button variant="outline" size="sm" onClick={handleStartEdit} className="gap-1.5">
                 <Edit2 className="h-3.5 w-3.5" />
                 {t('sops.recipes.edit')}
               </Button>
@@ -358,47 +574,64 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Yield Unit
+                    {t('sops.recipes.yieldUnit')}
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editForm.batch_yield_unit}
                     onChange={(e) => setEditForm({ ...editForm, batch_yield_unit: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm"
-                  />
+                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
+                  >
+                    <option value="">{t('sops.recipes.selectUnit')}</option>
+                    {getCompatibleUnitOptions(editForm.category === 'FINAL_DISH' ? 'pcs' : 'kg', centralUnits, undefined, locale).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Portion Size Quantity
+                    {t('sops.recipes.portionQuantity')}
                   </label>
                   <input
                     type="number"
                     step="any"
                     value={editForm.portion_size_quantity}
                     onChange={(e) => setEditForm({ ...editForm, portion_size_quantity: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm"
+                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Portion Unit
+                    {t('sops.recipes.portionUnit')}
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editForm.portion_size_unit}
                     onChange={(e) => setEditForm({ ...editForm, portion_size_unit: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm"
-                  />
+                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
+                  >
+                    <option value="">{t('sops.recipes.selectUnit')}</option>
+                    {getCompatibleUnitOptions('g', centralUnits, undefined, locale).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ) : (
               <div className="space-y-3 text-sm divide-y divide-[#E7E2D8]">
                 <div className="flex justify-between py-1">
                   <span className="text-stone-500">{t('sops.recipes.colBatchYield')}</span>
-                  <span className="font-mono font-medium text-stone-900">
+                  <span className="font-mono font-medium text-stone-900 flex items-center">
                     {recipe.batch_yield_quantity != null
                       ? `${recipe.batch_yield_quantity} ${recipe.batch_yield_unit || ''}`
                       : '—'}
+                    {recipe.batch_yield_unit && getUnitDimension(recipe.batch_yield_unit) === 'UNKNOWN' && (
+                      <Badge variant="danger" className="ml-2 font-mono text-[10px]">
+                        {t('sops.recipes.invalidUnit')}: {recipe.batch_yield_unit}
+                      </Badge>
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between py-1 pt-2">
@@ -492,19 +725,219 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
 
       {/* Card 2: Ingredients & Formulation Table */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-2">
           <div>
             <CardTitle className="text-base font-bold flex items-center gap-2">
               <UtensilsCrossed className="h-4 w-4 text-amber-600" />
-              {t('sops.recipeDetail.ingredientsTitle')}
+              {isEditing ? t('sops.recipeDetail.editIngredients') : t('sops.recipeDetail.ingredientsTitle')}
             </CardTitle>
             <CardDescription>
-              {ingredients.length} {locale === 'hi' ? 'घटक सामग्री' : 'ingredients and sub-preparations in this recipe'}
+              {isEditing ? editableIngredients.length : ingredients.length} {locale === 'hi' ? 'घटक सामग्री' : 'ingredients and sub-preparations in this recipe'}
             </CardDescription>
           </div>
+          {isEditing && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleAddIngredient('RAW_MATERIAL')}
+                className="gap-1.5 text-xs border-amber-300 text-amber-800 hover:bg-amber-50 cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5 text-amber-600" />
+                {t('sops.recipeDetail.addRawMaterial')}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleAddIngredient('PREPARATION')}
+                className="gap-1.5 text-xs border-blue-300 text-blue-800 hover:bg-blue-50 cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5 text-blue-600" />
+                {t('sops.recipeDetail.addSubPrep')}
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
-          {ingredients.length === 0 ? (
+          {isEditing ? (
+            /* INTERACTIVE INGREDIENTS EDITOR */
+            <div className="p-4 space-y-3">
+              {editableIngredients.length === 0 ? (
+                <div className="p-8 text-center text-stone-400 text-sm border-2 border-dashed border-[#E7E2D8] rounded-xl">
+                  <p>{t('sops.recipeDetail.noIngredientsEdit')}</p>
+                  <div className="flex justify-center gap-2 mt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddIngredient('RAW_MATERIAL')}
+                      className="gap-1 text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {t('sops.recipeDetail.addRawMaterial')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddIngredient('PREPARATION')}
+                      className="gap-1 text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {t('sops.recipeDetail.addSubPrep')}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {editableIngredients.map((row, idx) => {
+                    const isPrep = row.ingredient_type === 'PREPARATION';
+                    const baseUnit = isPrep
+                      ? row.base_unit_symbol || 'kg'
+                      : row.base_unit_symbol || 'g';
+                    const unitOptions = getCompatibleUnitOptions(baseUnit, centralUnits, undefined, locale);
+                    const availablePreps = allRecipes.filter((r) => r.id !== id && r.category === 'PREPARATION');
+
+                    return (
+                      <div
+                        key={row.tempId || idx}
+                        className="bg-white border border-[#E7E2D8] rounded-xl p-3 flex flex-col md:flex-row md:items-center gap-3 shadow-2xs hover:border-amber-300 transition-colors"
+                      >
+                        {/* Drag / Reorder Buttons & Index */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="font-mono text-xs text-stone-400 w-5 text-center">
+                            {idx + 1}
+                          </span>
+                          <div className="flex flex-col">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveIngredient(idx, 'up')}
+                              className="p-0.5 text-stone-400 hover:text-stone-700 disabled:opacity-20 cursor-pointer"
+                              title={t('sops.recipeDetail.moveUp')}
+                            >
+                              <ArrowUp className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === editableIngredients.length - 1}
+                              onClick={() => handleMoveIngredient(idx, 'down')}
+                              className="p-0.5 text-stone-400 hover:text-stone-700 disabled:opacity-20 cursor-pointer"
+                              title={t('sops.recipeDetail.moveDown')}
+                            >
+                              <ArrowDown className="h-3 w-3" />
+                            </button>
+                          </div>
+                          <Badge
+                            variant={isPrep ? 'info' : 'default'}
+                            className="text-[10px] uppercase font-mono ml-1"
+                          >
+                            {isPrep ? t('sops.recipeDetail.typePrep') : t('sops.recipeDetail.typeRaw')}
+                          </Badge>
+                        </div>
+
+                        {/* Searchable Item Selector */}
+                        <div className="flex-1 min-w-[200px]">
+                          {isPrep ? (
+                            <SearchableSelect
+                              options={availablePreps}
+                              value={row.sub_recipe_id}
+                              onChange={(val, opt) => {
+                                handleUpdateIngredient(idx, {
+                                  sub_recipe_id: val,
+                                  selected_item_name: opt?.name,
+                                  selected_item_name_hi: opt?.name_hi,
+                                  base_unit_symbol: opt?.batch_yield_unit || 'kg',
+                                  unit: opt?.batch_yield_unit || 'kg',
+                                });
+                              }}
+                              labelKey="name"
+                              valueKey="id"
+                              secondaryLabelKey="name_hi"
+                              placeholder={locale === 'hi' ? 'पूर्व-तैयारी चुनें...' : 'Select preparation...'}
+                              className="text-xs"
+                            />
+                          ) : (
+                            <SearchableSelect
+                              options={foodGroups}
+                              value={row.ingredient_group_id}
+                              onChange={(val, opt) => {
+                                const bUnit = opt?.base_unit?.symbol || 'g';
+                                handleUpdateIngredient(idx, {
+                                  ingredient_group_id: val,
+                                  selected_item_name: opt?.name,
+                                  selected_item_name_hi: opt?.name_hi,
+                                  base_unit_symbol: bUnit,
+                                  unit: bUnit,
+                                });
+                              }}
+                              labelKey="name"
+                              valueKey="id"
+                              secondaryLabelKey={(g) => g.name_hi || g.group_code}
+                              getSearchableText={(g) => getSearchableItemText(g, aliasesMap)}
+                              placeholder={locale === 'hi' ? 'कच्ची सामग्री चुनें...' : 'Select raw material...'}
+                              className="text-xs"
+                            />
+                          )}
+                        </div>
+
+                        {/* Quantity Input */}
+                        <div className="w-24 shrink-0">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.001"
+                            value={row.quantity}
+                            onChange={(e) => handleUpdateIngredient(idx, { quantity: e.target.value })}
+                            placeholder="Qty"
+                            className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded-lg text-xs bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                          />
+                        </div>
+
+                        {/* Unit Select Dropdown */}
+                        <div className="w-32 shrink-0">
+                          <select
+                            value={row.unit}
+                            onChange={(e) => handleUpdateIngredient(idx, { unit: e.target.value })}
+                            className="w-full px-2 py-1.5 border border-[#E7E2D8] rounded-lg text-xs bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                          >
+                            {unitOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Notes Input */}
+                        <div className="w-32 shrink-0">
+                          <input
+                            type="text"
+                            value={row.notes || ''}
+                            onChange={(e) => handleUpdateIngredient(idx, { notes: e.target.value })}
+                            placeholder={locale === 'hi' ? 'टिप्पणी (वैकल्पिक)' : 'Notes (optional)'}
+                            className="w-full px-2 py-1.5 border border-[#E7E2D8] rounded-lg text-xs bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+
+                        {/* Delete Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveIngredient(idx)}
+                          className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
+                          title={t('sops.recipeDetail.deleteIngredient')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : ingredients.length === 0 ? (
             <div className="p-8 text-center text-stone-400 text-sm">
               No ingredients added to this formulation.
             </div>
@@ -726,6 +1159,111 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Category Change Blocker Dialog */}
+      {blockerDialog?.open && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-rose-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-rose-100 bg-rose-50/50">
+              <h2 className="text-base font-bold text-rose-900 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-rose-600" />
+                {blockerDialog.title}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setBlockerDialog(null)}
+                className="text-stone-400 hover:text-stone-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-stone-700 leading-relaxed">
+                {blockerDialog.message}
+              </p>
+              <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1.5">
+                <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                  {t('sops.recipeDetail.affectedParentRecipes')} ({blockerDialog.items.length}):
+                </div>
+                {blockerDialog.items.map((name, i) => (
+                  <div key={i} className="text-xs font-medium text-stone-800 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+                    {name}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-stone-500 italic">
+                {locale === 'hi' ? 'श्रेणी बदलने से पहले इन मूल रेसिपी से यह उप-तैयारी हटाना अनिवार्य है।' : 'You must remove this sub-preparation from all parent recipes before converting it to a Final Dish.'}
+              </p>
+              <div className="flex justify-end pt-2">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setBlockerDialog(null)}
+                  className="bg-stone-800 hover:bg-stone-900 text-white cursor-pointer"
+                >
+                  {locale === 'hi' ? 'समझ गया' : 'Understood'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Change Warning Dialog */}
+      {warningDialog?.open && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-amber-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-amber-100 bg-amber-50/50">
+              <h2 className="text-base font-bold text-amber-900 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                {warningDialog.title}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setWarningDialog(null)}
+                className="text-stone-400 hover:text-stone-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-stone-700 leading-relaxed">
+                {warningDialog.message}
+              </p>
+              <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1.5">
+                {warningDialog.items.map((name, i) => (
+                  <div key={i} className="text-xs font-medium text-stone-800 flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                    {name}
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setWarningDialog(null)}
+                >
+                  {t('sops.recipes.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    const fn = warningDialog.onConfirm;
+                    setWarningDialog(null);
+                    fn();
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+                >
+                  {locale === 'hi' ? 'परिवर्तन जारी रखें' : 'Proceed with Change'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
