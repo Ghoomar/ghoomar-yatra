@@ -169,10 +169,12 @@ export default function GateCounterPage() {
             await saveCachedLocations(locRes.data);
           }
 
-          const serverCars = (cRes.data || []).reduce((sum: number, e: any) => sum + (e.increment || 0), 0);
+          // Ordinary car and bike counters strictly isolate manual gate taps from commercial taxi visits
+          const ordinaryEvents = (cRes.data || []).filter((e: any) => !e.taxi_visit_id);
+          const serverCars = ordinaryEvents.reduce((sum: number, e: any) => sum + (e.increment || 0), 0);
           const serverLocMap: Record<string, number> = {};
 
-          (cRes.data || []).forEach((e: any) => {
+          ordinaryEvents.forEach((e: any) => {
             serverLocMap[e.location_id] = (serverLocMap[e.location_id] || 0) + (e.increment || 0);
           });
 

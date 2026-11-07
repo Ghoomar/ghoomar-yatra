@@ -19,19 +19,50 @@ export async function marketingRead<T>(
   if (!response.ok) throw new Error(body.code || "REQUEST_FAILED");
   return body as T;
 }
+export const MARKETING_CONFIG_CACHE_KEY = "ghoomar_marketing_config_cache";
+
+export function getCachedMarketingConfig(): MarketingConfig | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(MARKETING_CONFIG_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as MarketingConfig;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCachedMarketingConfig(config: MarketingConfig): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(MARKETING_CONFIG_CACHE_KEY, JSON.stringify(config));
+  } catch {}
+}
+
 export function useMarketingConfig() {
-  const [config, setConfig] = useState<MarketingConfig | null>(null);
+  const [config, setConfig] = useState<MarketingConfig | null>(getCachedMarketingConfig);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     const controller = new AbortController();
+    if (!config) setLoading(true);
     marketingRead<MarketingConfig>("config", {}, controller.signal)
-      .then(setConfig)
+      .then((fresh) => {
+        setConfig(fresh);
+        setLoading(false);
+        saveCachedMarketingConfig(fresh);
+      })
       .catch((e) => {
-        if (e.name !== "AbortError") setError(e.message);
+        if (e.name !== "AbortError") {
+          setError(e.message);
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, []);
-  return { config, error };
+
+  return { config, error, loading };
 }
 /** Key results to their request URL so filter changes never show stale values. */
 export function useRemoteJson<T>(url: string | null, delay = 0) {
