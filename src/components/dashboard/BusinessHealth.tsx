@@ -7,7 +7,6 @@ import { useI18n } from '@/lib/i18n/context';
 
 interface BusinessHealthProps {
   salesHealth: 'Healthy' | 'Warning' | 'Pending';
-  footfallHealth: 'Healthy' | 'Warning';
   inventoryHealth: 'Healthy' | 'Warning';
   attendanceHealth: 'Healthy' | 'Warning';
   cashHealth: 'Healthy' | 'Warning';
@@ -16,7 +15,6 @@ interface BusinessHealthProps {
 
 export function BusinessHealth({
   salesHealth,
-  footfallHealth,
   inventoryHealth,
   attendanceHealth,
   cashHealth,
@@ -50,7 +48,6 @@ export function BusinessHealth({
 
   const healthItems = [
     { label: t('dashboard.health.salesPos'), status: salesHealth },
-    { label: t('dashboard.health.footfallFlow'), status: footfallHealth },
     { label: t('dashboard.health.storeInventory'), status: inventoryHealth },
     { label: t('dashboard.health.staffAttendance'), status: attendanceHealth },
     { label: t('dashboard.health.cashGateway'), status: cashHealth },

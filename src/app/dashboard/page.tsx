@@ -7,11 +7,12 @@ import { getTodayBusinessDate, getYesterdayBusinessDate, formatINR } from '@/lib
 import { 
   calculateDailyProfitability, 
   calculateBreakEvenPacing, 
-  calculateVisitorPacing,
   calculateDinerPacing,
   fetchMTDFinancialSummary 
 } from '@/lib/finance-engine';
 import { isDineInOrder } from '@/lib/sales/business-units';
+import { OperatingMetrics } from '@/components/marketing/OperatingMetrics';
+import type { OperatingMetrics as OperatingData } from '@/lib/marketing/domain';
 import { KPICards } from '@/components/dashboard/KPICards';
 import { TargetPacing } from '@/components/dashboard/TargetPacing';
 import { MonthlyPosition } from '@/components/dashboard/MonthlyPosition';
@@ -25,6 +26,7 @@ import { useI18n } from '@/lib/i18n/context';
 export default function DashboardPage() {
   const { t, locale } = useI18n();
   const supabase = createClient();
+  const [operatingData, setOperatingData] = useState<OperatingData | null>(null);
   const todayIST = useMemo(() => getTodayBusinessDate(), []);
   const yesterdayIST = useMemo(() => getYesterdayBusinessDate(), []);
   const [businessDate, setBusinessDate] = useState(todayIST);
@@ -32,12 +34,9 @@ export default function DashboardPage() {
 
   // Raw Query States
   const [salesSummary, setSalesSummary] = useState<any>(null);
-  const [dayOrders, setDayOrders] = useState<any[]>([]);
   const [targetProgress, setTargetProgress] = useState<any>(null);
   const [financialSummary, setFinancialSummary] = useState<any>(null);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
-  const [visitorEvents, setVisitorEvents] = useState<any[]>([]);
-  const [vehicleEvents, setVehicleEvents] = useState<any[]>([]);
   const [activeStaffCount, setActiveStaffCount] = useState<number>(0);
   const [absentStaffCount, setAbsentStaffCount] = useState<number>(0);
 
@@ -59,24 +58,17 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       // 1. Fetch sales summary, sales orders (for authentic dine-in calculations), targets, and financial summary in parallel
-      const [{ data: salesData }, { data: ordersData }, { data: targetData }, { data: finData }] = await Promise.all([
+      const [{ data: salesData }, { data: targetData }, { data: finData }] = await Promise.all([
         supabase.from('daily_sales_summary').select('*').eq('business_date', businessDate).maybeSingle(),
-        supabase.from('sales_orders').select('order_type, area, payment_type, covers_pax, net_sales, grand_total, status').eq('business_date', businessDate),
         supabase.from('daily_target_progress').select('*').eq('business_date', businessDate).maybeSingle(),
         supabase.from('daily_financial_summary').select('*').eq('business_date', businessDate).maybeSingle(),
       ]);
       setSalesSummary(salesData || null);
-      setDayOrders(ordersData || []);
       setTargetProgress(targetData || null);
       setFinancialSummary(finData || null);
 
-      // 4. Fetch Visitor and Vehicle events for exact Last-Updated timestamps
-      const [{ data: vEvents }, { data: cEvents }] = await Promise.all([
-        supabase.from('visitor_counter_events').select('increment, timestamp').eq('business_date', businessDate).order('timestamp', { ascending: false }),
-        supabase.from('vehicle_counter_events').select('increment, timestamp').eq('business_date', businessDate).order('timestamp', { ascending: false }),
-      ]);
-      setVisitorEvents(vEvents || []);
-      setVehicleEvents(cEvents || []);
+      const {data: operating, error: operatingError} = await supabase.rpc('operating_metrics', {p_from: businessDate, p_to: businessDate});
+      setOperatingData(operatingError ? null : operating);
 
       // 5. Fetch low stock items from inventory_current_position view
       const { data: items } = await supabase
@@ -168,29 +160,7 @@ export default function DashboardPage() {
   const isSalesReported = Boolean(salesSummary?.is_reported);
   const revenueUpdatedAt = salesSummary?.last_updated_at;
 
-  // 2. Gate Footfall (people entering the property via gate turnstile/taps)
-  const totalVisitors = visitorEvents.reduce((s, e) => s + (e.increment || 0), 0);
-  const visitorsUpdatedAt = visitorEvents[0]?.timestamp;
-
-  const totalCars = vehicleEvents.reduce((s, e) => s + (e.increment || 0), 0);
-  const carsUpdatedAt = vehicleEvents[0]?.timestamp;
-
-  // 3. Restaurant Dine-In covers, net sales, and APC (authoritative Dine In only, excluding Snacks Stall, Takeaway, Lancho, and non-Success)
-  const dineInOrders = useMemo(() => {
-    return (dayOrders || []).filter((o) => isDineInOrder(o) && o.status === 'Success');
-  }, [dayOrders]);
-
-  const restaurantDineInNet = useMemo(() => {
-    return dineInOrders.reduce((sum, o) => sum + (Number(o.net_sales) || 0), 0);
-  }, [dineInOrders]);
-
-  const restaurantDineInPax = useMemo(() => {
-    return dineInOrders.reduce((sum, o) => sum + (Number(o.covers_pax) || 0), 0);
-  }, [dineInOrders]);
-
-  const restaurantApc = restaurantDineInPax > 0
-    ? Number((restaurantDineInNet / restaurantDineInPax).toFixed(2))
-    : 0;
+  const restaurantApc = Number(operatingData?.spend_per_cover) || 0;
 
   // 4. Target Pacing (Restaurant APC and Diners Needed)
   const dailyTarget = Number(targetProgress?.daily_target) || 100000;
@@ -201,8 +171,6 @@ export default function DashboardPage() {
     requiredDinersAtCurrentSpend, 
     achievementPercent 
   } = calculateDinerPacing(revenue, restaurantApc, dailyTarget);
-  const actualSpendPerVisitor = restaurantApc;
-  const requiredVisitorsAtTargetSpend = requiredDinersAtTargetSpend;
 
   const { daysInMonth, daysElapsed } = getMonthDateRange(businessDate);
   const actualSalariesPool = monthlySalaries;
@@ -336,12 +304,6 @@ export default function DashboardPage() {
         revenue={revenue}
         revenueUpdatedAt={revenueUpdatedAt}
         isSalesReported={isSalesReported}
-        visitors={totalVisitors}
-        visitorsUpdatedAt={visitorsUpdatedAt}
-        cars={totalCars}
-        carsUpdatedAt={carsUpdatedAt}
-        spendPerVisitor={restaurantApc}
-        restaurantApc={restaurantApc}
         dailyTarget={dailyTarget}
         achievementPercent={achievementPercent}
         estimatedNetProfit={profitResult.estimatedNetProfit}
@@ -351,6 +313,8 @@ export default function DashboardPage() {
         calculatedBreakEven={breakEven.calculatedBreakEven}
       />
 
+      <OperatingMetrics from={businessDate} to={businessDate} />
+
       {/* Row 2: Target Pacing and Monthly Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TargetPacing
@@ -358,9 +322,7 @@ export default function DashboardPage() {
           revenueAchieved={revenue}
           remainingRevenue={remainingRevenue}
           actualSpendPerDiner={restaurantApc}
-          actualSpendPerVisitor={restaurantApc}
           requiredDinersRemaining={requiredDinersAtCurrentSpend > 0 ? requiredDinersAtCurrentSpend : requiredDinersAtTargetSpend}
-          requiredVisitorsRemaining={requiredDinersAtTargetSpend}
           achievementPercent={achievementPercent}
         />
 
@@ -383,7 +345,6 @@ export default function DashboardPage() {
         <ActionRequiredFlags flags={flags} />
         <BusinessHealth
           salesHealth={isSalesReported ? 'Healthy' : 'Pending'}
-          footfallHealth={totalVisitors > 0 ? 'Healthy' : 'Warning'}
           inventoryHealth={lowStockItems.length > 0 ? 'Warning' : 'Healthy'}
           attendanceHealth={absentStaffCount > 3 ? 'Warning' : 'Healthy'}
           cashHealth="Healthy"

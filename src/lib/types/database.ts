@@ -236,10 +236,11 @@ export interface DailyTargetProgress {
   daily_target: number;
   target_achievement_percent: number;
   remaining_revenue_to_target: number;
-  total_visitors: number;
-  revenue_per_visitor: number;
+  /** Retired view compatibility columns; active metrics use operating_metrics. */
+  total_visitors: null;
+  revenue_per_visitor: null;
   revenue_updated_at?: string;
-  last_visitor_at?: string;
+  last_visitor_at?: null;
 }
 
 export type SalaryPeriodStatus = 'draft' | 'closed';

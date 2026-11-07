@@ -1,15 +1,19 @@
 import type { Metadata } from 'next';
+import {getServerTranslator} from '@/lib/i18n/server';
 
-export const metadata: Metadata = {
-  title: 'Yatra Gate | Footfall Counter',
-  description: 'Offline-First Fast Touch Counter for Ghoomar Yatra Highway Gate',
+export async function generateMetadata(): Promise<Metadata> {
+ const t=await getServerTranslator();
+ return {
+  title: t('marketing.gateTitle'),
+  description: t('marketing.gateDescription'),
   manifest: '/manifest-gate.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Yatra Gate',
+    title: t('gate.title'),
   },
-};
+ };
+}
 
 export default function GateLayout({
   children,

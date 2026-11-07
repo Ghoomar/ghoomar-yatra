@@ -10,8 +10,8 @@
   "kpis": {
     "netRevenue": "नेट सेल",
     "netRevenueSub": "Petpooja से सैटल",
-    "guestPax": "आने वाले लोग",
-    "guestPaxSub": "गेट पर दर्ज लोग",
+    "guestPax": "डाइनिंग मेहमान",
+    "guestPaxSub": "बिलों में दर्ज",
     "dinerPax": "रेस्टोरेंट कस्टमर",
     "dinerPaxSub": "डाइनिंग में आए लोग",
     "avgSpendPax": "औसत खर्च / व्यक्ति",
@@ -26,8 +26,8 @@
   "charts": {
     "dailySalesTrend": "मंथली सेल चार्ट",
     "salesTrendDesc": "महीने के हर दिन की नेट सेल और ट्रेंड",
-    "gateTimeAnalytics": "गेट पर आने वाले लोगों का समय",
-    "gateTimeDesc": "भीड़ वाले घंटे और लोगों का आना-जाना",
+    "gateTimeAnalytics": "हर घंटे वाहन आगमन",
+    "gateTimeDesc": "वाहन प्रकार और व्यस्त घंटे",
     "inventoryDispatches": "डिपार्टमेंट के हिसाब से स्टोर से सामान",
     "inventoryDispatchesDesc": "हर डिपार्टमेंट को दिया गया राशन और सामान"
   },

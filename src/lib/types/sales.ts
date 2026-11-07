@@ -58,6 +58,7 @@ export interface PosMenuItem {
 }
 
 export interface SalesImportBatch {
+  revision?: number;
   id: string;
   report_type: PetpoojaReportType;
   business_date: string;

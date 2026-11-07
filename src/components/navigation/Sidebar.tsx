@@ -57,6 +57,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       items: [
         { href: '/operations/daily', labelKey: 'navigation.items.dailyOperations', icon: ClipboardList, permission: 'operations.daily' },
         { href: '/operations/gate', labelKey: 'navigation.items.gateCounter', icon: Car, permission: 'operations.gate' },
+        { href: '/operations/marketing/drivers', labelKey: 'marketing.drivers', groupKey: 'marketing.title', icon: Users, permission: ['marketing.view', 'marketing.manage'] },
       ]
     },
     {
@@ -181,8 +182,9 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
                     const Icon = item.icon;
 
                     return (
+                      <React.Fragment key={item.href}>
+                      {'groupKey' in item && typeof item.groupKey === 'string' && <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase text-[#A393B7]">{t(item.groupKey)}</div>}
                       <Link
-                        key={item.href}
                         href={targetHref}
                         onClick={onClose}
                         className={`
@@ -196,6 +198,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
                         <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#190F24]' : 'text-[#A393B7]'}`} />
                         <span className="truncate">{t(item.labelKey)}</span>
                       </Link>
+                      </React.Fragment>
                     );
                   })}
                 </div>

@@ -10,7 +10,8 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:r1-remediation": "node --experimental-strip-types --test scripts/test-functional-remediation-round1.mjs",
     "test:r2-performance": "node --experimental-strip-types --test scripts/test-round2-where-used.mjs scripts/test-round2-telemetry.mjs scripts/test-round2-auth.mjs",
-    "test": "node scripts/test-costing-security.mjs && node scripts/test-dag-costing-and-migration.mjs && npx tsx scripts/test-inventory-locations-http.mjs"
+    "test": "node scripts/test-costing-security.mjs && node scripts/test-dag-costing-and-migration.mjs && npx tsx scripts/test-inventory-locations-http.mjs",
+    "test:marketing": "node --experimental-strip-types --test scripts/test-marketing-domain.mjs scripts/test-marketing-database.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
@@ -24,6 +25,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.4.6",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",

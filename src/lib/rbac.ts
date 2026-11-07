@@ -6,6 +6,7 @@ export const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   '/dashboard': 'dashboard.view',
   '/operations/daily': 'operations.daily',
   '/operations/gate': 'operations.gate',
+  '/operations/marketing/drivers': ['marketing.view', 'marketing.manage'],
   '/finance/sales': 'finance.sales',
   '/finance/purchases': 'finance.purchases',
   '/finance/vendors': 'finance.vendors',

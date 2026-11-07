@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate, formatNumber } from '@/lib/utils';
 import {
-  recordVisitorEvent,
   recordVehicleEvent,
   undoLastLocalEvent,
   getCachedLocations,
@@ -23,7 +22,6 @@ import {
   SyncState,
 } from '@/lib/gate/sync-engine';
 import {
-  Users,
   Car,
   Undo2,
   RefreshCw,
@@ -36,6 +34,8 @@ import {
   Bike,
   X,
 } from 'lucide-react';
+import { TaxiArrival } from '@/components/marketing/TaxiArrival';
+import { fetchGateVehicleEvents } from '@/lib/gate/vehicle-events';
 import { useI18n } from '@/lib/i18n/context';
 
 interface VehicleLocation {
@@ -64,7 +64,6 @@ export default function GateCounterPage() {
   const supabase = createClient();
   const { t, formatDate } = useI18n();
   const [businessDate, setBusinessDate] = useState(getTodayBusinessDate());
-  const [totalVisitors, setTotalVisitors] = useState<number>(0);
   const [totalCars, setTotalCars] = useState<number>(0);
   const [locations, setLocations] = useState<VehicleLocation[]>(DEFAULT_LOCATIONS);
   const [lastAction, setLastAction] = useState<string | null>(null);
@@ -89,6 +88,11 @@ export default function GateCounterPage() {
 
   const lettersRef = useRef<HTMLInputElement>(null);
   const digitsRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => setBusinessDate(getTodayBusinessDate()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Auto-focus letters input when smart prefix modal opens
   useEffect(() => {
@@ -118,14 +122,11 @@ export default function GateCounterPage() {
         (e) => e.sync_status === 'pending' || e.sync_status === 'syncing' || e.sync_status === 'failed'
       );
 
-      let localPendingVisitors = 0;
       let localPendingCars = 0;
       const localLocMap: Record<string, number> = {};
 
       pendingLocal.forEach((ev) => {
-        if (ev.event_type === 'visitor') {
-          localPendingVisitors += ev.increment;
-        } else if (ev.event_type === 'vehicle') {
+        if (ev.event_type === 'vehicle') {
           localPendingCars += ev.increment;
           if (ev.location_id) {
             localLocMap[ev.location_id] = (localLocMap[ev.location_id] || 0) + ev.increment;
@@ -134,7 +135,6 @@ export default function GateCounterPage() {
       });
 
       // Show local cached counts immediately (instant touch response)
-      setTotalVisitors((prev) => (prev > 0 ? prev : localPendingVisitors));
       setTotalCars((prev) => (prev > 0 ? prev : localPendingCars));
       setLocations(
         currentLocations.map((loc: any) => ({
@@ -159,24 +159,16 @@ export default function GateCounterPage() {
               .select('*')
               .eq('is_active', true)
               .order('display_order'),
-            supabase
-              .from('visitor_counter_events')
-              .select('increment, timestamp')
-              .eq('business_date', businessDate),
-            supabase
-              .from('vehicle_counter_events')
-              .select('location_id, increment, timestamp, vehicle_prefix')
-              .eq('business_date', businessDate),
+            fetchGateVehicleEvents(supabase, businessDate, businessDate),
           ]);
 
-          const [locRes, vRes, cRes] = await Promise.race([fetchPromise, timeoutPromise]);
+          const [locRes, cRes] = await Promise.race([fetchPromise, timeoutPromise]);
 
           if (locRes.data && locRes.data.length > 0) {
             currentLocations = locRes.data;
             await saveCachedLocations(locRes.data);
           }
 
-          const serverVisitors = (vRes.data || []).reduce((sum: number, e: any) => sum + (e.increment || 0), 0);
           const serverCars = (cRes.data || []).reduce((sum: number, e: any) => sum + (e.increment || 0), 0);
           const serverLocMap: Record<string, number> = {};
 
@@ -184,19 +176,23 @@ export default function GateCounterPage() {
             serverLocMap[e.location_id] = (serverLocMap[e.location_id] || 0) + (e.increment || 0);
           });
 
-          const latestVTime = vRes.data?.[0]?.timestamp;
           const latestCTime = cRes.data?.[0]?.timestamp;
-          const latest = [latestVTime, latestCTime].filter(Boolean).sort().reverse()[0];
+          const latest = [latestCTime].filter(Boolean).sort().reverse()[0];
           if (latest) setLastUpdatedAt(latest);
 
-          setTotalVisitors(serverVisitors + localPendingVisitors);
-          setTotalCars(serverCars + localPendingCars);
+          // Sync may have completed while the server fetch was in flight. Do
+          // not add a formerly-pending event again if its UUID is now present.
+          const serverIds = new Set(cRes.data.map(e => e.id));
+          const stillLocal = pendingLocal.filter(e => e.event_type === 'vehicle' && !serverIds.has(e.id));
+          const pendingByLocation: Record<string, number> = {};
+          for (const event of stillLocal) if (event.location_id) pendingByLocation[event.location_id] = (pendingByLocation[event.location_id] || 0) + event.increment;
+          setTotalCars(serverCars + stillLocal.reduce((sum, event) => sum + event.increment, 0));
 
           setLocations(
             currentLocations.map((loc: any) => ({
               id: loc.id,
               name: loc.name,
-              count: (serverLocMap[loc.id] || 0) + (localLocMap[loc.id] || 0),
+              count: (serverLocMap[loc.id] || 0) + (pendingByLocation[loc.id] || 0),
               display_order: loc.display_order ?? 0,
               is_quick_prefix: Boolean(loc.is_quick_prefix),
             }))
@@ -232,24 +228,6 @@ export default function GateCounterPage() {
   }, [loadData]);
 
   // 3. Instant Touch Handlers (< 5ms local IndexedDB commit)
-  const handleAddVisitors = async (increment = 1) => {
-    setTotalVisitors((prev) => prev + increment);
-    setLastAction(t('gate.messages.addedVisitors', { count: increment }));
-    setLastUpdatedAt(new Date().toISOString());
-
-    try {
-      await recordVisitorEvent(
-        increment,
-        businessDate,
-        enrollment?.userId || null,
-        enrollment?.deviceId || null
-      );
-      syncPendingEvents();
-    } catch (err) {
-      console.error('Failed to commit visitor event locally:', err);
-    }
-  };
-
   const handleAddVehicle = async (locationId: string, locationName: string, vehiclePrefix?: string) => {
     setTotalCars((prev) => prev + 1);
     setLocations((prev) =>
@@ -283,8 +261,7 @@ export default function GateCounterPage() {
       const undone = await undoLastLocalEvent();
       if (undone) {
         if (undone.event_type === 'visitor') {
-          setTotalVisitors((prev) => Math.max(0, prev - undone.increment));
-          setLastAction(t('gate.messages.undoneVisitor'));
+              setLastAction(t('gate.messages.undoneVisitor'));
         } else {
           setTotalCars((prev) => Math.max(0, prev - 1));
           setLocations((prev) =>
@@ -554,28 +531,7 @@ export default function GateCounterPage() {
         </button>
       </div>
 
-      {/* 5. SECTION 3: VISITOR COUNTING — DE-PRIORITISED (VISUALLY SECONDARY) */}
-      <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-2.5">
-        <div className="flex items-center justify-between border-b border-stone-200/80 pb-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-stone-600 uppercase tracking-wider">
-            <Users className="h-4 w-4 text-amber-600" />
-            <span>{t('gate.visitors.title')}</span>
-          </div>
-          <div className="text-xs font-medium text-stone-500">
-            {t('gate.kpi.todaysVisitors')}: <strong data-testid="visitors-count" className="text-base font-black text-stone-900">{formatNumber(totalVisitors)}</strong>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          data-testid="btn-visitor-1"
-          onClick={() => handleAddVisitors(1)}
-          className="w-full h-12 sm:h-13 rounded-xl bg-white hover:bg-amber-50 active:bg-amber-100 text-stone-900 border-2 border-stone-300 hover:border-amber-400 font-black text-base sm:text-lg shadow-2xs flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer touch-manipulation"
-        >
-          <Users className="h-4 w-4 text-amber-600" />
-          <span>{t('gate.visitors.addOnePerson')}</span>
-        </button>
-      </div>
+      <TaxiArrival onCountChanged={loadData} />
 
       {/* 6. SMART PREFIX ENTRY MODAL */}
       {isOthersOpen && (
@@ -667,7 +623,7 @@ export default function GateCounterPage() {
                 </span>
               ) : (
                 <span className="text-xs text-stone-400">
-                  e.g. MP09, RJ14, PB10, HR26
+                  {t('marketing.prefixExample')}
                 </span>
               )}
             </div>

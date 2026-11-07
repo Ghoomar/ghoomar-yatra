@@ -28,7 +28,7 @@
     {
       "name": "Gate Counter",
       "short_name": "Gate",
-      "description": "High-Speed Gate & Footfall Touch Counter",
+      "description": "High-Speed Gate & vehicle arrivals Touch Counter",
       "url": "/operations/gate",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }

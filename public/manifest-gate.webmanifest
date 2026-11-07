@@ -1,5 +1,5 @@
 {
-  "name": "Yatra Gate | Footfall Counter",
+  "name": "Yatra Gate | Vehicle Counter",
   "short_name": "Yatra Gate",
   "description": "Offline-First Fast Touch Counter for Ghoomar Yatra Highway Gate",
   "start_url": "/operations/gate",

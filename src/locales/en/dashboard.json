@@ -1,7 +1,7 @@
 {
   "title": "Operations Dashboard",
   "centralTitle": "Dashboard",
-  "subtitle": "Live operations, sales pacing, footfall, and business health.",
+  "subtitle": "Live operations, sales pacing, dining and vehicle metrics, and business health.",
   "dateLabel": "Date:",
   "refreshTitle": "Refresh dashboard data",
   "kpis": {

@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
 import { loadMenuMasterLookupFromDb, resolveItemCategory, normalizeItemName } from '@/lib/petpooja/matcher';
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
+import { marketingError } from '@/lib/marketing/http';
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,6 +34,21 @@ export async function POST(request: NextRequest) {
 
     const { reportType, businessDate, fileChecksum, recordCount, totalNetSales, totalGrossSales, metadata, data } =
       parseResult;
+
+    // Orders replacement and all dependent taxi/loyalty changes commit together.
+    // Fail closed if the separately approved database migration is unavailable.
+    if (reportType === 'ORDERS_MASTER') {
+      if (!user) return NextResponse.json({code: 'AUTH_REQUIRED'}, {status: 401});
+      const requestId = formData.get('request_id');
+      if (typeof requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(requestId)) return NextResponse.json({code: 'INVALID_REQUEST'}, {status: 400});
+      const {data: result, error} = await supabase.rpc('marketing_orders_import', {
+        p_request: requestId,
+        p_data: {action: 'REPLACE', business_date: businessDate, file_name: file.name, checksum: fileChecksum,
+          metadata, orders: data, overwrite, expected_revision: Number(formData.get('expected_revision') || '0')},
+      });
+      if (error) return marketingError(error);
+      return NextResponse.json(result, {status: result?.code ? 409 : 200});
+    }
 
     // 1b. Discontinue manual HOURLY_ITEM_SALES import
     if (reportType === 'HOURLY_ITEM_SALES') {
@@ -94,41 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Ingest parsed data based on report type
-    if (reportType === 'ORDERS_MASTER') {
-      const ordersPayload = data.map((order) => ({
-        batch_id: newBatch.id,
-        business_date: businessDate,
-        invoice_no: order.invoice_no,
-        order_timestamp: order.order_timestamp,
-        hour_of_day: order.hour_of_day,
-        biller: order.biller,
-        kot_numbers: order.kot_numbers,
-        payment_type: order.payment_type,
-        order_type: order.order_type,
-        status: order.status,
-        area: order.area,
-        captain_name: order.captain_name,
-        customer_name: order.customer_name,
-        customer_phone: order.customer_phone,
-        covers_pax: order.covers_pax,
-        gross_amount: order.gross_amount,
-        discount_amount: order.discount_amount,
-        net_sales: order.net_sales,
-        tax_amount: order.tax_amount,
-        round_off: order.round_off,
-        waived_off: order.waived_off,
-        grand_total: order.grand_total,
-      }));
-
-      // Insert in chunks of 100
-      for (let i = 0; i < ordersPayload.length; i += 100) {
-        const chunk = ordersPayload.slice(i, i + 100);
-        const { error: insErr } = await supabase.from('sales_orders').insert(chunk);
-        if (insErr) {
-          throw new Error(`Failed to insert orders: ${insErr.message}`);
-        }
-      }
-    } else if (reportType === 'EXECUTIVE_SUMMARY') {
+    if (reportType === 'EXECUTIVE_SUMMARY') {
       const exec = data[0];
       const { error: execErr } = await supabase.from('sales_executive_summaries').insert({
         batch_id: newBatch.id,
@@ -462,15 +444,40 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Missing batch_id parameter.' }, { status: 400 });
     }
 
+    // Retry before looking up a possibly deleted batch. The transaction ledger
+    // can return the original result even after the first response was lost.
+    if (request.headers.get('X-Report-Type') === 'ORDERS_MASTER') {
+      const requestId = request.headers.get('Idempotency-Key');
+      const date = request.headers.get('X-Business-Date');
+      if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId) || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return NextResponse.json({code: 'INVALID_REQUEST'}, {status: 400});
+      }
+      const {data: result, error} = await supabase.rpc('marketing_orders_import', {p_request: requestId, p_data: {
+        action: 'DELETE', batch_id: batchId, business_date: date,
+        expected_revision: Number(request.headers.get('X-Expected-Revision') || '-1'),
+      }});
+      return error ? marketingError(error) : NextResponse.json(result, {status: result?.code ? 409 : 200});
+    }
+
     // Fetch batch details first
     const { data: batch, error: fetchErr } = await supabase
       .from('sales_import_batches')
-      .select('id, file_name, report_type, business_date, total_net_sales, record_count')
+      .select('id, file_name, report_type, business_date, total_net_sales, record_count, revision')
       .eq('id', batchId)
       .maybeSingle();
 
     if (fetchErr || !batch) {
       return NextResponse.json({ error: 'Import batch not found.' }, { status: 404 });
+    }
+
+    if (batch.report_type === 'ORDERS_MASTER') {
+      const requestId = request.headers.get('Idempotency-Key');
+      if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId)) return NextResponse.json({code: 'INVALID_REQUEST'}, {status: 400});
+      const {data: result, error} = await supabase.rpc('marketing_orders_import', {p_request: requestId, p_data: {
+        action: 'DELETE', batch_id: batchId, business_date: batch.business_date,
+        expected_revision: Number(request.headers.get('X-Expected-Revision') || '-1'),
+      }});
+      return error ? marketingError(error) : NextResponse.json(result, {status: result?.code ? 409 : 200});
     }
 
     // Delete child records explicitly for safety, then delete parent batch

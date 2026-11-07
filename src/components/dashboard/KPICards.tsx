@@ -12,12 +12,6 @@ interface KPICardsProps {
   revenue: number;
   revenueUpdatedAt?: string;
   isSalesReported: boolean;
-  visitors: number;
-  visitorsUpdatedAt?: string;
-  cars: number;
-  carsUpdatedAt?: string;
-  spendPerVisitor?: number;
-  restaurantApc?: number;
   dailyTarget: number;
   achievementPercent: number;
   estimatedNetProfit: number;
@@ -31,12 +25,6 @@ export function KPICards({
   revenue,
   revenueUpdatedAt,
   isSalesReported,
-  visitors,
-  visitorsUpdatedAt,
-  cars,
-  carsUpdatedAt,
-  spendPerVisitor = 0,
-  restaurantApc,
   dailyTarget,
   achievementPercent,
   estimatedNetProfit,
@@ -46,7 +34,6 @@ export function KPICards({
   calculatedBreakEven,
 }: KPICardsProps) {
   const { t, formatTime } = useI18n();
-  const apc = restaurantApc ?? spendPerVisitor;
 
   const getBadgeClass = (status: BreakEvenStatus | string) => {
     const norm = (status || '').toUpperCase();
@@ -108,72 +95,6 @@ export function KPICards({
           <div className="text-[11px] mt-1">
             <span className={isSalesReported ? 'text-emerald-700 font-medium' : 'text-amber-600 font-medium'}>
               {isSalesReported ? t('dashboard.kpis.reported') : t('dashboard.kpis.notEntered')}
-            </span>
-          </div>
-        </Card>
-      </Link>
-
-      {/* 2. Footfall -> /operations/gate */}
-      <Link
-        href="/operations/gate"
-        className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
-      >
-        <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
-          <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              {t('dashboard.kpis.visitors')}
-              <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
-            </CardDescription>
-            <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
-              <Clock className="h-3 w-3" /> {formatTime(visitorsUpdatedAt)}
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
-            {formatNumber(visitors)}
-          </div>
-        </Card>
-      </Link>
-
-      {/* 3. Vehicles -> /operations/gate */}
-      <Link
-        href="/operations/gate"
-        className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
-      >
-        <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
-          <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              {t('dashboard.kpis.vehicles')}
-              <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
-            </CardDescription>
-            <span className="flex items-center gap-1 text-[10px] text-stone-400 font-mono">
-              <Clock className="h-3 w-3" /> {formatTime(carsUpdatedAt)}
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
-            {formatNumber(cars)}
-          </div>
-        </Card>
-      </Link>
-
-      {/* 4. Spend / Guest -> /finance/profitability */}
-      <Link
-        href="/finance/profitability"
-        className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-xl touch-manipulation"
-      >
-        <Card className="p-4 relative overflow-hidden transition-all group-hover:border-amber-400/80 group-hover:shadow-md active:scale-[0.99] h-full">
-          <div className="flex items-center justify-between">
-            <CardDescription className="font-medium text-stone-500 group-hover:text-amber-700 transition-colors flex items-center gap-1">
-              {t('dashboard.kpis.spendPerVisitor')}
-              <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600" />
-            </CardDescription>
-            <span className="text-[10px] text-stone-400 font-mono">{t('dashboard.kpis.targetSpend', { target: 300 })}</span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-stone-900 mt-1.5 tracking-tight">
-            {formatINR(apc)}
-          </div>
-          <div className="text-[11px] mt-1">
-            <span className={apc >= 300 ? 'text-emerald-700 font-medium' : 'text-amber-700 font-medium'}>
-              {apc >= 300 ? t('dashboard.kpis.aboveTarget') : t('dashboard.kpis.belowTarget')}
             </span>
           </div>
         </Card>

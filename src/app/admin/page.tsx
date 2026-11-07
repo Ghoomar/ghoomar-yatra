@@ -940,16 +940,14 @@ export default function AdminSettingsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
-                      {targets.map((tg) => (
+                      {targets.filter(tg => tg.target_type !== 'visitor_spend').map((tg) => (
                         <tr key={tg.id} className="hover:bg-stone-50/80">
                           <td className="py-3 px-3 font-semibold text-stone-900 font-mono">{tg.target_type}</td>
                           <td className="py-3 px-3 text-stone-700 font-medium">
                             {tg.weekday !== null ? weekdayNames[tg.weekday] : 'Facility Level'}
                           </td>
                           <td className="py-3 px-3 text-right font-bold text-amber-700 text-sm">
-                            {tg.target_type === 'visitor_spend'
-                              ? `${formatINR(Number(tg.target_value))} / visitor`
-                              : tg.target_type === 'break_even_health_buffer_percent'
+                            {tg.target_type === 'break_even_health_buffer_percent'
                               ? `${Number(tg.target_value)}% buffer`
                               : formatINR(Number(tg.target_value))}
                           </td>

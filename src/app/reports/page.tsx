@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { DailySalesLineGraph } from '@/components/reports/DailySalesLineGraph';
 import { SalesAnalyticsDashboard } from '@/components/sales/SalesAnalyticsDashboard';
+import { OperatingMetrics } from '@/components/marketing/OperatingMetrics';
 import { GateTimeAnalyticsChart } from '@/components/reports/GateTimeAnalyticsChart';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
@@ -388,16 +389,12 @@ async function fetchPagedRows<T = any>(
   const spendPerDiner = dineInPax > 0 ? dineInNet / dineInPax : null;
   const paxPerBill = dineInBillsCount > 0 ? dineInPax / dineInBillsCount : null;
 
-  // 3. Gate Footfall & Conversion
-  const gateFootfall = gateSummary?.total_visitors || 0;
+  // 3. Vehicle traffic
   const totalVehicles = gateSummary?.total_vehicles || 0;
   const totalCars = gateSummary?.total_cars || 0;
   const totalBikes = gateSummary?.total_bikes || 0;
-  const peakVisitorHour = gateSummary?.peak_visitor_hour || null;
   const topVehiclePrefix = gateSummary?.prefixes && gateSummary.prefixes.length > 0 ? gateSummary.prefixes[0] : null;
 
-  const dinerConversionRate = gateFootfall > 0 ? (dineInPax / gateFootfall) * 100 : null;
-  const spendPerGateVisitor = gateFootfall > 0 ? dineInNet / gateFootfall : null;
 
   // 4. Snacks Stall (authoritative order_type = 'Delivery(Parcel)' / 'Snacks Stall' in Orders Master, EXCLUDES Lancho)
   const snacksOrders = useMemo(() => {
@@ -553,82 +550,7 @@ async function fetchPagedRows<T = any>(
       ? formatDisplayDate(effectiveStartDate, 'long')
       : `${formatDisplayDate(effectiveStartDate, 'short')} – ${formatDisplayDate(effectiveEndDate, 'short')}`;
 
-    // Zero-data case: neither gate nor sales logged
-    if (gateFootfall === 0 && consolidatedGross === 0) {
-      return isHindi
-        ? `${formattedDate} ${isSingleDay ? 'को' : 'की अवधि में'}, सिस्टम में कोई रिज़ॉर्ट गेट विज़िटर्स या रेस्टोरेंट बिक्री दर्ज नहीं की गई थी।`
-        : `${isSingleDay ? `On ${formattedDate}` : `During the period ${formattedDate}`}, no resort gate footfall or restaurant sales were logged in the system.`;
-    }
-
-    // Gate & Traffic sentence
-    if (gateFootfall > 0) {
-      if (isHindi) {
-        let vehicleStr = `कुल ${totalVehicles} वाहन (${totalBikes} दोपहिया और ${totalCars} कारें)`;
-        if (topVehiclePrefix) {
-          vehicleStr += `, जिसमें मुख्य रूप से प्रीफ़िक्स ${topVehiclePrefix.name} (${topVehiclePrefix.count} वाहन) शामिल थे`;
-        }
-        lines.push(
-          `${formattedDate} ${isSingleDay ? 'को' : 'की अवधि में'}, रिज़ॉर्ट गेट पर कुल ${formatNumber(gateFootfall)} आने वाले लोग दर्ज किए गए। सबसे अधिक भीड़ ${
-            peakVisitorHour?.label || 'शाम के समय'
-          } (${peakVisitorHour?.count || 0} लोग) रही। वाहन यातायात में ${vehicleStr}।`
-        );
-      } else {
-        let vehicleStr = `${totalVehicles} total vehicles (${totalBikes} two-wheelers and ${totalCars} cars)`;
-        if (topVehiclePrefix) {
-          vehicleStr += `, led by prefix ${topVehiclePrefix.name} (${topVehiclePrefix.count} vehicles)`;
-        }
-        lines.push(
-          `${isSingleDay ? `On ${formattedDate}` : `During the period ${formattedDate}`}, resort gate arrivals recorded ${formatNumber(gateFootfall)} persons. Peak visitor flow occurred between ${
-            peakVisitorHour?.label || 'evening hours'
-          } (${peakVisitorHour?.count || 0} entries). Vehicle traffic comprised ${vehicleStr}.`
-        );
-      }
-    } else {
-      lines.push(isHindi ? `${formattedDate} ${isSingleDay ? 'को' : 'की अवधि में'} कोई गेट फ़ुटफ़ॉल दर्ज नहीं किया गया।` : `${isSingleDay ? `On ${formattedDate}` : `During the period ${formattedDate}`}, no gate footfall was logged.`);
-    }
-
-    // Dining Performance & Conversion sentence
-    if (dineInOrders.length > 0) {
-      if (isHindi) {
-        const convText =
-          dinerConversionRate !== null
-            ? `गेट फ़ुटफ़ॉल से डाइनर कन्वर्शन दर ${dinerConversionRate.toFixed(1)}% रही`
-            : `गेट फ़ुटफ़ॉल दर्ज न होने के कारण कन्वर्शन दर उपलब्ध नहीं है`;
-        const apcText = spendPerDiner !== null ? formatINR(spendPerDiner) : '—';
-        const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} व्यक्ति/बिल` : '—';
-
-        lines.push(
-          `मुख्य रेस्टोरेंट ने ${dineInBillsCount} डाइन-इन बिलों के माध्यम से ${formatNumber(dineInPax)} डाइन-इन कवर्स को सेवा दी। ${convText}, जिसमें प्रति डाइनर औसत खर्च ${apcText} और औसत पार्टी आकार ${partyText} रहा। कुल डाइन-इन बिक्री ${formatINR(
-            dineInNet
-          )} शुद्ध बिक्री, ${formatINR(dineInTax)} जीएसटी, और ${formatINR(dineInGross)} सकल बिक्री रही।`
-        );
-      } else {
-        const convText =
-          dinerConversionRate !== null
-            ? `This yielded a ${dinerConversionRate.toFixed(1)}% diner conversion rate from gate footfall`
-            : `Diner conversion is unavailable due to unrecorded gate footfall`;
-        const apcText = spendPerDiner !== null ? formatINR(spendPerDiner) : '—';
-        const partyText = paxPerBill !== null ? `${paxPerBill.toFixed(1)} PAX/bill` : '—';
-
-        lines.push(
-          `The main restaurant served ${formatNumber(dineInPax)} Dine-In covers across ${dineInBillsCount} Dine-In bills. ${convText}, with an average spend per diner (APC) of ${apcText} and an average party size of ${partyText}. Total Dine-In sales were ${formatINR(
-            dineInNet
-          )} Net, ${formatINR(dineInTax)} GST, and ${formatINR(dineInGross)} Gross.`
-        );
-      }
-    } else if (gateFootfall > 0) {
-      lines.push(
-        isHindi
-          ? `${formattedDate} के लिए कोई डाइन-इन कवर्स दर्ज नहीं किए गए (गेट फ़ुटफ़ॉल से 0.0% डाइनर कन्वर्शन)।`
-          : `No Dine-In restaurant covers were recorded for ${formattedDate} (0.0% diner conversion from gate footfall).`
-      );
-    } else {
-      lines.push(
-        isHindi
-          ? `${formattedDate} के लिए कोई डाइन-इन कवर्स दर्ज नहीं किए गए।`
-          : `No Dine-In restaurant covers were recorded for ${formattedDate}.`
-      );
-    }
+    lines.push(t('marketing.diningBrief', {date: formattedDate, bills: dineInBillsCount, covers: dineInPax, revenue: formatINR(dineInNet)}));
 
     // Snacks Stall sentence
     if (snacksBillCount > 0) {
@@ -712,14 +634,6 @@ async function fetchPagedRows<T = any>(
       let compStr = isHindi
         ? `पिछले दिन (${formatDisplayDate(prevDayDate, 'short')}, ${formatINR(prevGross)}) की तुलना में सकल बिक्री में ${dodGrossDir} का परिवर्तन हुआ।`
         : `Day-over-day gross sales moved ${dodGrossDir} relative to ${formatDisplayDate(prevDayDate, 'short')} (${formatINR(prevGross)}).`;
-      if (prevDayGate && prevDayGate.total_visitors > 0 && gateFootfall > 0) {
-        const pdFootfall = prevDayGate.total_visitors;
-        const dodFootPct = (((gateFootfall - pdFootfall) / pdFootfall) * 100).toFixed(1);
-        const dodFootDir = Number(dodFootPct) >= 0 ? `+${dodFootPct}%` : `${dodFootPct}%`;
-        compStr += isHindi
-          ? ` गेट फ़ुटफ़ॉल में ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} लोग) की तुलना में ${dodFootDir} का बदलाव देखा गया।`
-          : ` Gate footfall moved ${dodFootDir} compared to ${formatDisplayDate(prevDayDate, 'short')} (${formatNumber(pdFootfall)} visitors).`;
-      }
       lines.push(compStr);
     }
 
@@ -740,16 +654,13 @@ async function fetchPagedRows<T = any>(
     effectiveEndDate,
     isSingleDay,
     locale,
-    gateFootfall,
     totalVehicles,
     totalBikes,
     totalCars,
     topVehiclePrefix,
-    peakVisitorHour,
     dineInOrders,
     dineInPax,
     dineInBillsCount,
-    dinerConversionRate,
     spendPerDiner,
     paxPerBill,
     dineInNet,
@@ -776,13 +687,7 @@ async function fetchPagedRows<T = any>(
   // Dynamic compact highlight metrics for Daily Operations Summary
   const executiveHighlights = useMemo(() => {
     const items: { label: string; value: string; sub?: string }[] = [];
-    if (gateFootfall > 0) {
-      items.push({
-        label: t('reports.operationsSummary.visitors'),
-        value: formatNumber(gateFootfall),
-        sub: t('reports.operationsSummary.visitorsSub'),
-      });
-    }
+
     if (dineInPax > 0) {
       items.push({
         label: t('reports.operationsSummary.restaurant'),
@@ -790,13 +695,7 @@ async function fetchPagedRows<T = any>(
         sub: t('reports.operationsSummary.restaurantBillsSub', { count: dineInBillsCount }),
       });
     }
-    if (dinerConversionRate !== null && dinerConversionRate > 0) {
-      items.push({
-        label: t('reports.operationsSummary.conversion'),
-        value: `${dinerConversionRate.toFixed(1)}%`,
-        sub: t('reports.operationsSummary.conversionSub'),
-      });
-    }
+
     if (spendPerDiner !== null && spendPerDiner > 0) {
       items.push({
         label: t('reports.operationsSummary.apc'),
@@ -804,13 +703,7 @@ async function fetchPagedRows<T = any>(
         sub: t('reports.operationsSummary.apcSub'),
       });
     }
-    if (peakVisitorHour?.label) {
-      items.push({
-        label: t('reports.operationsSummary.peakPeriod'),
-        value: peakVisitorHour.label,
-        sub: t('reports.operationsSummary.peakEntries', { count: peakVisitorHour.count || 0 }),
-      });
-    }
+
     if (dineInNet > 0) {
       items.push({
         label: t('reports.operationsSummary.restaurantNet'),
@@ -836,12 +729,9 @@ async function fetchPagedRows<T = any>(
     return items;
   }, [
     t,
-    gateFootfall,
     dineInPax,
     dineInBillsCount,
-    dinerConversionRate,
     spendPerDiner,
-    peakVisitorHour,
     dineInNet,
     snacksGross,
     snacksBillCount,
@@ -1038,89 +928,10 @@ async function fetchPagedRows<T = any>(
             </CardContent>
           </Card>
 
-          {/* Section 4: Compact Footfall vs Restaurant Dining Conversion Card Group */}
-          <Card className="border-[#E7E2D8] shadow-xs bg-white">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardTitle className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-[#6B162E]" />
-                  {t('reports.footfallConversion.title')}
-                </CardTitle>
-                <CardDescription className="text-xs text-stone-500">
-                  {t('reports.footfallConversion.subtitle', { date: periodDisplayLabel })}
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowGateDetails(!showGateDetails)}
-                className="text-xs gap-1 cursor-pointer rounded-xl border-[#E7E2D8]"
-              >
-                <Clock className="h-3.5 w-3.5 text-stone-500" />
-                <span>{showGateDetails ? t('reports.footfallConversion.hideHourly') : t('reports.footfallConversion.showHourly')}</span>
-                {showGateDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
-                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.gateFootfall')}</div>
-                  <div data-testid="gate-footfall-value" className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">{gateFootfall > 0 ? formatNumber(gateFootfall) : '—'}</div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? t('reports.footfallConversion.totalPersonsEntered') : t('reports.footfallConversion.noGateData')}</div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-[#6B162E] font-semibold uppercase tracking-wider">{t('reports.footfallConversion.restaurantPax')}</div>
-                  <div className="text-xl font-bold text-[#6B162E] tabular-nums mt-0.5">{dineInPax > 0 ? formatNumber(dineInPax) : '—'}</div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">{dineInPax > 0 ? t('reports.footfallConversion.dineInCovers') : t('reports.footfallConversion.noCovers')}</div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-emerald-800 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.dinerConversion')}</div>
-                  <div className="text-xl font-bold text-emerald-700 tabular-nums mt-0.5">
-                    {dinerConversionRate !== null ? `${dinerConversionRate.toFixed(1)}%` : '—'}
-                  </div>
-                  <div className="text-[10px] text-stone-500 mt-0.5">{dinerConversionRate !== null ? t('reports.footfallConversion.paxFootfall') : t('reports.footfallConversion.noGateData')}</div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.spendFootfall')}</div>
-                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
-                    {spendPerGateVisitor !== null ? formatINR(spendPerGateVisitor) : '—'}
-                  </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{gateFootfall > 0 ? t('reports.footfallConversion.netSalesVisitor') : t('reports.footfallConversion.noGateData')}</div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.spendDiner')}</div>
-                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
-                    {spendPerDiner !== null ? formatINR(spendPerDiner) : '—'}
-                  </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInPax > 0 ? t('reports.footfallConversion.avgCover') : t('reports.footfallConversion.noCovers')}</div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E7E2D8]">
-                  <div className="text-[10px] text-stone-500 font-semibold uppercase tracking-wider">{t('reports.footfallConversion.partySize')}</div>
-                  <div className="text-xl font-bold text-stone-900 tabular-nums mt-0.5">
-                    {paxPerBill !== null ? `${paxPerBill.toFixed(1)}` : '—'}
-                  </div>
-                  <div className="text-[10px] text-stone-400 mt-0.5">{dineInBillsCount > 0 ? t('reports.footfallConversion.coversPerBill') : t('reports.footfallConversion.noBills')}</div>
-                </div>
-              </div>
-
-              {/* Expandable Gate Counter Time Analytics Chart */}
-              {showGateDetails && (
-                <div className="mt-4 pt-4 border-t border-[#E7E2D8]">
-                  <GateTimeAnalyticsChart
-                    selectedDate={salesSelectedDate}
-                    startDate={salesPeriodStart}
-                    endDate={salesPeriodEnd}
-                    onDateChange={(date) => handleSalesSelectDate(date)}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <OperatingMetrics from={effectiveStartDate} to={effectiveEndDate} />
+          <details className="rounded-xl border p-4"><summary className="cursor-pointer">{t('marketing.hourlyVehicles')}</summary>
+            <GateTimeAnalyticsChart selectedDate={salesSelectedDate || effectiveStartDate} startDate={salesPeriodStart} endDate={salesPeriodEnd} onDateChange={handleSalesSelectDate} />
+          </details>
 
           {/* Section 5: Revenue KPI Cards Grid (All 7 Cards Clickable) */}
           <div>

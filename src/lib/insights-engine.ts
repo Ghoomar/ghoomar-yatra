@@ -1,6 +1,6 @@
 export interface InsightItem {
   id: string;
-  category: 'Sales' | 'Footfall Economics' | 'Target' | 'Inventory' | 'Staffing' | 'Utilities' | 'Profitability';
+  category: 'Sales' | 'Target' | 'Inventory' | 'Staffing' | 'Utilities' | 'Profitability';
   type: 'Fact' | 'Estimate' | 'Projection' | 'Anomaly';
   statement: string;
   detail: string;
@@ -10,9 +10,6 @@ export interface InsightItem {
 export interface InsightInput {
   netSales: number;
   dailyTarget: number;
-  visitors: number;
-  targetSpendPerVisitor: number;
-  spendPerVisitor: number;
   breakEvenProjected: number;
   planningBreakEven: number;
   calculatedBreakEven?: number;
@@ -50,30 +47,6 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
     }
   }
 
-  // 2. Visitor Economics Insight
-  if (input.visitors > 0) {
-    if (input.spendPerVisitor < input.targetSpendPerVisitor) {
-      const diff = Math.round(input.targetSpendPerVisitor - input.spendPerVisitor);
-      insights.push({
-        id: 'vis-below-target',
-        category: 'Footfall Economics',
-        type: 'Fact',
-        statement: `Average revenue per visitor is ₹${Math.round(input.spendPerVisitor)}, which is ₹${diff} below the planning assumption of ₹${input.targetSpendPerVisitor}.`,
-        detail: 'Increasing food stall conversions or activity participation can close this unit gap.',
-        severity: 'warning',
-      });
-    } else {
-      insights.push({
-        id: 'vis-healthy',
-        category: 'Footfall Economics',
-        type: 'Fact',
-        statement: `Average spend per visitor is healthy at ₹${Math.round(input.spendPerVisitor)}, exceeding the ₹${input.targetSpendPerVisitor} planning assumption.`,
-        detail: 'Strong multi-dish guest orders and snack stall participation.',
-        severity: 'positive',
-      });
-    }
-  }
-
   // 3. Profitability & Break-Even Insight
   const bep = input.calculatedBreakEven ?? input.planningBreakEven;
   if (bep > 0) {
@@ -83,7 +56,7 @@ export function generateManagementInsights(input: InsightInput): InsightItem[] {
         category: 'Profitability',
         type: 'Projection',
         statement: 'At current month-to-date pace, projected month-end revenue is below the Calculated Break-Even Point.',
-        detail: 'Management intervention required on highway visibility and weekend dinner footfall.',
+        detail: 'Management intervention required on highway visibility and weekend dining demand.',
         severity: 'critical',
       });
     } else {

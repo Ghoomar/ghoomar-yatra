@@ -1,294 +1,181 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { buildPrefixLookupMap, resolveSinglePrefix } from '@/lib/gate/prefix-resolver';
-
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  buildPrefixLookupMap,
+  resolveSinglePrefix,
+} from "@/lib/gate/prefix-resolver";
+import { fetchGateVehicleEvents } from "@/lib/gate/vehicle-events";
+import { classifyVehicle } from "@/lib/marketing/domain";
+import { getBusinessDateRange } from "@/lib/business-date-ranges";
 export interface GateHourlyPoint {
   hour: number;
   hour_label: string;
-  visitors: number;
-  visitor_taps: number;
   cars: number;
   bikes: number;
+  travellers: number;
+  buses: number;
   total_vehicles: number;
   prefixes: Record<string, number>;
   is_nighttime: boolean;
 }
-
 export interface GateAnalyticsResponse {
   business_date: string;
-  start_date?: string;
-  end_date?: string;
-  is_range?: boolean;
-  night_window: {
-    start_hour: number;
-    end_hour: number;
-    label: string;
-  };
+  start_date: string;
+  end_date: string;
+  is_range: boolean;
+  night_window: { start_hour: number; end_hour: number; label: string };
   summary: {
-    total_visitors: number;
     total_cars: number;
     total_bikes: number;
+    total_travellers: number;
+    total_buses: number;
     total_vehicles: number;
-    peak_visitor_hour: { hour: number; label: string; count: number };
     peak_vehicle_hour: { hour: number; label: string; count: number };
     nighttime: {
-      visitors: number;
       cars: number;
       bikes: number;
+      travellers: number;
+      buses: number;
       total_vehicles: number;
-      visitors_percent: number;
       vehicles_percent: number;
     };
     prefixes: { name: string; count: number; percent: number }[];
   };
   hourly_data: GateHourlyPoint[];
 }
-
-function formatHourLabel(h: number): string {
-  const displayH = h % 12 === 0 ? 12 : h % 12;
-  const meridiem = h >= 12 ? 'PM' : 'AM';
-  return `${String(displayH).padStart(2, '0')}:00 ${meridiem}`;
-}
-
-function isWithinNightWindow(hour: number, start: number, end: number): boolean {
-  if (start > end) {
-    // Overnight window, e.g. 23:00 to 06:00 (hour >= 23 or hour < 6)
-    return hour >= start || hour < end;
-  }
-  // Standard window, e.g. 01:00 to 05:00
-  return hour >= start && hour < end;
-}
-
-async function fetchAllRows<T = any>(
-  queryFactory: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
-  pageSize = 1000
-): Promise<T[]> {
-  const all: T[] = [];
-  let page = 0;
-  while (true) {
-    const from = page * pageSize;
-    const to = from + pageSize - 1;
-    const { data, error } = await queryFactory(from, to);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all.push(...data);
-    if (data.length < pageSize) break;
-    page++;
-  }
-  return all;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const searchParams = request.nextUrl.searchParams;
-
-    const startDateParam = searchParams.get('start_date');
-    const endDateParam = searchParams.get('end_date');
-    const dateParam = searchParams.get('date');
-    const localeParam = searchParams.get('locale') || 'en';
-
-    let startDate: string;
-    let endDate: string;
-    let isRange = false;
-
-    if (startDateParam && endDateParam) {
-      startDate = startDateParam;
-      endDate = endDateParam;
-      isRange = startDate !== endDate;
-    } else if (dateParam) {
-      startDate = dateParam;
-      endDate = dateParam;
-      isRange = false;
-    } else {
-      const today = new Date().toISOString().substring(0, 10);
-      startDate = today;
-      endDate = today;
-      isRange = false;
+    const db = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await db.auth.getUser();
+    if (!user)
+      return NextResponse.json({ code: "AUTH_REQUIRED" }, { status: 401 });
+    const params = request.nextUrl.searchParams;
+    const today = getBusinessDateRange("today").from!;
+    const from = params.get("start_date") || params.get("date") || today,
+      to = params.get("end_date") || from;
+    if (getBusinessDateRange("custom", new Date(), from, to).status !== "ready")
+      return NextResponse.json({ code: "INVALID_RANGE" }, { status: 400 });
+    const nightStart = Number(params.get("night_start") || 23),
+      nightEnd = Number(params.get("night_end") || 6);
+    if (
+      ![nightStart, nightEnd].every(
+        (n) => Number.isInteger(n) && n >= 0 && n <= 23,
+      )
+    )
+      return NextResponse.json({ code: "INVALID_RANGE" }, { status: 400 });
+    const [events, prefixes] = await Promise.all([
+      fetchGateVehicleEvents(db, from, to),
+      db
+        .from("vehicle_registration_prefixes")
+        .select("*")
+        .eq("is_active", true),
+    ]);
+    if (prefixes.error) throw prefixes.error;
+    const map = buildPrefixLookupMap(prefixes.data || []),
+      originCounts: Record<string, number> = {};
+    const hours: GateHourlyPoint[] = Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      hour_label: `${String(hour).padStart(2, "0")}:00`,
+      cars: 0,
+      bikes: 0,
+      travellers: 0,
+      buses: 0,
+      total_vehicles: 0,
+      prefixes: {},
+      is_nighttime:
+        nightStart > nightEnd
+          ? hour >= nightStart || hour < nightEnd
+          : hour >= nightStart && hour < nightEnd,
+    }));
+    for (const event of events.data) {
+      const hour = new Date(
+        new Date(event.timestamp).getTime() + 330 * 60000,
+      ).getUTCHours();
+      const bucket = hours[hour];
+      if (!bucket) continue;
+      const category = classifyVehicle(event);
+      const increment = Number(event.increment) || 0;
+      bucket[category] += increment;
+      bucket.total_vehicles += increment;
+      if (category === "cars") {
+        const raw = event.vehicle_prefix || event.location?.name || "Unknown";
+        const name =
+          raw === "Unknown"
+            ? params.get("locale") === "hi"
+              ? "अज्ञात"
+              : "Unknown"
+            : resolveSinglePrefix(raw, map, params.get("locale") || "en")
+                .locationName;
+        bucket.prefixes[name] = (bucket.prefixes[name] || 0) + increment;
+        originCounts[name] = (originCounts[name] || 0) + increment;
+      }
     }
-
-    const nightStart = parseInt(searchParams.get('night_start') || '23', 10);
-    const nightEnd = parseInt(searchParams.get('night_end') || '6', 10);
-
-    // 1. Query raw visitor events for date or range (paginated to retrieve all rows across date ranges)
-    const vEvents = await fetchAllRows((from, to) => {
-      let q = supabase
-        .from('visitor_counter_events')
-        .select('increment, timestamp');
-
-      if (isRange) {
-        q = q.gte('business_date', startDate).lte('business_date', endDate);
-      } else {
-        q = q.eq('business_date', startDate);
-      }
-      return q.range(from, to);
-    });
-
-    // 2. Query raw vehicle events for date or range joined with location (paginated)
-    const cEvents = await fetchAllRows((from, to) => {
-      let q = supabase
-        .from('vehicle_counter_events')
-        .select('increment, timestamp, vehicle_prefix, location:vehicle_origin_locations(id, name)');
-
-      if (isRange) {
-        q = q.gte('business_date', startDate).lte('business_date', endDate);
-      } else {
-        q = q.eq('business_date', startDate);
-      }
-      return q.range(from, to);
-    });
-
-    // 3. Query registration prefix master for location resolution
-    const { data: prefixMasterData } = await supabase
-      .from('vehicle_registration_prefixes')
-      .select('*')
-      .eq('is_active', true);
-
-    const prefixMap = buildPrefixLookupMap(prefixMasterData || []);
-
-    // 4. Initialize 24 hourly buckets (0..23)
-    const hourlyMap = new Map<number, GateHourlyPoint>();
-    for (let h = 0; h < 24; h++) {
-      hourlyMap.set(h, {
-        hour: h,
-        hour_label: formatHourLabel(h),
-        visitors: 0,
-        visitor_taps: 0,
-        cars: 0,
-        bikes: 0,
-        total_vehicles: 0,
-        prefixes: {},
-        is_nighttime: isWithinNightWindow(h, nightStart, nightEnd),
-      });
-    }
-
-    // 5. Populate Visitor Hourly Buckets using ORIGINAL tap timestamp in IST
-    let totalVisitors = 0;
-    (vEvents || []).forEach((ev: any) => {
-      if (!ev.timestamp) return;
-      // Convert timestamp to IST hour
-      const utcDate = new Date(ev.timestamp);
-      // IST is UTC+5:30 (330 minutes)
-      const istMs = utcDate.getTime() + 330 * 60 * 1000;
-      const istDate = new Date(istMs);
-      const hour = istDate.getUTCHours();
-
-      const point = hourlyMap.get(hour);
-      if (point) {
-        const inc = Number(ev.increment) || 0;
-        point.visitors += inc;
-        point.visitor_taps += 1;
-        totalVisitors += inc;
-      }
-    });
-
-    // 6. Populate Vehicle Hourly Buckets using ORIGINAL tap timestamp in IST
-    let totalCars = 0;
-    let totalBikes = 0;
-    const prefixCountMap: Record<string, number> = {};
-
-    (cEvents || []).forEach((ev: any) => {
-      if (!ev.timestamp) return;
-      const utcDate = new Date(ev.timestamp);
-      const istMs = utcDate.getTime() + 330 * 60 * 1000;
-      const istDate = new Date(istMs);
-      const hour = istDate.getUTCHours();
-
-      const point = hourlyMap.get(hour);
-      if (point) {
-        const inc = Number(ev.increment) || 1;
-        const isBike = (ev.location?.name || '').toLowerCase() === 'bike' || (ev.vehicle_prefix || '').toLowerCase() === 'bike';
-
-        if (isBike) {
-          point.bikes += inc;
-          totalBikes += inc;
-        } else {
-          // Resolve canonical origin location
-          const rawKey = ev.vehicle_prefix || ev.location?.name || 'Others';
-          const { locationName } = resolveSinglePrefix(rawKey, prefixMap, localeParam);
-          point.cars += inc;
-          totalCars += inc;
-          point.prefixes[locationName] = (point.prefixes[locationName] || 0) + inc;
-          prefixCountMap[locationName] = (prefixCountMap[locationName] || 0) + inc;
-        }
-        point.total_vehicles = point.cars + point.bikes;
-      }
-    });
-
-    const hourlyArray = Array.from(hourlyMap.values());
-
-    // 6. Compute Peaks and Nighttime Aggregates
-    let peakVisitorHour = { hour: 12, label: '12:00 PM', count: 0 };
-    let peakVehicleHour = { hour: 12, label: '12:00 PM', count: 0 };
-
-    let nightVisitors = 0;
-    let nightCars = 0;
-    let nightBikes = 0;
-
-    hourlyArray.forEach((p) => {
-      if (p.visitors > peakVisitorHour.count) {
-        peakVisitorHour = { hour: p.hour, label: p.hour_label, count: p.visitors };
-      }
-      if (p.total_vehicles > peakVehicleHour.count) {
-        peakVehicleHour = { hour: p.hour, label: p.hour_label, count: p.total_vehicles };
-      }
-      if (p.is_nighttime) {
-        nightVisitors += p.visitors;
-        nightCars += p.cars;
-        nightBikes += p.bikes;
-      }
-    });
-
-    const totalVehicles = totalCars + totalBikes;
-    const nightTotalVehicles = nightCars + nightBikes;
-
-    // Format origins summary sorted descending by count
-    const prefixSummary = Object.entries(prefixCountMap)
-      .map(([name, count]) => {
-        const percent = totalCars > 0 ? Math.round((count / totalCars) * 1000) / 10 : 0;
-        return { name, count, percent };
-      })
-      .sort((a, b) => b.count - a.count);
-
-    const startFmt = `${String(nightStart).padStart(2, '0')}:00`;
-    const endFmt = `${String(nightEnd).padStart(2, '0')}:00`;
-
-    const responsePayload: GateAnalyticsResponse = {
-      business_date: isRange ? `${startDate} to ${endDate}` : startDate,
-      start_date: startDate,
-      end_date: endDate,
-      is_range: isRange,
+    const total = (
+      key: "cars" | "bikes" | "travellers" | "buses" | "total_vehicles",
+      night = false,
+    ) =>
+      hours
+        .filter((h) => !night || h.is_nighttime)
+        .reduce((sum, h) => sum + h[key], 0);
+    const vehicles = total("total_vehicles"),
+      nightVehicles = total("total_vehicles", true);
+    const peak = hours.reduce(
+      (p, h) => (h.total_vehicles > p.total_vehicles ? h : p),
+      hours[0],
+    );
+    const result: GateAnalyticsResponse = {
+      business_date: from,
+      start_date: from,
+      end_date: to,
+      is_range: from !== to,
       night_window: {
         start_hour: nightStart,
         end_hour: nightEnd,
-        label: `${startFmt} – ${endFmt}`,
+        label: `${nightStart}:00–${nightEnd}:00`,
       },
+      hourly_data: hours,
       summary: {
-        total_visitors: totalVisitors,
-        total_cars: totalCars,
-        total_bikes: totalBikes,
-        total_vehicles: totalVehicles,
-        peak_visitor_hour: peakVisitorHour,
-        peak_vehicle_hour: peakVehicleHour,
-        nighttime: {
-          visitors: nightVisitors,
-          cars: nightCars,
-          bikes: nightBikes,
-          total_vehicles: nightTotalVehicles,
-          visitors_percent: totalVisitors > 0 ? Math.round((nightVisitors / totalVisitors) * 1000) / 10 : 0,
-          vehicles_percent: totalVehicles > 0 ? Math.round((nightTotalVehicles / totalVehicles) * 1000) / 10 : 0,
+        total_cars: total("cars"),
+        total_bikes: total("bikes"),
+        total_travellers: total("travellers"),
+        total_buses: total("buses"),
+        total_vehicles: vehicles,
+        peak_vehicle_hour: {
+          hour: peak.hour,
+          label: peak.hour_label,
+          count: peak.total_vehicles,
         },
-        prefixes: prefixSummary,
+        nighttime: {
+          cars: total("cars", true),
+          bikes: total("bikes", true),
+          travellers: total("travellers", true),
+          buses: total("buses", true),
+          total_vehicles: nightVehicles,
+          vehicles_percent: vehicles
+            ? Math.round((nightVehicles / vehicles) * 1000) / 10
+            : 0,
+        },
+        prefixes: Object.entries(originCounts)
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([name, count]) => ({
+            name,
+            count,
+            percent: total("cars")
+              ? Math.round((count / total("cars")) * 1000) / 10
+              : 0,
+          })),
       },
-      hourly_data: hourlyArray,
     };
-
-    return NextResponse.json(responsePayload);
-  } catch (err: any) {
-    console.error('Error computing gate analytics:', err);
-    return NextResponse.json(
-      { error: err.message || 'Failed to compute gate analytics.' },
-      { status: 500 }
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error(
+      "Vehicle analytics failed",
+      error instanceof Error ? error.message : "query failed",
     );
+    return NextResponse.json({ code: "REQUEST_FAILED" }, { status: 500 });
   }
 }

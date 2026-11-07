@@ -1,5 +1,5 @@
 // Ghoomar Yatra - Dedicated Offline Gate Counter Service Worker
-const CACHE_NAME = 'ghoomar-gate-v2';
+const CACHE_NAME = 'ghoomar-gate-v3';
 
 const PRECACHE_URLS = [
   '/operations/gate',

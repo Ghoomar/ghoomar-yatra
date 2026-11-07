@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import crypto from 'crypto';
 import { PetpoojaReportType } from '@/lib/types/sales';
 import { normalizeItemName, resolveParentCategory } from './matcher';
+import { normalizeOrderTimestamp, assertSingleReportDay } from './order-timestamp';
 
 export interface ParseResult {
   reportType: PetpoojaReportType;
@@ -385,6 +386,7 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
         const nextCell = row[c + 1] ? String(row[c + 1]).trim() : '';
         const candidate = nextCell || inlineVal;
         if (candidate) {
+          assertSingleReportDay(candidate, normalizeDateStringToIso);
           const parsed = normalizeDateStringToIso(candidate);
           if (parsed) {
             businessDate = parsed;
@@ -439,6 +441,7 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     if (clean.includes('grand total') || clean.includes('total (') || clean === 'total') col.grandTotal = idx;
   });
 
+  const hasExplicitBusinessDate = Boolean(businessDate);
   const data: any[] = [];
   let totalNetSales = 0;
   let totalGrossSales = 0;
@@ -454,16 +457,9 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     }
 
     const timestampStr = String(row[col.timestamp] || '').trim();
-    let hourOfDay = 12;
-    if (timestampStr) {
-      const timePartMatch = timestampStr.match(/(\d{1,2}):(\d{2})/);
-      if (timePartMatch) {
-        hourOfDay = parseInt(timePartMatch[1], 10) || 12;
-      }
-      if (!businessDate) {
-        businessDate = normalizeDateStringToIso(timestampStr);
-      }
-    }
+    if (!businessDate && timestampStr) businessDate = normalizeDateStringToIso(timestampStr);
+    const orderTimestamp = normalizeOrderTimestamp(timestampStr);
+    const istTimestamp = new Date(new Date(orderTimestamp).getTime() + 330 * 60000);
 
     const grossAmount = cleanNumericValue(row[col.grossAmount]);
     const discountAmount = cleanNumericValue(row[col.discount]);
@@ -484,12 +480,12 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
     data.push({
       business_date: businessDate,
       invoice_no: invoiceNo,
-      order_timestamp: timestampStr || null,
-      hour_of_day: hourOfDay,
+      order_timestamp: orderTimestamp,
+      hour_of_day: istTimestamp.getUTCHours(),
       biller: String(row[col.biller] || '').trim() || null,
       kot_numbers: String(row[col.kotNo] || '').trim() || null,
       payment_type: String(row[col.paymentType] || 'Cash').trim(),
-      order_type: String(row[col.orderType] || '').trim() || 'Dine In',
+      order_type: String(row[col.orderType] || '').trim() || null,
       status: String(row[col.status] || 'Success').trim(),
       area: String(row[col.area] || '').trim() || null,
       captain_name: String(row[col.assignTo] || '').trim() || null,
@@ -513,6 +509,8 @@ function parseOrdersMasterReport(sheetRows: any[][], fileName: string, fileCheck
   if (!businessDate) {
     throw new Error(`Unable to extract report/business date from inside Orders Master report (${fileName}).`);
   }
+
+  if (!hasExplicitBusinessDate && new Set(data.map(d => new Date(new Date(d.order_timestamp).getTime() + 330 * 60000).toISOString().slice(0,10))).size > 1) throw new Error('MULTI_DAY_ORDERS_UNSUPPORTED');
 
   // Synchronize business_date across data rows
   data.forEach((d) => {

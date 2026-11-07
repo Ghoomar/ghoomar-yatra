@@ -3,7 +3,7 @@
  * 
  * Verifies:
  * 1. Service Worker caching logic (Network First with Cache Fallback for Next.js chunks, Gate navigation fallback)
- * 2. Service Worker cache upgrade ('ghoomar-gate-v2') and stale cache purging
+ * 2. Service Worker cache upgrade ('ghoomar-gate-v3') and stale cache purging
  * 3. Gate Counter offline initialization from local store (0ms lag, no network required)
  * 4. Visitor counter increments (+1, +2, +5, +10) stored locally in IndexedDB
  * 5. Vehicle counters (DL, UP16, UP22, UP23, HR, UK, Others, Bike) stored locally
@@ -322,7 +322,7 @@ console.log('📌 Test Group 1: Service Worker Offline Configuration');
 
 // Verify cache name
 const cacheNameMatch = swCode.match(/const CACHE_NAME = '([^']+)';/);
-assert(cacheNameMatch && cacheNameMatch[1] === 'ghoomar-gate-v2', `Cache namespace is correctly set to 'ghoomar-gate-v2' (found '${cacheNameMatch?.[1]}')`);
+assert(cacheNameMatch && cacheNameMatch[1] === 'ghoomar-gate-v3', `Cache namespace is correctly set to 'ghoomar-gate-v3' (found '${cacheNameMatch?.[1]}')`);
 
 // Verify precached URLs includes Gate Counter
 assert(swCode.includes("'/operations/gate'"), "Precache URLs explicitly includes '/operations/gate'");
@@ -339,12 +339,12 @@ assert(swCode.includes("caches.match('/operations/gate')"), "Offline navigation 
 // Simulate Service Worker Cache Eviction (activate event)
 const cacheStorage = globalThis.caches;
 await (await cacheStorage.open('ghoomar-gate-v1')).put('/stale-chunk.js', { body: 'stale' });
-await (await cacheStorage.open('ghoomar-gate-v2')).put('/operations/gate', { body: 'fresh-gate' });
+await (await cacheStorage.open('ghoomar-gate-v3')).put('/operations/gate', { body: 'fresh-gate' });
 
 const existingCachesBefore = await cacheStorage.keys();
-assert(existingCachesBefore.includes('ghoomar-gate-v1') && existingCachesBefore.includes('ghoomar-gate-v2'), "Simulated presence of both old (v1) and new (v2) caches before activation");
+assert(existingCachesBefore.includes('ghoomar-gate-v1') && existingCachesBefore.includes('ghoomar-gate-v3'), "Simulated presence of both old (v1) and new (v3) caches before activation");
 
-// Run SW activate logic: delete all caches where name !== 'ghoomar-gate-v2'
+// Run SW activate logic: delete all caches where name !== 'ghoomar-gate-v3'
 const newCacheName = cacheNameMatch[1];
 const cacheNames = await cacheStorage.keys();
 await Promise.all(
@@ -355,13 +355,13 @@ await Promise.all(
 
 const remainingCaches = await cacheStorage.keys();
 assert(!remainingCaches.includes('ghoomar-gate-v1'), "Old 'ghoomar-gate-v1' cache purged successfully during activation");
-assert(remainingCaches.includes('ghoomar-gate-v2'), "Active 'ghoomar-gate-v2' cache preserved during activation");
+assert(remainingCaches.includes('ghoomar-gate-v3'), "Active 'ghoomar-gate-v3' cache preserved during activation");
 
 // Simulate Network First with Cache Fallback behavior for a Next.js chunk
 console.log('\n📌 Test Group 2: Next.js Chunk Fetching (Online vs Offline)');
 
 const chunkUrl = 'https://yatra.ghoomar.in/_next/static/chunks/app/operations/gate/page-12345.js';
-const v2Cache = await cacheStorage.open('ghoomar-gate-v2');
+const v2Cache = await cacheStorage.open('ghoomar-gate-v3');
 
 // Phase 1: Online fetch succeeds and puts response in cache
 let onlineNetworkAvailable = true;
@@ -381,7 +381,7 @@ async function simulatedFetchChunk(url) {
 const onlineRes = await simulatedFetchChunk(chunkUrl);
 assert(onlineRes.status === 200, "Online chunk fetch returns status 200 from network");
 const inCache = await v2Cache.match(chunkUrl);
-assert(inCache && inCache.body.includes('gate page loaded'), "Chunk was automatically cached in 'ghoomar-gate-v2'");
+assert(inCache && inCache.body.includes('gate page loaded'), "Chunk was automatically cached in 'ghoomar-gate-v3'");
 
 // Phase 2: Offline - network fails, chunk served from cache
 onlineNetworkAvailable = false;

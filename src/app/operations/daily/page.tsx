@@ -15,6 +15,9 @@ import {
   getPreviousPetpoojaReportDate,
   DAILY_REPORT_CONFIG,
 } from '@/lib/sales/petpooja-completeness';
+import { OperatingMetrics } from '@/components/marketing/OperatingMetrics';
+import { classifyVehicle } from '@/lib/marketing/domain';
+import { fetchGateVehicleEvents } from '@/lib/gate/vehicle-events';
 import { resolveCarOrigins, ResolvedCarOrigin } from '@/lib/gate/prefix-resolver';
 import {
   ClipboardList,
@@ -48,7 +51,6 @@ interface EntryStatusState {
 }
 
 interface GateTrafficState {
-  visitors: number;
   cars: number;
   bikes: number;
   totalVehicles: number;
@@ -119,7 +121,6 @@ export default function DailyOperationsPage() {
 
   // Section 2: Gate Traffic (Origins First)
   const [gateTraffic, setGateTraffic] = useState<GateTrafficState>({
-    visitors: 0,
     cars: 0,
     bikes: 0,
     totalVehicles: 0,
@@ -160,7 +161,6 @@ export default function DailyOperationsPage() {
         attendanceRes,
         storeStatusRes,
         utilitiesStatusRes,
-        visitorEventsRes,
         vehicleEventsRes,
         petpoojaBatchesRes,
         petpoojaSummaryRes,
@@ -186,17 +186,7 @@ export default function DailyOperationsPage() {
           .select('id', { count: 'exact', head: true })
           .eq('business_date', businessDate),
 
-        // 4. Gate visitors for businessDate
-        supabase
-          .from('visitor_counter_events')
-          .select('increment')
-          .eq('business_date', businessDate),
-
-        // 5. Gate vehicles & origins for businessDate
-        supabase
-          .from('vehicle_counter_events')
-          .select('increment, vehicle_prefix, location:vehicle_origin_locations(id, name)')
-          .eq('business_date', businessDate),
+        fetchGateVehicleEvents(supabase, businessDate, businessDate),
 
         // 6. Petpooja batches for previousDate
         supabase
@@ -258,39 +248,31 @@ export default function DailyOperationsPage() {
       });
 
       // --- SECTION 2: GATE TRAFFIC DERIVATION ---
-      const visitors = (visitorEventsRes.data || []).reduce(
-        (sum: number, ev: any) => sum + (Number(ev.increment) || 0),
-        0
-      );
-
       let cars = 0;
       let bikes = 0;
+      let otherVehicles = 0;
 
       (vehicleEventsRes.data || []).forEach((ev: any) => {
         const inc = Number(ev.increment) || 1;
-        const locObj = Array.isArray(ev.location) ? ev.location[0] : ev.location;
-        const isBike =
-          (locObj?.name || '').toLowerCase() === 'bike' ||
-          (ev.vehicle_prefix || '').toLowerCase() === 'bike';
-
+        const group = classifyVehicle(ev);
+        const isBike = group === 'bikes';
         if (isBike) {
           bikes += inc;
-        } else {
+        } else if (group === 'cars') {
           cars += inc;
-        }
+        } else { otherVehicles += inc; }
       });
 
       const resolvedOrigins = resolveCarOrigins(
-        vehicleEventsRes.data || [],
+        (vehicleEventsRes.data || []).filter((e: any) => classifyVehicle(e) === 'cars'),
         prefixMasterRes.data || [],
         locale
       );
 
       setGateTraffic({
-        visitors,
         cars,
         bikes,
-        totalVehicles: cars + bikes,
+        totalVehicles: cars + bikes + otherVehicles,
         origins: resolvedOrigins,
       });
 
@@ -627,6 +609,8 @@ export default function DailyOperationsPage() {
       {/* =========================================================================
           SECTION 2: GATE TRAFFIC (Origin Prominence First, NO View Gate Link)
           ========================================================================= */}
+      <OperatingMetrics from={businessDate} to={businessDate} />
+
       <Card className="border-stone-200/80 shadow-xs overflow-hidden">
         <CardHeader className="pb-3 border-b border-stone-100">
           <CardTitle className="text-sm font-bold flex items-center gap-2 text-stone-900">
@@ -684,14 +668,7 @@ export default function DailyOperationsPage() {
 
           {/* Compact Gate Metrics Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-stone-100">
-            <div className="bg-stone-50/70 p-2.5 rounded-xl border border-stone-200/60">
-              <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block">
-                {t('operations.daily.gate.visitors')}
-              </span>
-              <span className="text-xl font-black text-stone-900 block mt-0.5">
-                {formatNumber(gateTraffic.visitors)}
-              </span>
-            </div>
+
 
             <div className="bg-stone-50/70 p-2.5 rounded-xl border border-stone-200/60">
               <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block">

@@ -35,6 +35,7 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
     isOpen: boolean;
     message: string;
     existingBatch?: any;
+    expectedRevision?: number;
   }>({ isOpen: false, message: '' });
 
   const [batchToDelete, setBatchToDelete] = useState<SalesImportBatch | null>(null);
@@ -44,6 +45,8 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
   const [loadingBatches, setLoadingBatches] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
+  const importRetry = useRef<{file: File; overwrite: boolean; revision: number; id: string} | null>(null);
+  const deleteRetry = useRef<{id: string; request: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadBatches = async () => {
@@ -107,6 +110,10 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const revision = overwrite ? (duplicateModal.expectedRevision ?? duplicateModal.existingBatch?.revision ?? 0) : (duplicateModal.expectedRevision ?? 0);
+      if (!importRetry.current || importRetry.current.file !== file || importRetry.current.overwrite !== overwrite || importRetry.current.revision !== revision) importRetry.current = {file, overwrite, revision, id: crypto.randomUUID()};
+      formData.append('request_id', importRetry.current.id);
+      formData.append('expected_revision', String(revision));
       if (overwrite) {
         formData.append('overwrite', 'true');
       }
@@ -118,17 +125,18 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
 
       const data = await res.json();
 
-      if (res.status === 409 && data.isDuplicate) {
+      if (res.status === 409 && (data.isDuplicate || data.code === 'REVISION_CONFLICT')) {
         setDuplicateModal({
           isOpen: true,
-          message: data.message,
+          message: data.code ? t(`marketing.errors.${data.code}`) : data.message,
           existingBatch: data.existingBatch,
+          expectedRevision: data.expectedRevision,
         });
         return;
       }
 
       if (!res.ok) {
-        throw new Error(data.error || t('finance.sales.import.failedImport'));
+        throw new Error((data.code ? t(`marketing.errors.${data.code}`) : data.error) || t('finance.sales.import.failedImport'));
       }
 
       setMessage({
@@ -167,12 +175,14 @@ export function SalesImportSection({ onImportSuccess }: SalesImportSectionProps)
     if (!batchToDelete) return;
     setDeleting(true);
     try {
+      if (deleteRetry.current?.id !== batchToDelete.id) deleteRetry.current = {id: batchToDelete.id, request: crypto.randomUUID()};
       const res = await fetch(`/api/finance/sales/import?batch_id=${batchToDelete.id}`, {
         method: 'DELETE',
+        headers: {'Idempotency-Key': deleteRetry.current.request, 'X-Expected-Revision': String(batchToDelete.revision ?? 0), 'X-Report-Type': batchToDelete.report_type, 'X-Business-Date': batchToDelete.business_date},
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to delete import batch');
+        throw new Error(data.code ? t(`marketing.errors.${data.code}`) : data.error || t('finance.sales.import.failedImport'));
       }
 
       setMessage({

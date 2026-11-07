@@ -10,9 +10,7 @@ interface TargetPacingProps {
   revenueAchieved: number;
   remainingRevenue: number;
   actualSpendPerDiner?: number;
-  actualSpendPerVisitor?: number;
   requiredDinersRemaining?: number;
-  requiredVisitorsRemaining?: number;
   achievementPercent: number;
 }
 
@@ -21,15 +19,13 @@ export function TargetPacing({
   revenueAchieved,
   remainingRevenue,
   actualSpendPerDiner,
-  actualSpendPerVisitor,
   requiredDinersRemaining,
-  requiredVisitorsRemaining,
   achievementPercent,
 }: TargetPacingProps) {
   const { t } = useI18n();
-  const spend = actualSpendPerDiner ?? actualSpendPerVisitor ?? 0;
+  const spend = actualSpendPerDiner ?? 0;
   const spendBase = spend > 0 ? spend : 300;
-  const dinersNeeded = requiredDinersRemaining ?? requiredVisitorsRemaining ?? 0;
+  const dinersNeeded = requiredDinersRemaining ?? 0;
 
   return (
     <Card>

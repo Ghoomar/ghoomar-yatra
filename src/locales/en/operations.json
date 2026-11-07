@@ -24,7 +24,7 @@
     },
     "gate": {
       "title": "Gate Traffic",
-      "subtitle": "Authoritative footfall and vehicle arrivals for {date}",
+      "subtitle": "Vehicle arrivals and origins for {date}",
       "carOrigins": "Car Origins",
       "visitors": "Visitors",
       "cars": "Cars",

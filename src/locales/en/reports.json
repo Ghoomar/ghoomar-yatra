@@ -10,8 +10,8 @@
   "kpis": {
     "netRevenue": "Net Revenue",
     "netRevenueSub": "Petpooja POS settled",
-    "guestPax": "Guest Footfall",
-    "guestPaxSub": "Logged at gate",
+    "guestPax": "Dining covers",
+    "guestPaxSub": "Recorded on bills",
     "dinerPax": "Restaurant Covers",
     "dinerPaxSub": "Dining guests",
     "avgSpendPax": "Avg Spend / PAX",
@@ -26,8 +26,8 @@
   "charts": {
     "dailySalesTrend": "Daily Sales Trend Line (MTD)",
     "salesTrendDesc": "Cumulative daily performance showing net sales progression and peaks",
-    "gateTimeAnalytics": "Hourly Gate Footfall & Arrival Heatmap",
-    "gateTimeDesc": "Peak entry hours and visitor flow distribution",
+    "gateTimeAnalytics": "Hourly vehicle arrivals",
+    "gateTimeDesc": "Vehicle types and peak arrival hours",
     "inventoryDispatches": "Store Dispatches by Department",
     "inventoryDispatchesDesc": "Daily material requisitions and departmental allocations"
   },

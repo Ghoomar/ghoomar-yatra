@@ -12,6 +12,7 @@ import enFinance from './en/finance.json';
 import enReports from './en/reports.json';
 import enDashboard from './en/dashboard.json';
 import enSops from './en/sops.json';
+import enMarketing from './en/marketing.json';
 
 import hiCommon from './hi/common.json';
 import hiNavigation from './hi/navigation.json';
@@ -27,6 +28,7 @@ import hiFinance from './hi/finance.json';
 import hiReports from './hi/reports.json';
 import hiDashboard from './hi/dashboard.json';
 import hiSops from './hi/sops.json';
+import hiMarketing from './hi/marketing.json';
 
 export type Locale = 'en' | 'hi';
 
@@ -52,6 +54,7 @@ export const enTranslations = {
   reports: enReports,
   dashboard: enDashboard,
   sops: enSops,
+  marketing: enMarketing,
 };
 
 export const hiTranslations = {
@@ -69,6 +72,7 @@ export const hiTranslations = {
   reports: hiReports,
   dashboard: hiDashboard,
   sops: hiSops,
+  marketing: hiMarketing,
 };
 
 export const translations: Record<Locale, typeof enTranslations> = {

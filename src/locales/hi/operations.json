@@ -24,7 +24,7 @@
     },
     "gate": {
       "title": "गेट ट्रैफिक",
-      "subtitle": "{date} को आने वाले लोग और वाहन",
+      "subtitle": "{date} के वाहन आगमन और मूल स्थान",
       "carOrigins": "Car Origins",
       "visitors": "आने वाले लोग",
       "cars": "कारें",
