@@ -564,7 +564,19 @@ function MenuMasterContent() {
         </div>
 
         {/* Header Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href="/admin/menu-master">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs text-stone-700">
+              <UtensilsCrossed className="h-3.5 w-3.5 text-amber-600" />
+              <span>Menu Master</span>
+            </Button>
+          </Link>
+          <Link href="/sops/recipes">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs text-stone-700">
+              <Layers className="h-3.5 w-3.5 text-amber-600" />
+              <span>Recipe Book</span>
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"
@@ -826,9 +838,23 @@ function MenuMasterContent() {
                           >
                             {/* 1. Item Name */}
                             <td className="py-3.5 px-4">
-                              <span className="font-medium text-stone-900 group-hover:text-amber-700 transition-colors">
-                                {item.name}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium text-stone-900 group-hover:text-amber-700 transition-colors">
+                                  {item.name}
+                                </span>
+                                {item.product_type && (
+                                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${
+                                    item.product_type === 'COMBO' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                    item.product_type === 'THALI' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                    item.product_type === 'STANDALONE_PURCHASED' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                                    'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}>
+                                    {item.product_type === 'INDIVIDUAL_DISH' ? 'Dish' :
+                                     item.product_type === 'STANDALONE_PURCHASED' ? 'Packaged' :
+                                     item.product_type}
+                                  </span>
+                                )}
+                              </div>
                               {item.name_hi && (
                                 <div className="text-xs text-stone-500 font-sans">{item.name_hi}</div>
                               )}

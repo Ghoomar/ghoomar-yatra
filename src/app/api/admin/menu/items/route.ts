@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         name_hi: finalNameHi,
         name_hi_is_custom: Boolean(name_hi_is_custom),
         needs_setup: false,
+        product_type: body.product_type || 'INDIVIDUAL_DISH',
         normalized_name: normalized,
         category: cat.name,
         category_id,
@@ -264,6 +265,9 @@ export async function PUT(request: NextRequest) {
     }
     if (is_active !== undefined) {
       updatePayload.is_active = Boolean(is_active);
+    }
+    if (body.product_type !== undefined) {
+      updatePayload.product_type = body.product_type;
     }
 
     // Preserve GST = 5%, Tax Type = Forward Tax (do not overwrite)

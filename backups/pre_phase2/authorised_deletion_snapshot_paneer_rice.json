@@ -1,0 +1,140 @@
+{
+  "captured_at": "2026-11-12T20:07:51.946Z",
+  "paneer_rice_combo": [
+    {
+      "id": "7e7d7b0e-463e-4740-90de-a7e61c80943d",
+      "name": "Paneer Rice",
+      "name_hi": null,
+      "product_type": "COMBO",
+      "menu_item_id": null,
+      "selling_price": "199.0000",
+      "gas_cost": "7.0000",
+      "other_operating_cost": "0.0000",
+      "packaging_cost_dine_in": "0.0000",
+      "packaging_cost_takeaway": "15.0000",
+      "default_service_channel": "DINE_IN",
+      "notes": null,
+      "is_active": true,
+      "legacy_combo_id": "90e6a39e-427e-4bd6-a524-890404045630",
+      "created_at": "2026-10-31T04:34:10.135Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    }
+  ],
+  "paneer_rice_components": [
+    {
+      "id": "bf0d4b50-dbfc-47c5-950b-1f7cb294079e",
+      "combo_thali_id": "7e7d7b0e-463e-4740-90de-a7e61c80943d",
+      "component_name": "Paneer",
+      "recipe_id": "b4df614a-a873-48da-929c-4faed5af6f9e",
+      "variant_id": null,
+      "portion_quantity": "200.0000",
+      "portion_unit": "g",
+      "sort_order": 1,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    },
+    {
+      "id": "b52a8098-a88d-48d2-a3a6-a63f3a8f8cb6",
+      "combo_thali_id": "7e7d7b0e-463e-4740-90de-a7e61c80943d",
+      "component_name": "Cooked Rice",
+      "recipe_id": "b48fa976-3800-4415-a822-566ab4100193",
+      "variant_id": null,
+      "portion_quantity": "160.0000",
+      "portion_unit": "g",
+      "sort_order": 2,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    },
+    {
+      "id": "eef5af96-12ce-41f1-a5b8-97902c714e11",
+      "combo_thali_id": "7e7d7b0e-463e-4740-90de-a7e61c80943d",
+      "component_name": "Salad",
+      "recipe_id": "d914facf-ed4d-4a8c-a564-10eb2ea6b1dc",
+      "variant_id": null,
+      "portion_quantity": "40.0000",
+      "portion_unit": "g",
+      "sort_order": 3,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    }
+  ],
+  "paneer_dish_recipe": [
+    {
+      "id": "b4df614a-a873-48da-929c-4faed5af6f9e",
+      "name": "Paneer Dish (Combo Portion)",
+      "name_hi": null,
+      "category": "COMBO_PORTION",
+      "batch_yield_quantity": "200.0000",
+      "batch_yield_unit": "g",
+      "portion_size_quantity": null,
+      "portion_size_unit": null,
+      "instructions": null,
+      "notes": "Paneer portion for combos: 200g serving costing ₹40.00.",
+      "is_active": true,
+      "legacy_recipe_id": "0e0d1f83-e0d6-4458-b8cb-5dc57a1b21f9",
+      "created_at": "2026-10-31T04:33:47.120Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    }
+  ],
+  "paneer_dish_ingredients": [
+    {
+      "id": "b567419c-31b5-4827-96dc-7fba094808c6",
+      "recipe_id": "b4df614a-a873-48da-929c-4faed5af6f9e",
+      "ingredient_type": "RAW_MATERIAL",
+      "ingredient_group_id": "e8f28c53-698b-4d00-a208-a0650dec19b1",
+      "inventory_item_id": null,
+      "sub_recipe_id": null,
+      "quantity": "100.0000",
+      "unit": "g",
+      "sort_order": 0,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    },
+    {
+      "id": "4e17a69b-3eb4-4f23-8a8c-22b9d22f7f6f",
+      "recipe_id": "b4df614a-a873-48da-929c-4faed5af6f9e",
+      "ingredient_type": "PREPARATION",
+      "ingredient_group_id": null,
+      "inventory_item_id": null,
+      "sub_recipe_id": "42166877-1a9e-4982-af98-eec2be5a117c",
+      "quantity": "90.0000",
+      "unit": "g",
+      "sort_order": 1,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    },
+    {
+      "id": "53be2c6f-d1c9-4883-a62a-8f5444cbfdad",
+      "recipe_id": "b4df614a-a873-48da-929c-4faed5af6f9e",
+      "ingredient_type": "PREPARATION",
+      "ingredient_group_id": null,
+      "inventory_item_id": null,
+      "sub_recipe_id": "124aa47a-609d-4e7a-8c0f-a074093058a1",
+      "quantity": "10.0000",
+      "unit": "g",
+      "sort_order": 2,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    },
+    {
+      "id": "1ee9eb11-081d-4096-a747-88c1626df0e7",
+      "recipe_id": "b4df614a-a873-48da-929c-4faed5af6f9e",
+      "ingredient_type": "RAW_MATERIAL",
+      "ingredient_group_id": "8be877ec-34ff-4eca-bc02-53f65e961ff5",
+      "inventory_item_id": null,
+      "sub_recipe_id": null,
+      "quantity": "9.6630",
+      "unit": "g",
+      "sort_order": 3,
+      "notes": null,
+      "created_at": "2026-11-01T17:17:15.022Z",
+      "updated_at": "2026-11-01T17:17:15.022Z"
+    }
+  ]
+}

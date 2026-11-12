@@ -24,6 +24,9 @@ import {
   HelpCircle,
   Lock,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
   Filter,
   X,
   BookOpen,
@@ -72,9 +75,13 @@ function RecipesContent() {
   const [groupsLoading, setGroupsLoading] = useState(false);
 
   // Filters
-  const [categoryTab, setCategoryTab] = useState<string>('ALL');
+  const [categoryTab, setCategoryTab] = useState<string>('FINAL_DISH');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Sorting
+  const [sortField, setSortField] = useState<'name' | 'category' | 'batch_yield' | 'status'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Units Master Data
   const [centralUnits, setCentralUnits] = useState<CentralUnit[]>([]);
@@ -296,6 +303,34 @@ function RecipesContent() {
     });
   }, [recipes, categoryTab, statusFilter, searchTerm]);
 
+  const sortedRecipes = useMemo(() => {
+    const list = [...filteredRecipes];
+    list.sort((a, b) => {
+      let res = 0;
+      if (sortField === 'name') {
+        res = (a.name || '').localeCompare(b.name || '', locale || 'en');
+      } else if (sortField === 'category') {
+        res = (a.category || '').localeCompare(b.category || '', locale || 'en');
+      } else if (sortField === 'batch_yield') {
+        const aVal = a.batch_yield_quantity != null ? Number(a.batch_yield_quantity) : -1;
+        const bVal = b.batch_yield_quantity != null ? Number(b.batch_yield_quantity) : -1;
+        res = aVal - bVal;
+      } else if (sortField === 'status') {
+        const rank: Record<string, number> = {
+          COSTED_ELIGIBLE: 1,
+          UNCOSTED: 2,
+          COSTING_INCOMPLETE: 3,
+          INELIGIBLE: 4,
+        };
+        const aRank = rank[a.costing_status] || 5;
+        const bRank = rank[b.costing_status] || 5;
+        res = aRank - bRank;
+      }
+      return sortOrder === 'asc' ? res : -res;
+    });
+    return list;
+  }, [filteredRecipes, sortField, sortOrder, locale]);
+
   const getStatusBadge = (status: string, reasons?: string[]) => {
     switch (status) {
       case 'COSTED_ELIGIBLE':
@@ -426,10 +461,9 @@ function RecipesContent() {
       {/* Category Tabs */}
       <div className="flex overflow-x-auto gap-1 border-b border-[#E7E2D8] pb-px">
         {[
-          { key: 'ALL', label: t('sops.recipes.allCategories') },
           { key: 'FINAL_DISH', label: t('sops.recipes.finalDishes') },
           { key: 'PREPARATION', label: locale === 'hi' ? 'पूर्व-तैयारियां (YM)' : 'Preparations (YM)' },
-          { key: 'COMBO_PORTION', label: t('sops.recipes.comboPortions') },
+          { key: 'ALL', label: t('sops.recipes.allCategories') },
           { key: 'COMBOS', label: `${locale === 'hi' ? 'कॉम्बो और थाली' : 'Combos & Thalis'}${combos.length ? ` (${combos.length})` : ''}` },
         ].map((tab) => (
           <button
@@ -588,18 +622,77 @@ function RecipesContent() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
-                    <th className="py-3 px-4">{t('sops.recipes.colName')}</th>
-                    <th className="py-3 px-4">{t('sops.recipes.colCategory')}</th>
-                    <th className="py-3 px-4">{t('sops.recipes.colBatchYield')}</th>
+                    <th
+                      onClick={() => {
+                        if (sortField === 'name') setSortOrder((p) => (p === 'asc' ? 'desc' : 'asc'));
+                        else { setSortField('name'); setSortOrder('asc'); }
+                      }}
+                      className="py-3 px-4 cursor-pointer select-none hover:text-amber-800 transition-colors"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>{t('sops.recipes.colName')}</span>
+                        {sortField === 'name' ? (
+                          sortOrder === 'asc' ? <ChevronUp className="h-3.5 w-3.5 text-amber-600" /> : <ChevronDown className="h-3.5 w-3.5 text-amber-600" />
+                        ) : (
+                          <ChevronsUpDown className="h-3.5 w-3.5 text-stone-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => {
+                        if (sortField === 'category') setSortOrder((p) => (p === 'asc' ? 'desc' : 'asc'));
+                        else { setSortField('category'); setSortOrder('asc'); }
+                      }}
+                      className="py-3 px-4 cursor-pointer select-none hover:text-amber-800 transition-colors"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>{t('sops.recipes.colCategory')}</span>
+                        {sortField === 'category' ? (
+                          sortOrder === 'asc' ? <ChevronUp className="h-3.5 w-3.5 text-amber-600" /> : <ChevronDown className="h-3.5 w-3.5 text-amber-600" />
+                        ) : (
+                          <ChevronsUpDown className="h-3.5 w-3.5 text-stone-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => {
+                        if (sortField === 'batch_yield') setSortOrder((p) => (p === 'asc' ? 'desc' : 'asc'));
+                        else { setSortField('batch_yield'); setSortOrder('asc'); }
+                      }}
+                      className="py-3 px-4 cursor-pointer select-none hover:text-amber-800 transition-colors"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>{t('sops.recipes.colBatchYield')}</span>
+                        {sortField === 'batch_yield' ? (
+                          sortOrder === 'asc' ? <ChevronUp className="h-3.5 w-3.5 text-amber-600" /> : <ChevronDown className="h-3.5 w-3.5 text-amber-600" />
+                        ) : (
+                          <ChevronsUpDown className="h-3.5 w-3.5 text-stone-300" />
+                        )}
+                      </div>
+                    </th>
                     <th className="py-3 px-4">{t('sops.recipes.colPortion')}</th>
                     <th className="py-3 px-4 text-right">{t('sops.recipes.colBatchCost')}</th>
                     <th className="py-3 px-4 text-right">{t('sops.recipes.colUnitCost')}</th>
-                    <th className="py-3 px-4">{t('sops.recipes.colStatus')}</th>
-                    <th className="py-3 px-4 text-right">{t('sops.recipes.colActions')}</th>
+                    <th
+                      onClick={() => {
+                        if (sortField === 'status') setSortOrder((p) => (p === 'asc' ? 'desc' : 'asc'));
+                        else { setSortField('status'); setSortOrder('asc'); }
+                      }}
+                      className="py-3 px-4 cursor-pointer select-none hover:text-amber-800 transition-colors"
+                    >
+                      <div className="inline-flex items-center gap-1.5">
+                        <span>{t('sops.recipes.colStatus')}</span>
+                        {sortField === 'status' ? (
+                          sortOrder === 'asc' ? <ChevronUp className="h-3.5 w-3.5 text-amber-600" /> : <ChevronDown className="h-3.5 w-3.5 text-amber-600" />
+                        ) : (
+                          <ChevronsUpDown className="h-3.5 w-3.5 text-stone-300" />
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E7E2D8]">
-                  {filteredRecipes.map((r) => {
+                  {sortedRecipes.map((r) => {
                     const unitOrServingCost =
                       r.category === 'PREPARATION' || r.category === 'COMBO_PORTION' || r.category === 'BULK_CATERING'
                         ? r.cost_per_output_unit
@@ -611,16 +704,18 @@ function RecipesContent() {
                         : `/${r.portion_size_unit || 'portion'}`;
 
                     return (
-                      <tr key={r.id} className="hover:bg-amber-50/20 transition-colors group">
+                      <tr
+                        key={r.id}
+                        onClick={() => router.push(`/sops/recipes/${r.id}`)}
+                        className="hover:bg-amber-50/30 cursor-pointer transition-colors group"
+                      >
                         <td className="py-3.5 px-4">
-                          <Link href={`/sops/recipes/${r.id}`} className="block">
-                            <div className="font-medium text-stone-900 group-hover:text-amber-700 transition-colors">
-                              {r.name}
-                            </div>
-                            {r.name_hi && (
-                              <div className="text-xs text-stone-500 font-sans">{r.name_hi}</div>
-                            )}
-                          </Link>
+                          <div className="font-medium text-stone-900 group-hover:text-amber-700 transition-colors">
+                            {r.name}
+                          </div>
+                          {r.name_hi && (
+                            <div className="text-xs text-stone-500 font-sans">{r.name_hi}</div>
+                          )}
                         </td>
 
                         <td className="py-3.5 px-4">
@@ -678,15 +773,6 @@ function RecipesContent() {
 
                         <td className="py-3.5 px-4">
                           {getStatusBadge(r.costing_status, r.costing_reasons)}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-right">
-                          <Link href={`/sops/recipes/${r.id}`}>
-                            <Button variant="ghost" size="sm" className="h-8 px-2 text-stone-600 hover:text-amber-700">
-                              <span className="text-xs mr-1">{t('sops.recipes.viewDetails')}</span>
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            </Button>
-                          </Link>
                         </td>
                       </tr>
                     );
@@ -850,9 +936,9 @@ function RecipesContent() {
                     onChange={(e) => setNewForm({ ...newForm, batch_yield_unit: e.target.value })}
                     className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 cursor-pointer"
                   >
-                    {getCompatibleUnitOptions(newForm.category === 'FINAL_DISH' ? 'pcs' : 'kg', centralUnits, undefined, locale).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                    {['kg', 'g', 'pcs'].map((u) => (
+                      <option key={u} value={u}>
+                        {u === 'kg' ? (locale === 'hi' ? 'kg (किलोग्राम)' : 'kg (Kilograms)') : u === 'g' ? (locale === 'hi' ? 'g (ग्राम)' : 'g (Grams)') : (locale === 'hi' ? 'pcs (पीस)' : 'pcs (Pieces)')}
                       </option>
                     ))}
                   </select>

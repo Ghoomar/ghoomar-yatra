@@ -35,6 +35,7 @@ interface MenuItemModalProps {
     gst_percent: number;
     tax_type: string;
     is_active: boolean;
+    product_type?: string;
     aliases?: string[];
   } | null;
 }
@@ -52,6 +53,7 @@ export function MenuItemModal({
   const [name, setName] = useState('');
   const [nameHi, setNameHi] = useState('');
   const [isCustomHindi, setIsCustomHindi] = useState(false);
+  const [productType, setProductType] = useState('INDIVIDUAL_DISH');
   const [selectedParent, setSelectedParent] = useState<string>('');
   const [categoryId, setCategoryId] = useState('');
   const [price, setPrice] = useState<number | string>(0);
@@ -84,6 +86,7 @@ export function MenuItemModal({
       setName(item.name);
       setNameHi(item.name_hi || '');
       setIsCustomHindi(Boolean(item.name_hi_is_custom));
+      setProductType(item.product_type || 'INDIVIDUAL_DISH');
       const matchedCat = categories.find((c) => c.id === item.category_id || c.name === item.category);
       const parentCandidate = matchedCat?.parent_category_name || (item.parent_category && item.parent_category !== 'Uncategorized' ? item.parent_category : '') || parentList[0]?.name || '';
       setSelectedParent(parentCandidate);
@@ -96,6 +99,7 @@ export function MenuItemModal({
       setName('');
       setNameHi('');
       setIsCustomHindi(false);
+      setProductType('INDIVIDUAL_DISH');
       const defaultParent = parentList[0]?.name || '';
       setSelectedParent(defaultParent);
       const firstCatInParent = categories.find((c) => c.parent_category_name === defaultParent) || categories[0];
@@ -165,6 +169,7 @@ export function MenuItemModal({
         name: name.trim(),
         name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
         name_hi_is_custom: isCustomHindi,
+        product_type: productType,
         category_id: categoryId,
         price: Number(price) || 0,
         is_active: isActive,
@@ -279,6 +284,22 @@ export function MenuItemModal({
             placeholderHindi="उदा. पंजाबी स्पेशल थाली, दाल मखनी"
             required
           />
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              {locale === 'hi' ? 'उत्पाद प्रकार (Product Type)' : 'Product Type'} <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={productType}
+              onChange={(e) => setProductType(e.target.value)}
+              className="w-full rounded-xl border border-stone-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-none bg-stone-50/30 font-medium"
+            >
+              <option value="INDIVIDUAL_DISH">{locale === 'hi' ? 'एकल डिश (Individual Dish)' : 'Individual Dish'}</option>
+              <option value="COMBO">{locale === 'hi' ? 'कॉम्बो (Combo)' : 'Combo'}</option>
+              <option value="THALI">{locale === 'hi' ? 'थाली (Thali)' : 'Thali'}</option>
+              <option value="STANDALONE_PURCHASED">{locale === 'hi' ? 'तैयार/पैकेज्ड उत्पाद (Retail/Packaged)' : 'Standalone Purchased (Retail/Packaged)'}</option>
+            </select>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>

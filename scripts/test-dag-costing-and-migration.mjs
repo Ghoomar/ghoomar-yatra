@@ -152,14 +152,14 @@ async function runTests() {
 
     console.log(`Initial status counts across ${initialRecipeCosts.size} recipes:`);
     console.log(`  COSTED_ELIGIBLE: ${costedCount} (Expected: 0)`);
-    console.log(`  UNCOSTED: ${uncostedCount} (Expected: >= 54)`);
+    console.log(`  UNCOSTED: ${uncostedCount} (Expected: >= 53)`);
     console.log(`  COSTING_INCOMPLETE: ${incompleteCount} (Expected: >= 5)`);
 
     if (costedCount !== 0) {
       throw new Error(`Expected 0 COSTED_ELIGIBLE recipes in resting state, found ${costedCount}`);
     }
-    if (uncostedCount < 54) {
-      throw new Error(`Expected at least 54 UNCOSTED recipes in resting state, found ${uncostedCount}`);
+    if (uncostedCount < 53) {
+      throw new Error(`Expected at least 53 UNCOSTED recipes in resting state, found ${uncostedCount}`);
     }
     if (incompleteCount < 5) {
       throw new Error(`Expected at least 5 COSTING_INCOMPLETE recipes in resting state, found ${incompleteCount}`);
@@ -617,11 +617,11 @@ async function runTests() {
     const comboCompsRes = await client.query('SELECT * FROM public.yatra_combo_components ORDER BY combo_thali_id, sort_order');
 
     console.log(`Verifying ${combosRes.rows.length} Combos/Thalis and ${comboCompsRes.rows.length} Components...`);
-    if (combosRes.rows.length !== 3) {
-      throw new Error(`Expected 3 combos/thalis, found ${combosRes.rows.length}`);
+    if (combosRes.rows.length !== 2) {
+      throw new Error(`Expected 2 combos/thalis, found ${combosRes.rows.length}`);
     }
-    if (comboCompsRes.rows.length !== 9) {
-      throw new Error(`Expected 9 combo components, found ${comboCompsRes.rows.length}`);
+    if (comboCompsRes.rows.length !== 6) {
+      throw new Error(`Expected 6 combo components, found ${comboCompsRes.rows.length}`);
     }
 
     for (const combo of combosRes.rows) {

@@ -6,12 +6,17 @@ import {
   YatraRecipe,
   YatraRecipeIngredient,
 } from './types';
-import { areUnitsCompatible, convertDirectQuantity, normalizeUnit } from './units';
+import { areUnitsCompatible, convertDirectQuantity, normalizeUnit, ExplicitConversion } from './units';
 
 export interface PrepCostInfo {
   costPerOutputUnit: number | null;
   yieldUnit: string | null;
   status: CostingStatus;
+}
+
+export interface CalculationOptions {
+  conversions?: ExplicitConversion[];
+  outputConversions?: ExplicitConversion[];
 }
 
 /**
@@ -20,7 +25,8 @@ export interface PrepCostInfo {
 export function calculateRecipeCost(
   recipe: YatraRecipe,
   prepCostsMap: Map<string, PrepCostInfo>,
-  groupWacMap: Map<string, GroupWacResolution>
+  groupWacMap: Map<string, GroupWacResolution>,
+  options?: CalculationOptions
 ): CostCalculationResult {
   const reasons: string[] = [];
   let hasIncomplete = false;
@@ -111,6 +117,9 @@ export function calculateRecipeCost(
           : (wacRes?.conversionFactor ? Number(wacRes.conversionFactor) : undefined);
 
         const conversion = convertDirectQuantity(ing.quantity, ing.unit, effectiveRateUnit, {
+          inventoryItemId: pinnedItemId,
+          ingredientGroupId: groupId,
+          conversions: options?.conversions,
           pieceWeightGrams,
           itemName: ing.ingredient_group?.name || ing.inventory_item?.name,
         });
@@ -265,7 +274,7 @@ export function calculateRecipeCost(
         servingsPerBatch = yieldQty / portionInYieldUnit;
 
         if (!hasIncomplete && !hasUncosted && totalBatchCost !== null && servingsPerBatch > 0) {
-          costPerServing = totalBatchCost / servingsPerBatch;
+          costPerServing = (totalBatchCost / yieldQty) * portionInYieldUnit;
         }
       }
     }
@@ -445,7 +454,8 @@ export function calculateVariantCost(
  */
 export function calculateAllRecipes(
   recipes: YatraRecipe[],
-  groupWacMap: Map<string, GroupWacResolution>
+  groupWacMap: Map<string, GroupWacResolution>,
+  options?: CalculationOptions
 ): Map<string, CostCalculationResult> {
   const results = new Map<string, CostCalculationResult>();
   const prepCostsMap = new Map<string, PrepCostInfo>();
@@ -491,7 +501,7 @@ export function calculateAllRecipes(
     processedCount++;
     const recipe = recipeMap.get(currentId)!;
 
-    const calcResult = calculateRecipeCost(recipe, prepCostsMap, groupWacMap);
+    const calcResult = calculateRecipeCost(recipe, prepCostsMap, groupWacMap, options);
     results.set(currentId, calcResult);
 
     // If it's a preparation or combo portion, record its rate in prepCostsMap
@@ -537,4 +547,46 @@ export function calculateAllRecipes(
   }
 
   return results;
+}
+
+/**
+ * 4-Tier Native Culinary Serving Cost Formula:
+ * Serving Cost = (Batch Cost / Usable Finished Batch Yield) * Portion Size (in yield unit)
+ */
+export function calculateServingConfigurationCost(
+  batchCost: number | null,
+  batchYieldQty: number,
+  batchYieldUnit: string,
+  portionQty: number,
+  portionUnit: string,
+  options?: CalculationOptions
+): {
+  servingCost: number | null;
+  status: CostingStatus;
+  error: string | null;
+} {
+  if (batchCost === null || batchCost === undefined || isNaN(batchCost)) {
+    return { servingCost: null, status: 'UNCOSTED', error: 'Batch cost is uncosted' };
+  }
+  if (!batchYieldQty || batchYieldQty <= 0 || !batchYieldUnit) {
+    return { servingCost: null, status: 'COSTING_INCOMPLETE', error: 'Missing or zero finished batch yield' };
+  }
+  if (!portionQty || portionQty <= 0 || !portionUnit) {
+    return { servingCost: null, status: 'COSTING_INCOMPLETE', error: 'Missing or zero portion size' };
+  }
+
+  const conv = convertDirectQuantity(portionQty, portionUnit, batchYieldUnit, {
+    outputConversions: options?.outputConversions,
+  });
+
+  if (!conv.possible || conv.converted === undefined || conv.converted <= 0) {
+    return {
+      servingCost: null,
+      status: 'COSTING_INCOMPLETE',
+      error: `Incompatible yield and portion units: Yield is in '${batchYieldUnit}', portion is in '${portionUnit}'`,
+    };
+  }
+
+  const servingCost = (batchCost / batchYieldQty) * conv.converted;
+  return { servingCost, status: 'COSTED_ELIGIBLE', error: null };
 }

@@ -190,14 +190,89 @@ export async function GET(
       sanitizedValuation = null;
     }
 
-    // Recipe & Menu Dependencies (Card 4)
+    // Recipe & Menu Dependencies (Card 4) - 4-Tier Native & Legacy Traversal
     let directRecipes: any[] = [];
     let transitiveRecipes: any[] = [];
     let linkedMenuItems: any[] = [];
     let linkedCombos: any[] = [];
 
+    const directRecipeMap = new Map<string, any>();
+    const prepDishIdsToTrace = new Set<string>();
+    const prepFormIdsToTrace = new Set<string>();
+    const allDishIds = new Set<string>();
+    const allLegacyRecipeIds = new Set<string>();
+
+    // 1. Query 4-tier formulation ingredients by group_id or brand-pinned item_id
+    const formIngFilter = item.group_id
+      ? `ingredient_group_id.eq.${item.group_id},inventory_item_id.eq.${itemId}`
+      : `inventory_item_id.eq.${itemId}`;
+
+    const { data: formIngs } = await admin
+      .from('yatra_recipe_formulation_ingredients')
+      .select(`
+        id, quantity, unit, sort_order, notes, formulation_id, ingredient_group_id, inventory_item_id,
+        formulation:yatra_recipe_formulations!yatra_recipe_formulation_ingredients_formulation_id_fkey(
+          id, name, version_number, batch_yield_quantity, batch_yield_unit, is_active,
+          canonical_dish:yatra_canonical_dishes!yatra_recipe_formulations_canonical_dish_id_fkey(
+            id, name, name_hi, category, is_preparation, is_active
+          )
+        )
+      `)
+      .or(formIngFilter);
+
+    // Fetch latest costing snapshots for discovered formulations
+    const discoveredFormIds = (formIngs || [])
+      .map((fi: any) => fi.formulation?.id)
+      .filter(Boolean);
+
+    let formSnapshotMap = new Map<string, any>();
+    if (discoveredFormIds.length > 0) {
+      const { data: snaps } = await admin
+        .from('yatra_costing_snapshots')
+        .select('formulation_id, costing_status, batch_cost')
+        .in('formulation_id', discoveredFormIds)
+        .is('serving_configuration_id', null)
+        .order('created_at', { ascending: false });
+
+      for (const s of snaps || []) {
+        if (!formSnapshotMap.has(s.formulation_id)) {
+          formSnapshotMap.set(s.formulation_id, s);
+        }
+      }
+    }
+
+    for (const fi of formIngs || []) {
+      const f = fi.formulation as any;
+      const dish = f?.canonical_dish as any;
+      if (f && f.is_active && dish && dish.is_active) {
+        const key = `form_${f.id}`;
+        if (!directRecipeMap.has(key)) {
+          const snap = formSnapshotMap.get(f.id);
+          const displayName = dish.name === f.name || f.name === 'Standard' ? dish.name : `${dish.name} (${f.name})`;
+          directRecipeMap.set(key, {
+            id: f.id,
+            formulation_id: f.id,
+            dish_id: dish.id,
+            name: displayName,
+            name_hi: dish.name_hi,
+            category: dish.category,
+            usage_type: 'DIRECT',
+            quantity: fi.quantity,
+            unit: fi.unit,
+            costing_status: snap?.costing_status || 'UNCOSTED',
+            is_preparation: dish.is_preparation,
+          });
+          allDishIds.add(dish.id);
+          if (dish.is_preparation || dish.category === 'PREPARATION') {
+            prepDishIdsToTrace.add(dish.id);
+            prepFormIdsToTrace.add(f.id);
+          }
+        }
+      }
+    }
+
+    // 2. Query legacy recipes for backward compatibility
     if (item.group_id) {
-      // 1. Resolve DAG recipe costs to attach costing status badges
       const [groupWacMap, { data: allRecipes }] = await Promise.all([
         resolveAllGroupWacs(admin),
         admin.from('yatra_recipes').select(`
@@ -220,89 +295,222 @@ export async function GET(
         `)
         .or(`ingredient_group_id.eq.${item.group_id},inventory_item_id.eq.${itemId}`);
 
-      const directRecipeMap = new Map();
-      const prepIdsToTrace: string[] = [];
-
       for (const di of directIngs || []) {
         const r = di.recipe as any;
         if (r && r.is_active) {
-          if (!directRecipeMap.has(r.id)) {
+          const key = `rec_${r.id}`;
+          if (!directRecipeMap.has(key)) {
             const rCost = recipeCalcs.get(r.id);
-            directRecipeMap.set(r.id, {
+            directRecipeMap.set(key, {
               ...r,
               usage_type: 'DIRECT',
               quantity: di.quantity,
               unit: di.unit,
               costing_status: rCost?.status || 'UNCOSTED',
             });
+            allLegacyRecipeIds.add(r.id);
             if (r.category === 'PREPARATION') {
-              prepIdsToTrace.push(r.id);
+              prepDishIdsToTrace.add(r.id);
             }
           }
         }
       }
-      directRecipes = Array.from(directRecipeMap.values());
+    }
+    directRecipes = Array.from(directRecipeMap.values());
 
-      // Transitive downstream recipes (depth 10, cycle-safe)
-      const visitedRecipeIds = new Set(directRecipeMap.keys());
-      let currentPrepIds = [...prepIdsToTrace];
-      const transitiveRecipeMap = new Map();
+    // 3. Transitive downstream traversal (DAG depth 10, cycle-safe)
+    const visitedDishIds = new Set<string>(allDishIds);
+    const visitedFormIds = new Set<string>(prepFormIdsToTrace);
+    const visitedRecipeIds = new Set<string>(allLegacyRecipeIds);
+    let currentPrepDishIds = Array.from(prepDishIdsToTrace);
+    let currentPrepFormIds = Array.from(prepFormIdsToTrace);
+    let currentLegacyPrepIds = Array.from(allLegacyRecipeIds);
+    const transitiveRecipeMap = new Map<string, any>();
 
-      for (let depth = 0; depth < 10 && currentPrepIds.length > 0; depth++) {
+    for (let depth = 0; depth < 10 && (currentPrepDishIds.length > 0 || currentLegacyPrepIds.length > 0); depth++) {
+      const nextPrepDishIds = new Set<string>();
+      const nextPrepFormIds = new Set<string>();
+      const nextLegacyPrepIds = new Set<string>();
+
+      // 3a. 4-Tier parent formulation ingredients
+      if (currentPrepDishIds.length > 0) {
+        const { data: parentFormIngs } = await admin
+          .from('yatra_recipe_formulation_ingredients')
+          .select(`
+            id, quantity, unit, sub_preparation_dish_id, sub_preparation_formulation_id,
+            formulation:yatra_recipe_formulations!yatra_recipe_formulation_ingredients_formulation_id_fkey(
+              id, name, version_number, batch_yield_quantity, batch_yield_unit, is_active,
+              canonical_dish:yatra_canonical_dishes!yatra_recipe_formulations_canonical_dish_id_fkey(
+                id, name, name_hi, category, is_preparation, is_active
+              )
+            )
+          `)
+          .in('sub_preparation_dish_id', currentPrepDishIds)
+          .eq('ingredient_type', 'PREPARATION');
+
+        for (const pfi of parentFormIngs || []) {
+          const pf = pfi.formulation as any;
+          const pdish = pf?.canonical_dish as any;
+          if (pf && pf.is_active && pdish && pdish.is_active && !visitedFormIds.has(pf.id)) {
+            visitedFormIds.add(pf.id);
+            visitedDishIds.add(pdish.id);
+            allDishIds.add(pdish.id);
+
+            const snap = formSnapshotMap.get(pf.id);
+            const displayName = pdish.name === pf.name || pf.name === 'Standard' ? pdish.name : `${pdish.name} (${pf.name})`;
+            transitiveRecipeMap.set(`form_${pf.id}`, {
+              id: pf.id,
+              formulation_id: pf.id,
+              dish_id: pdish.id,
+              name: displayName,
+              name_hi: pdish.name_hi,
+              category: pdish.category,
+              usage_type: 'TRANSITIVE',
+              via_sub_recipe_id: pfi.sub_preparation_dish_id,
+              depth: depth + 1,
+              costing_status: snap?.costing_status || 'UNCOSTED',
+              is_preparation: pdish.is_preparation,
+            });
+
+            if (pdish.is_preparation || pdish.category === 'PREPARATION') {
+              nextPrepDishIds.add(pdish.id);
+              nextPrepFormIds.add(pf.id);
+            }
+          }
+        }
+      }
+
+      // 3b. Legacy parent recipe ingredients
+      if (currentLegacyPrepIds.length > 0) {
         const { data: parentIngs } = await admin
           .from('yatra_recipe_ingredients')
           .select(`
             id, quantity, unit, sub_recipe_id,
             recipe:yatra_recipes(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit, portion_size_quantity, portion_size_unit, is_active)
           `)
-          .in('sub_recipe_id', currentPrepIds);
+          .in('sub_recipe_id', currentLegacyPrepIds);
 
-        const nextPrepIds: string[] = [];
         for (const pi of parentIngs || []) {
           const pr = pi.recipe as any;
           if (pr && pr.is_active && !visitedRecipeIds.has(pr.id)) {
             visitedRecipeIds.add(pr.id);
-            const prCost = recipeCalcs.get(pr.id);
-            transitiveRecipeMap.set(pr.id, {
+            allLegacyRecipeIds.add(pr.id);
+            transitiveRecipeMap.set(`rec_${pr.id}`, {
               ...pr,
               usage_type: 'TRANSITIVE',
               via_sub_recipe_id: pi.sub_recipe_id,
               depth: depth + 1,
-              costing_status: prCost?.status || 'UNCOSTED',
+              costing_status: 'UNCOSTED',
             });
             if (pr.category === 'PREPARATION') {
-              nextPrepIds.push(pr.id);
+              nextLegacyPrepIds.add(pr.id);
             }
           }
         }
-        currentPrepIds = nextPrepIds;
       }
-      transitiveRecipes = Array.from(transitiveRecipeMap.values());
 
-      const allActiveRecipeIds = Array.from(visitedRecipeIds);
-      if (allActiveRecipeIds.length > 0) {
-        const [varRes, comboRes] = await Promise.all([
-          admin
-            .from('yatra_menu_item_variants')
-            .select(`
-              id, variant_name, is_default, recipe_id,
-              menu_item:pos_menu_items(id, name, category, price)
-            `)
-            .in('recipe_id', allActiveRecipeIds)
-            .eq('is_active', true),
-          admin
-            .from('yatra_combo_components')
-            .select(`
-              id, component_name, recipe_id,
-              combo:yatra_combos_thalis(id, name, product_type, selling_price, is_active)
-            `)
-            .in('recipe_id', allActiveRecipeIds)
-        ]);
+      currentPrepDishIds = Array.from(nextPrepDishIds);
+      currentPrepFormIds = Array.from(nextPrepFormIds);
+      currentLegacyPrepIds = Array.from(nextLegacyPrepIds);
+    }
+    transitiveRecipes = Array.from(transitiveRecipeMap.values());
 
-        linkedMenuItems = (varRes.data || []).filter((v: any) => v.menu_item);
-        linkedCombos = (comboRes.data || []).filter((c: any) => c.combo && c.combo.is_active);
+    // 4. Linked POS Menu Items (4-tier canonical dishes + legacy variants)
+    const linkedMenuItemMap = new Map<string, any>();
+
+    // 4a. 4-tier direct menu items linked to canonical dishes
+    const allDishesArray = Array.from(allDishIds);
+    if (allDishesArray.length > 0) {
+      const { data: tier4MenuItems } = await admin
+        .from('pos_menu_items')
+        .select(`
+          id, name, category, price, product_type, canonical_dish_id,
+          serving_config:yatra_serving_configurations!pos_menu_items_serving_configuration_id_fkey(name)
+        `)
+        .in('canonical_dish_id', allDishesArray)
+        .eq('is_active', true);
+
+      for (const mi of tier4MenuItems || []) {
+        const variantName = (mi.serving_config as any)?.name || 'Standard';
+        linkedMenuItemMap.set(mi.id, {
+          id: mi.id,
+          variant_name: variantName,
+          is_default: true,
+          recipe_id: mi.canonical_dish_id,
+          menu_item: {
+            id: mi.id,
+            name: mi.name,
+            category: mi.category,
+            price: mi.price,
+          },
+        });
+      }
+
+      // 4b. 4-tier combo/thali compositions referencing canonical dishes
+      const { data: compositions } = await admin
+        .from('yatra_menu_item_compositions')
+        .select(`
+          id, quantity, component_dish_id,
+          dish:yatra_canonical_dishes!yatra_menu_item_compositions_component_dish_id_fkey(name),
+          menu_item:pos_menu_items!yatra_menu_item_compositions_menu_item_id_fkey(id, name, product_type, price, is_active)
+        `)
+        .in('component_dish_id', allDishesArray);
+
+      for (const comp of compositions || []) {
+        const cItem = comp.menu_item as any;
+        if (cItem && cItem.is_active) {
+          const compName = (comp.dish as any)?.name || 'Component';
+          linkedCombos.push({
+            id: comp.id,
+            component_name: compName,
+            recipe_id: comp.component_dish_id,
+            combo: {
+              id: cItem.id,
+              name: cItem.name,
+              product_type: cItem.product_type,
+              selling_price: cItem.price,
+              is_active: cItem.is_active,
+            },
+          });
+        }
       }
     }
+
+    // 4c. Legacy menu item variants and combos
+    const allLegacyArray = Array.from(allLegacyRecipeIds);
+    if (allLegacyArray.length > 0) {
+      const [varRes, comboRes] = await Promise.all([
+        admin
+          .from('yatra_menu_item_variants')
+          .select(`
+            id, variant_name, is_default, recipe_id,
+            menu_item:pos_menu_items(id, name, category, price)
+          `)
+          .in('recipe_id', allLegacyArray)
+          .eq('is_active', true),
+        admin
+          .from('yatra_combo_components')
+          .select(`
+            id, component_name, recipe_id,
+            combo:yatra_combos_thalis(id, name, product_type, selling_price, is_active)
+          `)
+          .in('recipe_id', allLegacyArray),
+      ]);
+
+      for (const v of (varRes.data || []) as any[]) {
+        if (v.menu_item && !linkedMenuItemMap.has(v.menu_item.id)) {
+          linkedMenuItemMap.set(v.menu_item.id, v);
+        }
+      }
+
+      for (const c of (comboRes.data || []) as any[]) {
+        if (c.combo && c.combo.is_active) {
+          linkedCombos.push(c);
+        }
+      }
+    }
+
+    linkedMenuItems = Array.from(linkedMenuItemMap.values());
 
     return NextResponse.json({
       item: {

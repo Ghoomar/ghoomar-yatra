@@ -119,7 +119,23 @@ export interface PackagingUnitSpec {
   packSize: number; // in base units
 }
 
+export interface ExplicitConversion {
+  id?: string;
+  inventory_item_id?: string | null;
+  ingredient_group_id?: string | null;
+  formulation_id?: string | null;
+  serving_configuration_id?: string | null;
+  from_unit: string;
+  to_unit: string;
+  multiplier: number;
+  is_verified?: boolean;
+}
+
 export interface UnitConversionOptions {
+  inventoryItemId?: string | null;
+  ingredientGroupId?: string | null;
+  conversions?: ExplicitConversion[];
+  outputConversions?: ExplicitConversion[];
   pieceWeightGrams?: number;       // Grams per count piece (e.g. 14.285714... for 400g/28pcs)
   conversionFactor?: number;       // Secondary to base unit multiplier (e.g. 14.285714... for pcs<->g)
   secondaryUnit?: string;          // Symbol of secondary unit (e.g. 'g')
@@ -143,6 +159,40 @@ export interface UnitOption {
   dimension?: Dimension;
 }
 
+export const DEFAULT_VERIFIED_CONVERSIONS: ExplicitConversion[] = [
+  // Cheese Slice (item-specific: DAI-013)
+  {
+    inventory_item_id: 'bc94f42d-9e29-4a5f-a592-be1788dab983',
+    from_unit: 'pcs',
+    to_unit: 'g',
+    multiplier: 20.0,
+    is_verified: true,
+  },
+  // Toned Milk (group-specific: GRP-DAI-009)
+  {
+    ingredient_group_id: 'bc902c10-7abc-4695-8b37-1894a5c944a7',
+    from_unit: 'ml',
+    to_unit: 'g',
+    multiplier: 1.0,
+    is_verified: true,
+  },
+  {
+    ingredient_group_id: 'bc902c10-7abc-4695-8b37-1894a5c944a7',
+    from_unit: 'l',
+    to_unit: 'g',
+    multiplier: 1000.0,
+    is_verified: true,
+  },
+  // Club Soda (group-specific: GRP-BEV-007)
+  {
+    ingredient_group_id: '2d2aef09-2a32-42d3-99fe-f57340f3b82a',
+    from_unit: 'ml',
+    to_unit: 'g',
+    multiplier: 1.0,
+    is_verified: true,
+  },
+];
+
 export function areUnitsCompatible(
   unitA: string,
   unitB: string,
@@ -155,11 +205,41 @@ export function areUnitsCompatible(
   const dimA = getUnitDimension(normA);
   const dimB = getUnitDimension(normB);
 
-  // Same standard dimension (MASS, VOLUME, or COUNT)
-  if (dimA !== 'UNKNOWN' && dimA !== 'CONTAINER' && dimA === dimB) return true;
+  const activeConversions = options?.conversions && options.conversions.length > 0
+    ? [...options.conversions, ...DEFAULT_VERIFIED_CONVERSIONS]
+    : DEFAULT_VERIFIED_CONVERSIONS;
 
-  // Standard culinary liquid density equivalence: 1 g = 1 ml, 1 kg = 1 L
-  if ((dimA === 'MASS' && dimB === 'VOLUME') || (dimA === 'VOLUME' && dimB === 'MASS')) return true;
+  // Tier 1: Item-specific conversion from yatra_ingredient_unit_conversions
+  if (options?.inventoryItemId) {
+    const match = activeConversions.find(c =>
+      c.inventory_item_id === options.inventoryItemId &&
+      c.is_verified !== false &&
+      ((normalizeUnit(c.from_unit) === normA && normalizeUnit(c.to_unit) === normB) ||
+       (normalizeUnit(c.from_unit) === normB && normalizeUnit(c.to_unit) === normA))
+    );
+    if (match) return true;
+  }
+
+  // Tier 2: Group-level conversion from yatra_ingredient_unit_conversions
+  if (options?.ingredientGroupId) {
+    const match = activeConversions.find(c =>
+      c.ingredient_group_id === options.ingredientGroupId &&
+      c.is_verified !== false &&
+      ((normalizeUnit(c.from_unit) === normA && normalizeUnit(c.to_unit) === normB) ||
+       (normalizeUnit(c.from_unit) === normB && normalizeUnit(c.to_unit) === normA))
+    );
+    if (match) return true;
+  }
+
+  // Tier 3: Verified output conversion or metadata packaging / piece weight
+  if (options?.outputConversions && options.outputConversions.length > 0) {
+    const match = options.outputConversions.find(c =>
+      c.is_verified !== false &&
+      ((normalizeUnit(c.from_unit) === normA && normalizeUnit(c.to_unit) === normB) ||
+       (normalizeUnit(c.from_unit) === normB && normalizeUnit(c.to_unit) === normA))
+    );
+    if (match) return true;
+  }
 
   // Resolve piece weight for Mass <-> Count compatibility
   const pieceWeight = options?.pieceWeightGrams || (
@@ -184,11 +264,20 @@ export function areUnitsCompatible(
     }
   }
 
+  // Tier 4: Base dimensional conversion (same standard dimension: MASS, VOLUME, or COUNT)
+  // Cross-dimensional conversion without explicit conversion (Tiers 1-3) is strictly disallowed
+  if (dimA !== 'UNKNOWN' && dimA !== 'CONTAINER' && dimA === dimB) return true;
+
   return false;
 }
 
 /**
- * Converts a quantity from one unit to another within the same dimension (or liquid mass-volume / piece weight / packaging).
+ * Converts a quantity from one unit to another using 4-tier conversion precedence.
+ * Precedence:
+ * 1. Item-specific conversion (yatra_ingredient_unit_conversions where inventory_item_id is set)
+ * 2. Group-level conversion (yatra_ingredient_unit_conversions where ingredient_group_id is set)
+ * 3. Verified output conversion or metadata packaging / piece weight
+ * 4. Standard dimensional base conversion (MASS: kg/g/mg/chutki, VOLUME: l/ml, COUNT: pcs)
  */
 export function convertDirectQuantity(
   qty: number,
@@ -206,20 +295,64 @@ export function convertDirectQuantity(
   const dimFrom = getUnitDimension(normFrom);
   const dimTo = getUnitDimension(normTo);
 
-  // 1. Standard culinary liquid density equivalence: 1 g = 1 ml
-  if ((dimFrom === 'MASS' && dimTo === 'VOLUME') || (dimFrom === 'VOLUME' && dimTo === 'MASS')) {
-    if (dimFrom === 'MASS' && dimTo === 'VOLUME') {
-      const fromInGrams = qty * MASS_TO_GRAM[normFrom];
-      const converted = fromInGrams / VOLUME_TO_ML[normTo];
-      return { possible: true, converted };
-    } else {
-      const fromInMl = qty * VOLUME_TO_ML[normFrom];
-      const converted = fromInMl / MASS_TO_GRAM[normTo];
-      return { possible: true, converted };
+  const activeConversions = options?.conversions && options.conversions.length > 0
+    ? [...options.conversions, ...DEFAULT_VERIFIED_CONVERSIONS]
+    : DEFAULT_VERIFIED_CONVERSIONS;
+
+  // Tier 1: Item-specific conversion from yatra_ingredient_unit_conversions
+  if (options?.inventoryItemId) {
+    const match = activeConversions.find(c =>
+      c.inventory_item_id === options.inventoryItemId &&
+      c.is_verified !== false &&
+      ((normalizeUnit(c.from_unit) === normFrom && normalizeUnit(c.to_unit) === normTo) ||
+       (normalizeUnit(c.from_unit) === normTo && normalizeUnit(c.to_unit) === normFrom))
+    );
+    if (match) {
+      const mult = Number(match.multiplier);
+      if (normalizeUnit(match.from_unit) === normFrom) {
+        return { possible: true, converted: qty * mult };
+      } else {
+        return { possible: true, converted: qty / mult };
+      }
     }
   }
 
-  // 2. Resolve piece weight for Mass <-> Count conversions
+  // Tier 2: Group-level conversion from yatra_ingredient_unit_conversions
+  if (options?.ingredientGroupId) {
+    const match = activeConversions.find(c =>
+      c.ingredient_group_id === options.ingredientGroupId &&
+      c.is_verified !== false &&
+      ((normalizeUnit(c.from_unit) === normFrom && normalizeUnit(c.to_unit) === normTo) ||
+       (normalizeUnit(c.from_unit) === normTo && normalizeUnit(c.to_unit) === normFrom))
+    );
+    if (match) {
+      const mult = Number(match.multiplier);
+      if (normalizeUnit(match.from_unit) === normFrom) {
+        return { possible: true, converted: qty * mult };
+      } else {
+        return { possible: true, converted: qty / mult };
+      }
+    }
+  }
+
+  // Tier 3: Verified output conversion from yatra_recipe_formulation_output_conversions
+  if (options?.outputConversions && options.outputConversions.length > 0) {
+    const match = options.outputConversions.find(c =>
+      c.is_verified !== false &&
+      ((normalizeUnit(c.from_unit) === normFrom && normalizeUnit(c.to_unit) === normTo) ||
+       (normalizeUnit(c.from_unit) === normTo && normalizeUnit(c.to_unit) === normFrom))
+    );
+    if (match) {
+      const mult = Number(match.multiplier);
+      if (normalizeUnit(match.from_unit) === normFrom) {
+        return { possible: true, converted: qty * mult };
+      } else {
+        return { possible: true, converted: qty / mult };
+      }
+    }
+  }
+
+  // Resolve piece weight for Mass <-> Count conversions
   const pieceWeight = options?.pieceWeightGrams || (
     options?.conversionFactor && (
       (options.baseUnit && normalizeUnit(options.baseUnit) === 'pcs' && (!options.secondaryUnit || normalizeUnit(options.secondaryUnit) === 'g')) ||
@@ -227,7 +360,7 @@ export function convertDirectQuantity(
     ) ? options.conversionFactor : undefined
   );
 
-  // 3. Metadata-driven Packaging unit conversions
+  // Metadata-driven Packaging unit conversions
   if (options?.packagingUnits && options.packagingUnits.length > 0) {
     const packFrom = options.packagingUnits.find(p => normalizeUnit(p.packUnit) === normFrom);
     const packTo = options.packagingUnits.find(p => normalizeUnit(p.packUnit) === normTo);
@@ -258,7 +391,7 @@ export function convertDirectQuantity(
     }
   }
 
-  // 4. Metadata-driven Mass <-> Count conversion
+  // Metadata-driven Mass <-> Count conversion
   if ((dimFrom === 'MASS' && dimTo === 'COUNT') || (dimFrom === 'COUNT' && dimTo === 'MASS')) {
     if (pieceWeight && pieceWeight > 0) {
       if (dimFrom === 'MASS' && dimTo === 'COUNT') {
@@ -277,7 +410,8 @@ export function convertDirectQuantity(
     };
   }
 
-  // 5. Incompatible dimensions
+  // Tier 4: Base dimensional conversions
+  // Incompatible dimensions check
   if (dimFrom !== dimTo) {
     return {
       possible: false,
@@ -285,21 +419,21 @@ export function convertDirectQuantity(
     };
   }
 
-  // 6. Intra-dimension MASS conversion
+  // Intra-dimension MASS conversion
   if (dimFrom === 'MASS') {
     const fromInGrams = qty * MASS_TO_GRAM[normFrom];
     const converted = fromInGrams / MASS_TO_GRAM[normTo];
     return { possible: true, converted };
   }
 
-  // 7. Intra-dimension VOLUME conversion
+  // Intra-dimension VOLUME conversion
   if (dimFrom === 'VOLUME') {
     const fromInMl = qty * VOLUME_TO_ML[normFrom];
     const converted = fromInMl / VOLUME_TO_ML[normTo];
     return { possible: true, converted };
   }
 
-  // 8. Intra-dimension COUNT conversion
+  // Intra-dimension COUNT conversion
   if (dimFrom === 'COUNT') {
     return { possible: true, converted: qty };
   }
@@ -360,17 +494,32 @@ export function getCompatibleUnitOptions(
     }
   } else {
     // Fallback: derive from engine dimensions if central master is omitted
-    if (baseDim === 'MASS' || baseDim === 'VOLUME' || !normBase) {
+    if (baseDim === 'MASS' || !normBase) {
       addOption('kg', locale === 'hi' ? 'Kg (किलोग्राम)' : 'Kg (Kilogram)', 'MASS');
       addOption('g', locale === 'hi' ? 'g (ग्राम)' : 'g (Gram)', 'MASS');
       addOption('mg', locale === 'hi' ? 'mg (मिलीग्राम)' : 'mg (Milligram)', 'MASS');
     }
-    if (baseDim === 'VOLUME' || baseDim === 'MASS' || !normBase) {
+    if (baseDim === 'VOLUME' || !normBase) {
       addOption('L', locale === 'hi' ? 'L (लीटर)' : 'L (Liter)', 'VOLUME');
       addOption('ml', locale === 'hi' ? 'ml (मिलीलीटर)' : 'ml (Milliliter)', 'VOLUME');
     }
     if (baseDim === 'COUNT' || !normBase) {
       addOption('pcs', locale === 'hi' ? 'pcs (पीस)' : 'pcs (Pieces)', 'COUNT');
+    }
+  }
+
+  // Explicit verified conversions for item or group
+  if (options?.conversions && options.conversions.length > 0) {
+    for (const c of options.conversions) {
+      if (c.is_verified !== false) {
+        if (options.inventoryItemId && c.inventory_item_id === options.inventoryItemId) {
+          addOption(c.from_unit, c.from_unit, getUnitDimension(c.from_unit));
+          addOption(c.to_unit, c.to_unit, getUnitDimension(c.to_unit));
+        } else if (options.ingredientGroupId && c.ingredient_group_id === options.ingredientGroupId) {
+          addOption(c.from_unit, c.from_unit, getUnitDimension(c.from_unit));
+          addOption(c.to_unit, c.to_unit, getUnitDimension(c.to_unit));
+        }
+      }
     }
   }
 

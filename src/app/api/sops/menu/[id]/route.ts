@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveCallerAuth } from '@/lib/sops/auth';
 import { calculateAllRecipes, calculateVariantCost, resolveAllGroupWacs } from '@/lib/sops/costing';
+import { calculateMenuItemCompositionCost } from '@/lib/sops/costing/combos';
 import { parseMenuSalesChannel } from '@/lib/sales/menu-channels';
 
 export async function GET(
@@ -34,8 +35,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unsupported menu sales channel.' }, { status: 400 });
     }
 
-    // 1. Concurrently fetch Menu Item, Variants with Recipes, and Scoped Daily Sales Trend
-    const [menuItemRes, variantsRes, dailyTrendRes] = await Promise.all([
+    // 1. Concurrently fetch Menu Item, Variants with Recipes, Compositions, and Scoped Daily Sales Trend
+    const [menuItemRes, variantsRes, compositionsRes, dailyTrendRes] = await Promise.all([
       admin
         .from('pos_menu_items')
         .select('*')
@@ -57,6 +58,15 @@ export async function GET(
         `)
         .eq('menu_item_id', id)
         .eq('is_active', true),
+      admin
+        .from('yatra_menu_item_compositions')
+        .select(`
+          *,
+          component_dish:yatra_canonical_dishes(id, name, name_hi, is_preparation),
+          serving_configuration:yatra_serving_configurations(id, name, name_hi, portion_size_quantity, portion_size_unit)
+        `)
+        .eq('menu_item_id', id)
+        .order('sort_order', { ascending: true }),
       admin.rpc('get_menu_item_daily_sales', {
         p_menu_item_id: id,
         p_date_from: dateFrom || null,
@@ -70,11 +80,88 @@ export async function GET(
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 });
     }
     if (variantsRes.error) throw variantsRes.error;
+    if (compositionsRes.error) throw compositionsRes.error;
     if (dailyTrendRes.error) throw dailyTrendRes.error;
 
     const menuItem = menuItemRes.data;
     const variants = variantsRes.data || [];
+    const compositions = compositionsRes.data || [];
     const dailyTrend = dailyTrendRes.data || [];
+
+    // Optional 4-tier Dish and Serving Configuration for Individual Dishes
+    let canonicalDish: any = null;
+    let servingConfiguration: any = null;
+    if (menuItem.canonical_dish_id) {
+      const { data: dData } = await admin
+        .from('yatra_canonical_dishes')
+        .select('id, name, name_hi, is_preparation, category, default_formulation_id')
+        .eq('id', menuItem.canonical_dish_id)
+        .maybeSingle();
+      canonicalDish = dData;
+    }
+    if (menuItem.serving_configuration_id) {
+      const { data: scData } = await admin
+        .from('yatra_serving_configurations')
+        .select('id, name, name_hi, portion_size_quantity, portion_size_unit, custom_attributes')
+        .eq('id', menuItem.serving_configuration_id)
+        .maybeSingle();
+      servingConfiguration = scData;
+    }
+
+    // 4-Tier Combo & Thali Costing Calculation
+    let compositionCost: any = null;
+    if (compositions.length > 0) {
+      const configIds = compositions.map((c: any) => c.serving_configuration_id).filter(Boolean);
+      let snapshotMap = new Map<string, any>();
+      if (configIds.length > 0) {
+        const { data: snapshots } = await admin
+          .from('yatra_costing_snapshots')
+          .select('*')
+          .in('serving_configuration_id', configIds)
+          .eq('is_active', true);
+        (snapshots || []).forEach((s: any) => {
+          snapshotMap.set(s.serving_configuration_id, s);
+        });
+      }
+
+      const compInputs = compositions.map((c: any) => {
+        const snap = snapshotMap.get(c.serving_configuration_id);
+        const cost = snap?.calculated_serving_cost ? Number(snap.calculated_serving_cost) : null;
+        const status = snap?.snapshot_status || (cost !== null ? 'COSTED_ELIGIBLE' : 'UNCOSTED');
+        return {
+          component_dish_id: c.component_dish_id,
+          serving_configuration_id: c.serving_configuration_id,
+          quantity: Number(c.quantity) || 1,
+          serving_cost: cost,
+          status,
+          dish_name: c.component_dish?.name,
+          configuration_name: c.serving_configuration?.name,
+        };
+      });
+
+      const calc = calculateMenuItemCompositionCost(compInputs, {
+        price: Number(menuItem.price) || 0,
+        gas_cost: Number(menuItem.gas_cost || 0),
+        other_operating_cost: Number(menuItem.other_operating_cost || 0),
+        packaging_cost: Number(menuItem.packaging_cost_dine_in || 0),
+      });
+
+      if (!caller.hasCostAccess) {
+        compositionCost = {
+          ...calc,
+          totalFoodCost: null,
+          foodCostPct: null,
+          marginAmount: null,
+          contributionAmount: null,
+          contributionPct: null,
+          operatingCost: null,
+          packagingCost: null,
+          totalCost: null,
+        };
+      } else {
+        compositionCost = calc;
+      }
+    }
 
     // 2. Scoped Sales Metrics: Aggregated directly from trend (eliminates 20k sales scan)
     const trend = dailyTrend.map((r: any) => ({
@@ -245,6 +332,10 @@ export async function GET(
     return NextResponse.json({
       menuItem,
       variants: enrichedVariants,
+      compositions,
+      compositionCost,
+      canonicalDish,
+      servingConfiguration,
       salesMetrics,
       date_from: dateFrom,
       date_to: dateTo,

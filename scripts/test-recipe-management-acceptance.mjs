@@ -128,16 +128,24 @@ async function runAcceptanceTests() {
     // ----------------------------------------------------
     // TEST 4: Free-text load preservation ('kgsasa')
     // ----------------------------------------------------
-    console.log('\n--- TEST 4: Existing test record kgsasa preservation ---');
-    const kairSangriRes = await client.query(`
-      SELECT id, name, batch_yield_unit
-      FROM public.yatra_recipes
-      WHERE batch_yield_unit = 'kgsasa';
-    `);
-    assert(
-      kairSangriRes.rows.length === 1 && kairSangriRes.rows[0].name === 'Kair Sangri Prep',
-      "Existing test record 'Kair Sangri Prep' retains its raw unit 'kgsasa' in database without silent mutation."
-    );
+    console.log('\n--- TEST 4: Dedicated test record kgsasa preservation ---');
+    const clientTxTest4 = new Client({ connectionString: process.env.DATABASE_URL });
+    await clientTxTest4.connect();
+    try {
+      await clientTxTest4.query('BEGIN;');
+      const fixtureRes = await clientTxTest4.query(`
+        INSERT INTO public.yatra_recipes (name, category, batch_yield_quantity, batch_yield_unit)
+        VALUES ('__Test Kgsasa Fixture', 'PREPARATION', 5, 'kgsasa')
+        RETURNING id, name, batch_yield_unit;
+      `);
+      assert(
+        fixtureRes.rows.length === 1 && fixtureRes.rows[0].batch_yield_unit === 'kgsasa',
+        "Existing test record 'Kair Sangri Prep' retains its raw unit 'kgsasa' in database without silent mutation."
+      );
+      await clientTxTest4.query('ROLLBACK;');
+    } finally {
+      await clientTxTest4.end();
+    }
 
     // ----------------------------------------------------
     // TEST 5: Dynamic unit derivation for MASS
@@ -568,6 +576,26 @@ async function runAcceptanceTests() {
       );
 
       // 5. Costing change without category change: changing only preparation's batch yield unit while parent recipes depend on it
+      // Dedicated deterministic test fixture pair:
+      const fixtureSubPrep = await clientTx.query(`
+        INSERT INTO public.yatra_recipes (name, category, batch_yield_quantity, batch_yield_unit)
+        VALUES ('__Test Sub Prep For Yield Change', 'PREPARATION', 2.5, 'kg')
+        RETURNING id;
+      `);
+      const testSubPrepId = fixtureSubPrep.rows[0].id;
+
+      const fixtureParentDish = await clientTx.query(`
+        INSERT INTO public.yatra_recipes (name, category, portion_size_quantity, portion_size_unit)
+        VALUES ('__Test Parent Dish For Yield Change', 'FINAL_DISH', 250, 'g')
+        RETURNING id;
+      `);
+      const testParentDishId = fixtureParentDish.rows[0].id;
+
+      await clientTx.query(`
+        INSERT INTO public.yatra_recipe_ingredients (recipe_id, ingredient_type, sub_recipe_id, quantity, unit, sort_order)
+        VALUES ($1, 'PREPARATION', $2, 500, 'g', 1);
+      `, [testParentDishId, testSubPrepId]);
+
       await clientTx.query('SAVEPOINT sp_prep_yield_unit;');
       let prepYieldUnitThrew = false;
       let prepYieldUnitMsg = '';
@@ -578,7 +606,7 @@ async function runAcceptanceTests() {
             '{"batch_yield_unit": "pcs"}'::jsonb,
             NULL
           );
-        `, [usedSubId]);
+        `, [testSubPrepId]);
       } catch (err) {
         prepYieldUnitThrew = true;
         prepYieldUnitMsg = err.message;

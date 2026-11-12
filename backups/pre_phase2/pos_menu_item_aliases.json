@@ -1,0 +1,346 @@
+[
+  {
+    "id": "00072fb3-8757-429c-9ea7-f6076019f856",
+    "alias": "Extra Bati (1)",
+    "normalized_alias": "extra bati (1)",
+    "menu_item_id": "363408ee-5e88-4513-baaf-818ebdac21c1",
+    "notes": "Auto-reconciled from alias match",
+    "created_at": "2026-09-23T06:25:53.906Z"
+  },
+  {
+    "id": "0b3c99a8-0167-4687-a1d6-5d652a37fe5f",
+    "alias": "Classic Hot & Sour Soup [D]",
+    "normalized_alias": "classic hot & sour soup",
+    "menu_item_id": "803e5679-9cf1-4413-b9fc-892e8e127bac",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:59.109Z"
+  },
+  {
+    "id": "0fb92ec0-51d4-4322-939c-3736dfd6a366",
+    "alias": "Dahi Ke Sholay [D]",
+    "normalized_alias": "dahi ke sholay",
+    "menu_item_id": "e0732341-132b-485b-a342-ba2e796d1c6e",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:56.052Z"
+  },
+  {
+    "id": "0ff1dfd7-9011-40b8-8463-8f7575483049",
+    "alias": "Afghani Soya Chaap Tikka [D]",
+    "normalized_alias": "afghani soya chaap tikka",
+    "menu_item_id": "a4e8eb75-f6e9-4188-99ee-93b2f5087ed5",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:56.442Z"
+  },
+  {
+    "id": "1476b888-f916-4eb1-a0f5-c7cc0482c72a",
+    "alias": "Onion Parantha [D]",
+    "normalized_alias": "onion parantha",
+    "menu_item_id": "44d5200d-7a76-4631-9fda-da778bb7128d",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:04.933Z"
+  },
+  {
+    "id": "14ab4b10-0fdb-432d-8b68-3bf4c76b19b9",
+    "alias": "Mineral Water [D]",
+    "normalized_alias": "mineral water",
+    "menu_item_id": "35c171bc-63ec-49f1-99b9-fa6dbe34ea85",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:56.933Z"
+  },
+  {
+    "id": "16c6c192-3a95-4d83-aa5e-d23f882f4097",
+    "alias": "Peri Peri French Fries [D]",
+    "normalized_alias": "peri peri french fries",
+    "menu_item_id": "4f955f54-cfb4-4360-81be-04d65f725077",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:01.241Z"
+  },
+  {
+    "id": "16c76267-6229-42ba-9787-a09d257e6dc2",
+    "alias": "Aloo Onion Parantha [D]",
+    "normalized_alias": "aloo onion parantha",
+    "menu_item_id": "718f011a-dd03-4eda-bb87-826b8d07770d",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:59.431Z"
+  },
+  {
+    "id": "1897d971-df02-4fa7-8fdb-8ee668cae6b1",
+    "alias": "Veg. Sandwich [D]",
+    "normalized_alias": "veg sandwich",
+    "menu_item_id": "f7c72c49-7050-4946-a62b-a5c8ca1057c2",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:02.335Z"
+  },
+  {
+    "id": "1b8f9079-4a71-4635-84b8-5619e9953a30",
+    "alias": "Milk [D]",
+    "normalized_alias": "milk",
+    "menu_item_id": "3d4970fb-2a5f-401c-b349-3a5d35775097",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:58.439Z"
+  },
+  {
+    "id": "26b9de47-d53f-4a4e-aba8-d5de1b00e204",
+    "alias": "Cream Veg. Soup [D]",
+    "normalized_alias": "cream veg soup",
+    "menu_item_id": "bb344caf-3025-4bd5-9a86-95f464106eb9",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:00.096Z"
+  },
+  {
+    "id": "2b43de02-23c6-4ac9-bfff-8e53ea85cd8b",
+    "alias": "Malai Soya Chaap Tikka [D]",
+    "normalized_alias": "malai soya chaap tikka",
+    "menu_item_id": "33ba561e-b4f2-4162-84ad-c824e06ed366",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:57.697Z"
+  },
+  {
+    "id": "3bc9cfee-7dcf-41a0-b74a-8eef04c1f362",
+    "alias": "Masala Tea [D]",
+    "normalized_alias": "masala tea",
+    "menu_item_id": "6b39ef97-3094-4f0e-8a02-457d2331632c",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:54.533Z"
+  },
+  {
+    "id": "47bcaf8a-a861-41f7-b031-a203f26fe810",
+    "alias": "Manchow Soup [D]",
+    "normalized_alias": "manchow soup",
+    "menu_item_id": "10758237-025e-4e3d-8e7e-d3330d505b89",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:05.297Z"
+  },
+  {
+    "id": "54e2b4f3-30f3-4caf-adb4-222412f740c8",
+    "alias": "Gobhi Parantha [D]",
+    "normalized_alias": "gobhi parantha",
+    "menu_item_id": "f0907288-884a-4b4a-b1cb-936ae38c0066",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:01.996Z"
+  },
+  {
+    "id": "5836aa78-128b-4a79-a05a-78a82e5e6be4",
+    "alias": "Jaipuri Combo (1 FULL)",
+    "normalized_alias": "jaipuri combo (1 full)",
+    "menu_item_id": "1d65531c-b0d5-4ad1-b9e4-4566ff774e29",
+    "notes": "Auto-reconciled from alias match",
+    "created_at": "2026-09-23T06:25:53.965Z"
+  },
+  {
+    "id": "587627dd-046c-476f-9c50-75df9d62eb57",
+    "alias": "Veg. Grilled Sandwich [D]",
+    "normalized_alias": "veg grilled sandwich",
+    "menu_item_id": "42bcecfa-ebe9-43d4-b106-95e64e2e07d1",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:00.463Z"
+  },
+  {
+    "id": "5e2486cb-399f-4cfb-bf2f-161189c8733a",
+    "alias": "Tomato Soup [D]",
+    "normalized_alias": "tomato soup",
+    "menu_item_id": "aee60a07-1ef4-4493-8143-e2ebcc04082e",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:06.061Z"
+  },
+  {
+    "id": "68086d3c-4450-42ad-abf7-c898942938b9",
+    "alias": "Mixed Parantha [D]",
+    "normalized_alias": "mixed parantha",
+    "menu_item_id": "57621443-e203-46c2-9e79-d9bebe6d88d0",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:02.979Z"
+  },
+  {
+    "id": "6ee58669-2a25-413e-8442-751c738c5e06",
+    "alias": "churma",
+    "normalized_alias": "churma",
+    "menu_item_id": "14548fbd-7249-4b45-b505-e1173029934e",
+    "notes": "Auto-reconciled from alias match",
+    "created_at": "2026-09-29T09:19:58.791Z"
+  },
+  {
+    "id": "7124c126-cdf9-496d-a1b8-6472aa7c8b32",
+    "alias": "Tandoori Soya Chaap Tikka [D]",
+    "normalized_alias": "tandoori soya chaap tikka",
+    "menu_item_id": "2238218f-176a-4f3d-8d5c-ad596d0b1d1b",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:52.622Z"
+  },
+  {
+    "id": "7185713e-8d75-48c5-bb12-e502f9f66d78",
+    "alias": "Fresh Lemon Soda [D]",
+    "normalized_alias": "fresh lemon soda",
+    "menu_item_id": "27c47521-7756-487f-b9cd-7080cb0d08a1",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:51.415Z"
+  },
+  {
+    "id": "727fa549-0f83-4400-8e80-c5e1579e689f",
+    "alias": "Paneer Pakoda [D]",
+    "normalized_alias": "paneer pakoda",
+    "menu_item_id": "7d86d648-6934-4229-8a7e-d1f3aa818bc8",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:02.657Z"
+  },
+  {
+    "id": "7d7ecb44-885c-41c9-8718-eceb0fea5176",
+    "alias": "Coffee [D]",
+    "normalized_alias": "coffee",
+    "menu_item_id": "c887dee0-06a9-43bd-ae31-062ddcd041a3",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:59.752Z"
+  },
+  {
+    "id": "80335ada-2e5b-4cba-b0b9-dac3da64c475",
+    "alias": "French Fries [D]",
+    "normalized_alias": "french fries",
+    "menu_item_id": "a7a615ea-701f-4d3a-9786-e348dcbb94f1",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:53.766Z"
+  },
+  {
+    "id": "846fc203-23c4-45a0-927e-953c8d24c728",
+    "alias": "Lemon Tea [D]",
+    "normalized_alias": "lemon tea",
+    "menu_item_id": "6f45945e-42a0-416a-b9b3-9a14dd7e4dbc",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:57.277Z"
+  },
+  {
+    "id": "863ef95d-89f8-40a2-9247-a2e155ff1750",
+    "alias": "Veg. Seekh Kebab [D]",
+    "normalized_alias": "veg seekh kebab",
+    "menu_item_id": "0df2d29d-df93-40d7-9203-fe7263baded3",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:51.778Z"
+  },
+  {
+    "id": "8c8ee0cd-c63b-4b31-91bb-c691b5077256",
+    "alias": "coldrink",
+    "normalized_alias": "coldrink",
+    "menu_item_id": "d4ab3ff5-96a2-400d-8695-50ccce84501e",
+    "notes": "Petpooja short name without space",
+    "created_at": "2026-09-23T06:25:54.016Z"
+  },
+  {
+    "id": "8d5f120e-6245-43fe-9f6c-44e0022b295b",
+    "alias": "Aloo Parantha [D]",
+    "normalized_alias": "aloo parantha",
+    "menu_item_id": "ec3c8965-6237-48da-bb28-1718272c4a83",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:03.965Z"
+  },
+  {
+    "id": "8fbe7566-889e-4637-9651-d5354b894a0e",
+    "alias": "Mixed Pakoda [D]",
+    "normalized_alias": "mixed pakoda",
+    "menu_item_id": "0ab4b849-042e-49e7-bd32-68f5d7e11ab2",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:03.626Z"
+  },
+  {
+    "id": "908a7014-f3b4-4417-a918-c6de72028de3",
+    "alias": "Mooli Parantha [D]",
+    "normalized_alias": "mooli parantha",
+    "menu_item_id": "1050c0cc-2002-4b40-921d-f13e1a13d69d",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:00.786Z"
+  },
+  {
+    "id": "99a58e61-59f0-42ad-98af-a1f2f5f1a376",
+    "alias": "Tandoori Paneer Tikka [D]",
+    "normalized_alias": "tandoori paneer tikka",
+    "menu_item_id": "cbdea85a-49a9-4060-937b-794e808365b3",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:50.724Z"
+  },
+  {
+    "id": "9b2683d1-d539-4a6b-9c38-b6605ebcfdf4",
+    "alias": "Paneer Parantha [D]",
+    "normalized_alias": "paneer parantha",
+    "menu_item_id": "b51326d2-cbca-4de5-85ef-2f01077e434a",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:05.684Z"
+  },
+  {
+    "id": "aae82e14-433e-46da-8a68-d2f8096a0b2d",
+    "alias": "Tandoori Mushroom Masala Tikka [D]",
+    "normalized_alias": "tandoori mushroom masala tikka",
+    "menu_item_id": "fba73a3f-e196-4d17-9acf-f96bb523186e",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:52.942Z"
+  },
+  {
+    "id": "c4c3a9c1-859b-4083-b62a-a77925488ba2",
+    "alias": "Churma",
+    "normalized_alias": "churma",
+    "menu_item_id": "14548fbd-7249-4b45-b505-e1173029934e",
+    "notes": "POS variant for Mawa Churma",
+    "created_at": "2026-09-23T08:15:35.627Z"
+  },
+  {
+    "id": "c52385ae-1c01-4200-a1d1-3edb82ab3b3f",
+    "alias": "Special Stuffed Mughlai Chaap Tikka [D]",
+    "normalized_alias": "special stuffed mughlai chaap tikka",
+    "menu_item_id": "08de2dba-17e7-43ec-b285-cc242e09e250",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:53.322Z"
+  },
+  {
+    "id": "c6c4473b-a828-4675-92b7-c29e0961c5a6",
+    "alias": "Guldasta Platter [D]",
+    "normalized_alias": "guldasta platter",
+    "menu_item_id": "2718852a-2280-4704-acb1-4f6d23d91c89",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:54.948Z"
+  },
+  {
+    "id": "c77364f1-4980-4097-9de6-6b220d93321d",
+    "alias": "Malai Paneer Tikka [D]",
+    "normalized_alias": "malai paneer tikka",
+    "menu_item_id": "9c3a4d40-4201-4bfe-b7a6-0746b8d90f8c",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:52.288Z"
+  },
+  {
+    "id": "c93108f9-7d16-4f85-abf7-c6acdd9ac785",
+    "alias": "Coldrink",
+    "normalized_alias": "coldrink",
+    "menu_item_id": "d4ab3ff5-96a2-400d-8695-50ccce84501e",
+    "notes": "Auto-reconciled from alias match",
+    "created_at": "2026-09-29T09:19:54.101Z"
+  },
+  {
+    "id": "ead17bf5-d633-45d3-a571-c63539c1e917",
+    "alias": "Bun Maska [D]",
+    "normalized_alias": "bun maska",
+    "menu_item_id": "ea493287-99a1-4a8b-aded-b908c659c621",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:04.628Z"
+  },
+  {
+    "id": "eb905398-b5a5-42cf-a540-055e31b32b0d",
+    "alias": "Hara Bhara Kebab [D]",
+    "normalized_alias": "hara bhara kebab",
+    "menu_item_id": "9fe964ac-ce68-48e9-9532-b86e54a52932",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:55.707Z"
+  },
+  {
+    "id": "fd16daca-ab97-41e7-8945-b255009833d2",
+    "alias": "Veg. Cheese Grilled Sandwich [D]",
+    "normalized_alias": "veg cheese grilled sandwich",
+    "menu_item_id": "370e78a0-5998-4e72-9353-9dfde6e007b9",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:20:03.313Z"
+  },
+  {
+    "id": "fd1ca1dd-d077-4f77-87f8-29ec138d1da9",
+    "alias": "Achaari Paneer Tikka [D]",
+    "normalized_alias": "achaari paneer tikka",
+    "menu_item_id": "41b04191-ea4d-4b7a-b19d-30c3a7afdd90",
+    "notes": "Auto-reconciled from normalized match",
+    "created_at": "2026-09-29T09:19:55.341Z"
+  }
+]

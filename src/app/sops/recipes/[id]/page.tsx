@@ -17,6 +17,7 @@ import {
   getCompatibleUnitOptions,
   getUnitDimension,
   areUnitsCompatible,
+  convertDirectQuantity,
   CentralUnit,
 } from '@/lib/sops/costing/units';
 import {
@@ -40,6 +41,7 @@ import {
   ArrowUp,
   ArrowDown,
   Info,
+  Search,
 } from 'lucide-react';
 
 interface RecipeDetailPageProps {
@@ -60,12 +62,20 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [recipe, setRecipe] = useState<any>(null);
+  const [canonicalDish, setCanonicalDish] = useState<any>(null);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [selectedFormulationId, setSelectedFormulationId] = useState<string | null>(null);
   const [calculation, setCalculation] = useState<any>(null);
   const [whereUsed, setWhereUsed] = useState<{
     recipes: any[];
     menuItems: any[];
     combos: any[];
   }>({ recipes: [], menuItems: [], combos: [] });
+
+  // Quick Add & Conversions
+  const [quickSearch, setQuickSearch] = useState('');
+  const [conversionModalOpen, setConversionModalOpen] = useState(false);
+  const [conversionsList, setConversionsList] = useState<any[]>([]);
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -129,6 +139,13 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
       }
       const data = await res.json();
       setRecipe(data.recipe);
+      setCanonicalDish(data.canonicalDish || null);
+      if (data.canonicalDish?.configurations?.length) {
+        setSelectedConfigId(data.canonicalDish.configurations[0].id);
+      }
+      if (data.canonicalDish?.formulations?.length) {
+        setSelectedFormulationId(data.canonicalDish.formulations[0].id);
+      }
       setCalculation(data.calculation);
       setWhereUsed(data.whereUsed || { recipes: [], menuItems: [], combos: [] });
       setEditForm({
@@ -418,18 +435,43 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Top Nav & Breadcrumb */}
-      <div className="flex items-center justify-between">
-        <Link href="/sops/recipes">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-stone-600 hover:text-stone-900">
-            <ArrowLeft className="h-4 w-4" />
-            {t('sops.recipeDetail.backToRecipes')}
-          </Button>
-        </Link>
+      {/* Sticky Top Nav & Header Bar */}
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-[#E7E2D8] flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-3 truncate">
+          <Link href="/sops/recipes">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-stone-600 hover:text-stone-900">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('sops.recipeDetail.backToRecipes')}</span>
+            </Button>
+          </Link>
+          <div className="h-4 w-px bg-[#E7E2D8] hidden sm:block" />
+          <h1 className="text-lg font-bold text-stone-900 truncate">
+            {recipe.name}
+          </h1>
+          {recipe.name_hi && (
+            <span className="text-xs text-stone-500 font-sans hidden md:inline">({recipe.name_hi})</span>
+          )}
+          {calculation && getStatusBadge(calculation.status)}
+        </div>
 
-        {canManage && (
-          <div className="flex items-center gap-2">
-            {isEditing ? (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const supabase = createClient();
+              const { data } = await supabase.from('yatra_ingredient_unit_conversions').select('*');
+              setConversionsList(data || []);
+              setConversionModalOpen(true);
+            }}
+            className="text-xs gap-1 border-stone-300 text-stone-700 hover:bg-stone-50 cursor-pointer"
+          >
+            <Scale className="h-3.5 w-3.5 text-amber-600" />
+            <span className="hidden sm:inline">Unit Conversions</span>
+          </Button>
+
+          {canManage && (
+            isEditing ? (
               <>
                 <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
                   <X className="h-3.5 w-3.5 mr-1" />
@@ -440,21 +482,126 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                   size="sm"
                   onClick={handleSaveRecipe}
                   disabled={saving}
-                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                  className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
                 >
                   <Save className="h-3.5 w-3.5 mr-1" />
                   {saving ? 'Saving...' : t('sops.recipes.save')}
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm" onClick={handleStartEdit} className="gap-1.5">
+              <Button variant="outline" size="sm" onClick={handleStartEdit} className="gap-1.5 cursor-pointer">
                 <Edit2 className="h-3.5 w-3.5" />
                 {t('sops.recipes.edit')}
               </Button>
-            )}
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
+
+      {/* Multi-Configuration Tabs (A La Carte, Combo, Thali) */}
+      {canonicalDish?.configurations && canonicalDish.configurations.length > 0 && (
+        <div className="bg-white border border-[#E7E2D8] rounded-xl p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-amber-600" />
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
+                Serving Configurations ({canonicalDish.configurations.length})
+              </span>
+            </div>
+            <span className="text-[11px] text-stone-400">Portion size & food cost per serving</span>
+          </div>
+
+          <div className="flex overflow-x-auto gap-2 pb-1">
+            {canonicalDish.configurations.map((cfg: any) => {
+              const isSelected = selectedConfigId === cfg.id || (!selectedConfigId && canonicalDish.configurations[0]?.id === cfg.id);
+              const batchCost = calculation?.totalBatchCost;
+              const yieldQty = Number(recipe.batch_yield_quantity) || 0;
+              const yieldUnit = recipe.batch_yield_unit || 'kg';
+              let cfgCost: number | null = null;
+              if (batchCost && yieldQty > 0 && cfg.portion_size_quantity) {
+                let portionInYieldUnit = Number(cfg.portion_size_quantity);
+                if (yieldUnit === 'kg' && cfg.portion_size_unit === 'g') portionInYieldUnit /= 1000;
+                else if (yieldUnit === 'g' && cfg.portion_size_unit === 'kg') portionInYieldUnit *= 1000;
+                cfgCost = (batchCost / yieldQty) * portionInYieldUnit;
+              }
+
+              return (
+                <div
+                  key={cfg.id}
+                  onClick={() => setSelectedConfigId(cfg.id)}
+                  className={`p-3 rounded-xl border text-xs cursor-pointer min-w-[200px] flex-1 transition-all ${
+                    isSelected
+                      ? 'border-amber-500 bg-amber-50/60 shadow-xs'
+                      : 'border-[#E7E2D8] bg-[#FAF8F5] hover:border-stone-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-stone-900">{cfg.name}</span>
+                    <Badge variant={isSelected ? 'warning' : 'outline'} className="text-[10px] font-mono">
+                      {cfg.portion_size_quantity} {cfg.portion_size_unit}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-stone-200/60">
+                    <span className="text-[11px] text-stone-500">Portion Food Cost:</span>
+                    <span className="font-mono font-bold text-emerald-700">
+                      {!hasCostAccess ? (
+                        <Lock className="h-3 w-3 inline text-stone-400" />
+                      ) : cfgCost != null ? (
+                        formatINR(Math.round(cfgCost * 100) / 100)
+                      ) : (
+                        '—'
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Formulation Cards */}
+      {canonicalDish?.formulations && canonicalDish.formulations.length > 1 && (
+        <div className="bg-white border border-[#E7E2D8] rounded-xl p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <UtensilsCrossed className="h-4 w-4 text-purple-600" />
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-700">
+                Formulations & Chef Versions ({canonicalDish.formulations.length})
+              </span>
+            </div>
+            <span className="text-[11px] text-stone-400">Multiple chef formulations for this dish</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {canonicalDish.formulations.map((f: any) => {
+              const isSelected = selectedFormulationId === f.id || (!selectedFormulationId && canonicalDish.formulations[0]?.id === f.id);
+              return (
+                <div
+                  key={f.id}
+                  onClick={() => setSelectedFormulationId(f.id)}
+                  className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-purple-500 bg-purple-50/50 shadow-xs'
+                      : 'border-[#E7E2D8] bg-[#FAF8F5] hover:border-stone-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-stone-900">{f.name}</span>
+                    <Badge variant="outline" className="text-[9px] font-mono">v{f.version_number || 1}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-stone-500 font-mono text-[11px]">
+                    <span>Yield: {f.batch_yield_quantity || '—'} {f.batch_yield_unit}</span>
+                    <Badge variant={f.is_active ? 'success' : 'outline'} className="text-[9px]">
+                      {f.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Header Banner */}
       <div className="bg-white border border-[#E7E2D8] rounded-xl p-6 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -582,9 +729,9 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                     className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
                   >
                     <option value="">{t('sops.recipes.selectUnit')}</option>
-                    {getCompatibleUnitOptions(editForm.category === 'FINAL_DISH' ? 'pcs' : 'kg', centralUnits, undefined, locale).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                    {['kg', 'g', 'pcs'].map((u) => (
+                      <option key={u} value={u}>
+                        {u === 'kg' ? (locale === 'hi' ? 'kg (किलोग्राम)' : 'kg (Kilograms)') : u === 'g' ? (locale === 'hi' ? 'g (ग्राम)' : 'g (Grams)') : (locale === 'hi' ? 'pcs (पीस)' : 'pcs (Pieces)')}
                       </option>
                     ))}
                   </select>
@@ -764,6 +911,56 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
           {isEditing ? (
             /* INTERACTIVE INGREDIENTS EDITOR */
             <div className="p-4 space-y-3">
+              {/* Quick Add Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                <input
+                  type="text"
+                  value={quickSearch}
+                  onChange={(e) => setQuickSearch(e.target.value)}
+                  placeholder={locale === 'hi' ? 'सामग्री तुरंत खोजें और जोड़ें (उदा. पनीर, मक्खन, ग्रेवी)...' : 'Quick search and add ingredient (e.g. Paneer, Butter, Gravy)...'}
+                  className="w-full pl-8 pr-3 py-1.5 border border-[#E7E2D8] rounded-lg text-xs bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                {quickSearch.trim() && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-20 max-h-48 overflow-y-auto bg-white border border-[#E7E2D8] rounded-lg shadow-lg divide-y divide-stone-100">
+                    {foodGroups
+                      .filter((g) => g.name?.toLowerCase().includes(quickSearch.toLowerCase()) || g.name_hi?.includes(quickSearch))
+                      .slice(0, 6)
+                      .map((g) => (
+                        <div
+                          key={g.id}
+                          onClick={() => {
+                            const bUnit = g.base_unit?.symbol || 'g';
+                            setEditableIngredients((prev) => [
+                              ...prev,
+                              {
+                                tempId: `quick_${Date.now()}_${Math.random()}`,
+                                ingredient_type: 'RAW_MATERIAL',
+                                ingredient_group_id: g.id,
+                                sub_recipe_id: null,
+                                quantity: 1,
+                                unit: bUnit,
+                                sort_order: prev.length + 1,
+                                notes: '',
+                                base_unit_symbol: bUnit,
+                                selected_item_name: g.name,
+                                selected_item_name_hi: g.name_hi,
+                              },
+                            ]);
+                            setQuickSearch('');
+                          }}
+                          className="p-2 hover:bg-amber-50 cursor-pointer flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <span className="font-semibold text-stone-800">{g.name}</span>
+                            {g.name_hi && <span className="text-stone-500 ml-1">({g.name_hi})</span>}
+                          </div>
+                          <Badge variant="outline" className="text-[10px] font-mono">{g.base_unit?.symbol || 'g'}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
               {editableIngredients.length === 0 ? (
                 <div className="p-8 text-center text-stone-400 text-sm border-2 border-dashed border-[#E7E2D8] rounded-xl">
                   <p>{t('sops.recipeDetail.noIngredientsEdit')}</p>
@@ -921,6 +1118,26 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                             className="w-full px-2 py-1.5 border border-[#E7E2D8] rounded-lg text-xs bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
+
+                        {/* Live Cost Display */}
+                        {hasCostAccess && (
+                          <div className="w-20 text-right shrink-0">
+                            <span className="text-[10px] text-stone-400 block font-mono">Cost</span>
+                            <span className="font-mono text-xs font-semibold text-emerald-700">
+                              {(() => {
+                                const matched = foodGroups.find((g) => g.id === row.ingredient_group_id);
+                                const rate = matched?.current_weighted_average_cost || matched?.wac;
+                                if (rate && Number(row.quantity) > 0) {
+                                  const conv = convertDirectQuantity(Number(row.quantity), row.unit, matched.base_unit?.symbol || 'g');
+                                  if (conv.possible && conv.converted !== undefined) {
+                                    return formatINR(Math.round(conv.converted * Number(rate) * 100) / 100);
+                                  }
+                                }
+                                return '—';
+                              })()}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Delete Button */}
                         <button
@@ -1260,6 +1477,87 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                   {locale === 'hi' ? 'परिवर्तन जारी रखें' : 'Proceed with Change'}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Sticky Bottom Save Bar when editing */}
+      {isEditing && (
+        <div className="sticky bottom-0 z-40 bg-white/95 backdrop-blur-xs border-t border-[#E7E2D8] p-3 -mx-4 sm:-mx-6 px-4 sm:px-6 shadow-lg flex items-center justify-between animate-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-stone-500 hidden sm:inline">Editing recipe formulation</span>
+            <span className="font-mono text-xs font-semibold text-stone-800">
+              {editableIngredients.length} ingredients
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleCancelEdit} disabled={saving}>
+              <X className="h-3.5 w-3.5 mr-1" />
+              {t('sops.recipes.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveRecipe}
+              disabled={saving}
+              className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer font-semibold shadow-xs"
+            >
+              <Save className="h-3.5 w-3.5 mr-1" />
+              {saving ? 'Saving...' : t('sops.recipes.save')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Unit Conversion Modal */}
+      {conversionModalOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden border border-[#E7E2D8]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E2D8] bg-[#FAF8F5]">
+              <h2 className="text-base font-bold text-stone-900 flex items-center gap-2">
+                <Scale className="h-4 w-4 text-amber-600" />
+                Verified Unit Conversions
+              </h2>
+              <button
+                type="button"
+                onClick={() => setConversionModalOpen(false)}
+                className="text-stone-400 hover:text-stone-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-stone-600">
+                Active item-specific and group-level verified conversions supporting recipe costing.
+              </p>
+              {conversionsList.length === 0 ? (
+                <div className="p-4 text-center text-stone-400 text-xs bg-stone-50 rounded-lg">
+                  No verified conversions registered.
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-100 border border-[#E7E2D8] rounded-lg">
+                  {conversionsList.map((c: any) => (
+                    <div key={c.id} className="p-3 text-xs flex items-center justify-between">
+                      <div>
+                        <span className="font-mono font-bold text-stone-900">
+                          1 {c.from_unit} = {c.conversion_factor} {c.to_unit}
+                        </span>
+                        {c.source && (
+                          <span className="text-[10px] text-stone-400 block font-sans">Source: {c.source}</span>
+                        )}
+                      </div>
+                      <Badge variant={c.is_verified ? 'success' : 'warning'} className="text-[10px]">
+                        {c.is_verified ? 'Verified' : 'Pending'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-3 border-t border-[#E7E2D8] bg-[#FAF8F5] flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConversionModalOpen(false)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>

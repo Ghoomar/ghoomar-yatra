@@ -46,7 +46,92 @@ export async function GET(
     if (recipeRes.error) throw recipeRes.error;
 
     const allRecipes = recipeRes.data || [];
-    const recipe = allRecipes.find((candidate: any) => candidate.id === id);
+    let recipe = allRecipes.find((candidate: any) => candidate.id === id);
+
+    // If not found in yatra_recipes, check yatra_canonical_dishes
+    let canonicalDishData: any = null;
+    if (!recipe) {
+      const { data: dishFound } = await admin
+        .from('yatra_canonical_dishes')
+        .select(`
+          *,
+          configurations:yatra_serving_configurations(*),
+          formulations:yatra_recipe_formulations(
+            *,
+            ingredients:yatra_recipe_formulation_ingredients(
+              *,
+              ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              sub_preparation_dish:yatra_canonical_dishes!yatra_recipe_formulation_ingredients_sub_preparation_dish_id_fkey(id, name, name_hi, category, is_preparation)
+            )
+          )
+        `)
+        .eq('id', id)
+        .maybeSingle();
+
+      if (dishFound) {
+        canonicalDishData = dishFound;
+        const defaultForm = dishFound.formulations?.find((f: any) => f.id === dishFound.default_formulation_id) || dishFound.formulations?.[0];
+        const defaultCfg = dishFound.configurations?.[0];
+        recipe = {
+          id: dishFound.id,
+          name: dishFound.name,
+          name_hi: dishFound.name_hi,
+          category: dishFound.category,
+          batch_yield_quantity: defaultForm?.batch_yield_quantity || null,
+          batch_yield_unit: defaultForm?.batch_yield_unit || null,
+          portion_size_quantity: defaultCfg?.portion_size_quantity || null,
+          portion_size_unit: defaultCfg?.portion_size_unit || null,
+          instructions: defaultForm?.preparation_method || null,
+          notes: dishFound.description || null,
+          is_active: dishFound.is_active,
+          ingredients: (defaultForm?.ingredients || []).map((fi: any) => ({
+            id: fi.id,
+            recipe_id: dishFound.id,
+            ingredient_type: fi.ingredient_type,
+            ingredient_group_id: fi.ingredient_group_id,
+            inventory_item_id: fi.inventory_item_id,
+            sub_recipe_id: fi.sub_preparation_dish_id,
+            quantity: fi.quantity,
+            unit: fi.unit,
+            sort_order: fi.sort_order,
+            notes: fi.notes,
+            ingredient_group: fi.ingredient_group,
+            inventory_item: fi.inventory_item,
+            sub_recipe: fi.sub_preparation_dish ? {
+              id: fi.sub_preparation_dish.id,
+              name: fi.sub_preparation_dish.name,
+              name_hi: fi.sub_preparation_dish.name_hi,
+              category: fi.sub_preparation_dish.category,
+            } : null,
+          })),
+        };
+      }
+    } else {
+      // Find matching canonical dish if exists
+      const { data: matchedDish } = await admin
+        .from('yatra_canonical_dishes')
+        .select(`
+          *,
+          configurations:yatra_serving_configurations(*),
+          formulations:yatra_recipe_formulations(
+            *,
+            ingredients:yatra_recipe_formulation_ingredients(
+              *,
+              ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+              sub_preparation_dish:yatra_canonical_dishes!yatra_recipe_formulation_ingredients_sub_preparation_dish_id_fkey(id, name, name_hi, category, is_preparation)
+            )
+          )
+        `)
+        .ilike('name', recipe.name)
+        .maybeSingle();
+
+      if (matchedDish) {
+        canonicalDishData = matchedDish;
+      }
+    }
+
     if (!recipe) {
       return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
     }
@@ -113,6 +198,7 @@ export async function GET(
 
     return NextResponse.json({
       recipe,
+      canonicalDish: canonicalDishData,
       calculation: sanitizedCalc,
       whereUsed: {
         recipes: whereUsedRecipes,

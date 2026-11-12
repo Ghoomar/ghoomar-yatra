@@ -24,12 +24,15 @@ import {
   Building,
   Sparkles,
   Link2,
+  GitMerge,
 } from 'lucide-react';
+import Link from 'next/link';
 import { ParentCategoryModal } from './ParentCategoryModal';
 import { CategoryModal } from './CategoryModal';
 import { MenuItemModal } from './MenuItemModal';
 import { MapToExistingModal } from './MapToExistingModal';
 import { ReclassifySalesModal } from './ReclassifySalesModal';
+import { ManualMenuMergeModal } from './ManualMenuMergeModal';
 import { getCategoryColor, getCategoryBadgeClasses } from '@/lib/constants/category-colors';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
@@ -62,6 +65,7 @@ export function MenuMasterView() {
   const [filterParent, setFilterParent] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterActive, setFilterActive] = useState<string>('all');
+  const [filterProductType, setFilterProductType] = useState<string>('');
 
   // Collapsed state for hierarchy tree
   const [collapsedParents, setCollapsedParents] = useState<Record<string, boolean>>({});
@@ -79,6 +83,9 @@ export function MenuMasterView() {
 
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [mappingItem, setMappingItem] = useState<{ id?: string; name: string; price?: number } | null>(null);
+
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [mergeSourceItem, setMergeSourceItem] = useState<any | null>(null);
 
   const [reclassifyModalOpen, setReclassifyModalOpen] = useState(false);
 
@@ -196,6 +203,7 @@ export function MenuMasterView() {
 
       const matchParent = !filterParent || item.parent_category === filterParent;
       const matchCat = !filterCategory || item.category === filterCategory;
+      const matchProductType = !filterProductType || item.product_type === filterProductType;
       const matchActive =
         filterActive === 'all'
           ? true
@@ -203,9 +211,9 @@ export function MenuMasterView() {
           ? item.is_active
           : !item.is_active;
 
-      return matchSearch && matchParent && matchCat && matchActive;
+      return matchSearch && matchParent && matchCat && matchActive && matchProductType;
     });
-  }, [itemsList, searchTerm, filterParent, filterCategory, filterActive, viewTab]);
+  }, [itemsList, searchTerm, filterParent, filterCategory, filterActive, filterProductType, viewTab]);
 
   return (
     <div className="space-y-4">
@@ -304,6 +312,18 @@ export function MenuMasterView() {
             >
               <RefreshCw className="h-3.5 w-3.5 text-amber-600" />
               <span>Reclassify Sales</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setMergeSourceItem(null);
+                setMergeModalOpen(true);
+              }}
+              className="text-stone-700 border-stone-300 hover:bg-stone-100 flex items-center gap-1.5"
+            >
+              <GitMerge className="h-3.5 w-3.5 text-amber-600" />
+              <span>{locale === 'hi' ? 'आइटम विलय (Merge)' : 'Merge Items'}</span>
             </Button>
             <Button
               variant="outline"
@@ -717,6 +737,18 @@ export function MenuMasterView() {
                     </select>
 
                     <select
+                      value={filterProductType}
+                      onChange={(e) => setFilterProductType(e.target.value)}
+                      className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white focus:outline-none"
+                    >
+                      <option value="">{locale === 'hi' ? 'सभी प्रकार (All Types)' : 'All Product Types'}</option>
+                      <option value="INDIVIDUAL_DISH">{locale === 'hi' ? 'डिश (Dish)' : 'Individual Dish'}</option>
+                      <option value="COMBO">{locale === 'hi' ? 'कॉम्बो (Combo)' : 'Combo'}</option>
+                      <option value="THALI">{locale === 'hi' ? 'थाली (Thali)' : 'Thali'}</option>
+                      <option value="STANDALONE_PURCHASED">{locale === 'hi' ? 'पैकेज्ड (Packaged)' : 'Packaged Retail'}</option>
+                    </select>
+
+                    <select
                       value={filterActive}
                       onChange={(e) => setFilterActive(e.target.value)}
                       className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white focus:outline-none"
@@ -754,19 +786,57 @@ export function MenuMasterView() {
                             <tr key={item.id} className="hover:bg-stone-50/50">
                               <td className="p-3 font-semibold text-stone-900">
                                 <div className="flex flex-col">
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <span>{getLocalizedMasterName(item, locale)}</span>
+                                    {item.product_type && (
+                                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                                        item.product_type === 'COMBO' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                        item.product_type === 'THALI' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                        item.product_type === 'STANDALONE_PURCHASED' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                                        'bg-stone-100 text-stone-700 border-stone-200'
+                                      }`}>
+                                        {item.product_type === 'INDIVIDUAL_DISH' ? 'Dish' :
+                                         item.product_type === 'STANDALONE_PURCHASED' ? 'Packaged' :
+                                         item.product_type}
+                                      </span>
+                                    )}
+                                    {item.is_open_item && (
+                                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Open Item Protected">
+                                        <ShieldCheck className="h-3 w-3 text-amber-600" />
+                                        <span>Open Item</span>
+                                      </span>
+                                    )}
                                     {(item.needs_setup || item.category === 'Uncategorized' || !item.category) && (
                                       <span className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                         {locale === 'hi' ? 'सेटअप बाकी' : 'Needs Setup'}
                                       </span>
                                     )}
                                   </div>
-                                  {locale === 'hi' && item.name_hi && item.name_hi !== item.name && (
-                                    <span className="text-[11px] text-stone-400 font-normal">
-                                      {item.name}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {locale === 'hi' && item.name_hi && item.name_hi !== item.name && (
+                                      <span className="text-[11px] text-stone-400 font-normal">
+                                        {item.name}
+                                      </span>
+                                    )}
+                                    <Link
+                                      href={`/sops/menu/${item.id}`}
+                                      className="text-[11px] text-amber-700 hover:text-amber-900 inline-flex items-center gap-0.5"
+                                      title="View Menu Engineering"
+                                    >
+                                      <span>Engineering</span>
+                                      <ExternalLink className="h-2.5 w-2.5" />
+                                    </Link>
+                                    {item.canonical_dish_id && (
+                                      <Link
+                                        href={`/sops/recipes/${item.canonical_dish_id}`}
+                                        className="text-[11px] text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5"
+                                        title="View Recipe SOP"
+                                      >
+                                        <span>Recipe SOP</span>
+                                        <ExternalLink className="h-2.5 w-2.5" />
+                                      </Link>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                               <td className="p-3 font-medium text-stone-700">
@@ -843,17 +913,32 @@ export function MenuMasterView() {
                                     </Button>
                                   </div>
                                 ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingItem(item);
-                                      setItemModalOpen(true);
-                                    }}
-                                    className="text-stone-500 hover:text-stone-900"
-                                  >
-                                    <Edit2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingItem(item);
+                                        setItemModalOpen(true);
+                                      }}
+                                      className="text-stone-500 hover:text-stone-900 h-7 w-7 p-0"
+                                      title={locale === 'hi' ? 'संपादित करें' : 'Edit'}
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setMergeSourceItem(item);
+                                        setMergeModalOpen(true);
+                                      }}
+                                      className="text-stone-500 hover:text-amber-800 h-7 w-7 p-0"
+                                      title={locale === 'hi' ? 'अन्य आइटम में मिलाएं' : 'Merge item'}
+                                    >
+                                      <GitMerge className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 )}
                               </td>
                             </tr>
@@ -1110,6 +1195,14 @@ export function MenuMasterView() {
         isOpen={reclassifyModalOpen}
         onClose={() => setReclassifyModalOpen(false)}
         onSuccess={loadData}
+      />
+
+      <ManualMenuMergeModal
+        isOpen={mergeModalOpen}
+        onClose={() => setMergeModalOpen(false)}
+        onSuccess={loadData}
+        allItems={itemsList}
+        initialSourceItem={mergeSourceItem}
       />
     </div>
   );

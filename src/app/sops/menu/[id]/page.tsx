@@ -67,6 +67,10 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
 
   const [menuItem, setMenuItem] = useState<any>(null);
   const [variants, setVariants] = useState<any[]>([]);
+  const [compositions, setCompositions] = useState<any[]>([]);
+  const [compositionCost, setCompositionCost] = useState<any>(null);
+  const [canonicalDish, setCanonicalDish] = useState<any>(null);
+  const [servingConfiguration, setServingConfiguration] = useState<any>(null);
   const [salesMetrics, setSalesMetrics] = useState<any>(null);
   const fetchSequence = useRef(0);
 
@@ -116,6 +120,10 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
       const data = await res.json();
       setMenuItem(data.menuItem);
       setVariants(data.variants || []);
+      setCompositions(data.compositions || []);
+      setCompositionCost(data.compositionCost || null);
+      setCanonicalDish(data.canonicalDish || null);
+      setServingConfiguration(data.servingConfiguration || null);
       setSalesMetrics(data.salesMetrics || null);
     } catch (err: any) {
       if (sequence !== fetchSequence.current) return;
@@ -238,25 +246,50 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
 
   return (
     <div className="space-y-6">
-      {/* Top Breadcrumb */}
-      <div>
-        <Link href="/sops/menu">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-stone-600 hover:text-stone-900">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Menu Master
-          </Button>
-        </Link>
+      {/* Top Breadcrumb & Bidirectional Navigation */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Link href="/sops/menu">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-stone-600 hover:text-stone-900">
+              <ArrowLeft className="h-4 w-4" />
+              Menu Engineering
+            </Button>
+          </Link>
+          <Link href="/admin/menu-master">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs text-stone-600 hover:text-stone-900">
+              <UtensilsCrossed className="h-3.5 w-3.5" />
+              Menu Master
+            </Button>
+          </Link>
+        </div>
+
+        {(menuItem.canonical_dish_id || canonicalDish?.id) && (
+          <Link href={`/sops/recipes/${menuItem.canonical_dish_id || canonicalDish?.id}`}>
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 text-xs">
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span>View Recipe SOP: {canonicalDish?.name || 'Canonical Dish'}</span>
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Item Header Banner */}
       <div className="bg-white border border-[#E7E2D8] rounded-xl p-6 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
               {menuItem.name}
             </h1>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-stone-50 border border-stone-200">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: parentColor }} />
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+              menuItem.product_type === 'COMBO' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+              menuItem.product_type === 'THALI' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+              menuItem.product_type === 'STANDALONE_PURCHASED' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+              'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {menuItem.product_type || 'INDIVIDUAL_DISH'}
+            </span>
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-stone-50 border border-stone-200">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: parentColor }} />
               <span>{menuItem.parent_category || 'Other'}</span>
             </div>
             <Badge variant="outline" className="text-xs">
@@ -267,6 +300,11 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
             <p className="text-base text-stone-600 mt-1 font-sans">
               {menuItem.name_hi}
             </p>
+          )}
+          {servingConfiguration && (
+            <div className="text-xs text-stone-500 mt-1.5">
+              Serving Configuration: <span className="font-semibold text-stone-700">{servingConfiguration.name} ({servingConfiguration.portion_size_quantity} {servingConfiguration.portion_size_unit})</span>
+            </div>
           )}
         </div>
 
@@ -412,6 +450,144 @@ export default function MenuItemDetailPage({ params }: MenuItemDetailPageProps) 
           )}
         </CardContent>
       </Card>
+
+      {/* 4-Tier Combo & Thali Compositions Breakdown */}
+      {compositions.length > 0 && (
+        <Card className="border border-purple-200 shadow-xs overflow-hidden">
+          <CardHeader className="bg-purple-50/50 border-b border-purple-100 p-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base font-bold text-purple-950 flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-purple-700" />
+                  Fixed Combo / Thali Compositions ({compositions.length} Components)
+                </CardTitle>
+                <CardDescription className="text-xs text-purple-800">
+                  Authoritative multi-dish recipe portions linked to this commercial menu item.
+                </CardDescription>
+              </div>
+              {hasCostAccess && compositionCost?.status && (
+                <Badge variant={compositionCost.status === 'COSTED_ELIGIBLE' ? 'success' : 'outline'} className="text-xs">
+                  {compositionCost.status}
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-purple-50/30 text-purple-900 border-b border-purple-100">
+                  <tr>
+                    <th className="p-2.5">Component Dish</th>
+                    <th className="p-2.5">Serving Configuration</th>
+                    <th className="p-2.5 text-center">Qty</th>
+                    {hasCostAccess && <th className="p-2.5 text-right">Serving Cost</th>}
+                    {hasCostAccess && <th className="p-2.5 text-right">Total Line Cost</th>}
+                    <th className="p-2.5 text-center">Recipe SOP</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-purple-50">
+                  {compositions.map((c: any) => {
+                    const snapCost = c.serving_cost;
+                    const lineCost = snapCost !== null ? snapCost * (c.quantity || 1) : null;
+                    const dish = c.component_dish;
+                    return (
+                      <tr key={c.id} className="hover:bg-purple-50/20">
+                        <td className="p-2.5 font-semibold text-stone-900">
+                          {dish?.name || 'Unnamed Dish'}
+                        </td>
+                        <td className="p-2.5 text-stone-700">
+                          <span className="font-medium">{c.serving_configuration?.name || 'Default'}</span>
+                          {c.serving_configuration?.portion_size_quantity && (
+                            <span className="text-stone-400 ml-1">
+                              ({c.serving_configuration.portion_size_quantity} {c.serving_configuration.portion_size_unit})
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-center font-bold text-stone-800">
+                          {c.quantity || 1}
+                        </td>
+                        {hasCostAccess && (
+                          <td className="p-2.5 text-right font-mono text-stone-700">
+                            {formatNullablePrice(snapCost)}
+                          </td>
+                        )}
+                        {hasCostAccess && (
+                          <td className="p-2.5 text-right font-mono font-bold text-purple-900">
+                            {formatNullablePrice(lineCost)}
+                          </td>
+                        )}
+                        <td className="p-2.5 text-center">
+                          {dish?.id ? (
+                            <Link
+                              href={`/sops/recipes/${dish.id}`}
+                              className="inline-flex items-center gap-1 text-purple-700 hover:text-purple-900 font-semibold"
+                            >
+                              <span>SOP</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          ) : (
+                            <span className="text-stone-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {hasCostAccess && compositionCost && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-purple-50/40 p-3 rounded-xl border border-purple-100 text-xs">
+                <div>
+                  <span className="text-stone-500 block">Total Food Cost</span>
+                  <span className="text-base font-bold text-stone-900 font-mono">
+                    {formatNullablePrice(compositionCost.totalFoodCost)}
+                  </span>
+                  {compositionCost.foodCostPct !== null && (
+                    <span className="text-[11px] text-stone-500 ml-1">({compositionCost.foodCostPct.toFixed(1)}%)</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-stone-500 block">Operating + Packaging</span>
+                  <span className="text-base font-bold text-stone-900 font-mono">
+                    {formatNullablePrice(compositionCost.operatingCost + compositionCost.packagingCost)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 block">Selling Price</span>
+                  <span className="text-base font-bold text-stone-900 font-mono">
+                    {formatNullablePrice(menuItem.price)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-stone-500 block">Contribution Margin</span>
+                  <span className="text-base font-bold text-emerald-700 font-mono">
+                    {formatNullablePrice(compositionCost.contributionAmount)}
+                  </span>
+                  {compositionCost.contributionPct !== null && (
+                    <span className="text-[11px] text-emerald-600 ml-1">({compositionCost.contributionPct.toFixed(1)}%)</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Standalone Purchased Product Information */}
+      {menuItem.product_type === 'STANDALONE_PURCHASED' && (
+        <Card className="border border-cyan-200 bg-cyan-50/30">
+          <CardContent className="p-4 flex items-center gap-3 text-xs text-cyan-900">
+            <Package className="h-5 w-5 text-cyan-600 shrink-0" />
+            <div>
+              <span className="font-bold">Packaged / Retail Product</span>
+              <p className="text-cyan-700 mt-0.5">
+                This item is purchased ready-to-sell (e.g. packaged mineral water, canned cold drinks). It does not require a kitchen recipe formulation.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Variants List & Channel Comparison */}
       <div className="space-y-6">

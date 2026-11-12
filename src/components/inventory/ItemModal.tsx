@@ -214,6 +214,52 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
 
     try {
       const isFood = inventoryClass === 'Food Raw Material';
+
+      // Auto-link or create logical ingredient group for Food Raw Material
+      let assignedGroupId = item?.group_id || null;
+      if (isFood && (!isEdit || !assignedGroupId)) {
+        // Look for existing group by exact name
+        const { data: existingGroup } = await supabase
+          .from('logical_ingredient_groups')
+          .select('id')
+          .ilike('name', name.trim())
+          .maybeSingle();
+
+        if (existingGroup?.id) {
+          assignedGroupId = existingGroup.id;
+        } else {
+          // Generate clean group code
+          const rawCode = itemCode.trim() || name.trim().slice(0, 6).toUpperCase();
+          const groupCode = rawCode.startsWith('GRP-') ? rawCode : `GRP-${rawCode}`;
+
+          const { data: codeConflict } = await supabase
+            .from('logical_ingredient_groups')
+            .select('id')
+            .eq('group_code', groupCode)
+            .maybeSingle();
+
+          const finalCode = codeConflict?.id ? `${groupCode}-${Date.now().toString().slice(-4)}` : groupCode;
+
+          const { data: newGroup, error: groupErr } = await supabase
+            .from('logical_ingredient_groups')
+            .insert({
+              group_code: finalCode,
+              name: name.trim(),
+              name_hi: nameHi && nameHi.trim() ? nameHi.trim() : null,
+              category_id: categoryId || null,
+              base_unit_id: unitId || null,
+              inventory_class: 'Food Raw Material',
+              is_active: isActive,
+            })
+            .select('id')
+            .single();
+
+          if (!groupErr && newGroup?.id) {
+            assignedGroupId = newGroup.id;
+          }
+        }
+      }
+
       const payload: any = {
         item_code: itemCode.trim() || null,
         name: name.trim(),
@@ -232,6 +278,10 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         is_active: isActive,
         updated_at: new Date().toISOString(),
       };
+
+      if (assignedGroupId) {
+        payload.group_id = assignedGroupId;
+      }
 
       let savedResult;
       if (isEdit && itemId) {
