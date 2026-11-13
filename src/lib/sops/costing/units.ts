@@ -299,56 +299,82 @@ export function convertDirectQuantity(
     ? [...options.conversions, ...DEFAULT_VERIFIED_CONVERSIONS]
     : DEFAULT_VERIFIED_CONVERSIONS;
 
+  // Helper to bridge intermediate unit conversion to target unit
+  const tryApplyConversion = (c: ExplicitConversion, from: string, to: string, amount: number) => {
+    const cFrom = normalizeUnit(c.from_unit);
+    const cTo = normalizeUnit(c.to_unit);
+    const mult = Number(c.multiplier || (c as any).conversion_factor);
+    if (!mult || mult <= 0) return null;
+
+    // Direct match
+    if (cFrom === from && cTo === to) {
+      return { possible: true, converted: amount * mult };
+    }
+    if (cTo === from && cFrom === to) {
+      return { possible: true, converted: amount / mult };
+    }
+
+    // Forward bridge: from matches cFrom, cTo can convert to to
+    if (cFrom === from && areUnitsCompatible(cTo, to)) {
+      const intermediate = amount * mult;
+      return convertDirectQuantity(intermediate, cTo, to, { ...options, inventoryItemId: undefined, ingredientGroupId: undefined, outputConversions: undefined });
+    }
+
+    // Inverse bridge: from matches cTo, cFrom can convert to to
+    if (cTo === from && areUnitsCompatible(cFrom, to)) {
+      const intermediate = amount / mult;
+      return convertDirectQuantity(intermediate, cFrom, to, { ...options, inventoryItemId: undefined, ingredientGroupId: undefined, outputConversions: undefined });
+    }
+
+    // Target bridge: to matches cTo, from can convert to cFrom
+    if (cTo === to && areUnitsCompatible(from, cFrom)) {
+      const step1 = convertDirectQuantity(amount, from, cFrom, { ...options, inventoryItemId: undefined, ingredientGroupId: undefined, outputConversions: undefined });
+      if (step1.possible && step1.converted !== undefined) {
+        return { possible: true, converted: step1.converted * mult };
+      }
+    }
+
+    // Target inverse bridge: to matches cFrom, from can convert to cTo
+    if (cFrom === to && areUnitsCompatible(from, cTo)) {
+      const step1 = convertDirectQuantity(amount, from, cTo, { ...options, inventoryItemId: undefined, ingredientGroupId: undefined, outputConversions: undefined });
+      if (step1.possible && step1.converted !== undefined) {
+        return { possible: true, converted: step1.converted / mult };
+      }
+    }
+
+    return null;
+  };
+
   // Tier 1: Item-specific conversion from yatra_ingredient_unit_conversions
   if (options?.inventoryItemId) {
-    const match = activeConversions.find(c =>
+    const relevant = activeConversions.filter(c =>
       c.inventory_item_id === options.inventoryItemId &&
-      c.is_verified !== false &&
-      ((normalizeUnit(c.from_unit) === normFrom && normalizeUnit(c.to_unit) === normTo) ||
-       (normalizeUnit(c.from_unit) === normTo && normalizeUnit(c.to_unit) === normFrom))
+      c.is_verified !== false
     );
-    if (match) {
-      const mult = Number(match.multiplier);
-      if (normalizeUnit(match.from_unit) === normFrom) {
-        return { possible: true, converted: qty * mult };
-      } else {
-        return { possible: true, converted: qty / mult };
-      }
+    for (const c of relevant) {
+      const res = tryApplyConversion(c, normFrom, normTo, qty);
+      if (res && res.possible) return res;
     }
   }
 
   // Tier 2: Group-level conversion from yatra_ingredient_unit_conversions
   if (options?.ingredientGroupId) {
-    const match = activeConversions.find(c =>
+    const relevant = activeConversions.filter(c =>
       c.ingredient_group_id === options.ingredientGroupId &&
-      c.is_verified !== false &&
-      ((normalizeUnit(c.from_unit) === normFrom && normalizeUnit(c.to_unit) === normTo) ||
-       (normalizeUnit(c.from_unit) === normTo && normalizeUnit(c.to_unit) === normFrom))
+      c.is_verified !== false
     );
-    if (match) {
-      const mult = Number(match.multiplier);
-      if (normalizeUnit(match.from_unit) === normFrom) {
-        return { possible: true, converted: qty * mult };
-      } else {
-        return { possible: true, converted: qty / mult };
-      }
+    for (const c of relevant) {
+      const res = tryApplyConversion(c, normFrom, normTo, qty);
+      if (res && res.possible) return res;
     }
   }
 
   // Tier 3: Verified output conversion from yatra_recipe_formulation_output_conversions
   if (options?.outputConversions && options.outputConversions.length > 0) {
-    const match = options.outputConversions.find(c =>
-      c.is_verified !== false &&
-      ((normalizeUnit(c.from_unit) === normFrom && normalizeUnit(c.to_unit) === normTo) ||
-       (normalizeUnit(c.from_unit) === normTo && normalizeUnit(c.to_unit) === normFrom))
-    );
-    if (match) {
-      const mult = Number(match.multiplier);
-      if (normalizeUnit(match.from_unit) === normFrom) {
-        return { possible: true, converted: qty * mult };
-      } else {
-        return { possible: true, converted: qty / mult };
-      }
+    const relevant = options.outputConversions.filter(c => c.is_verified !== false);
+    for (const c of relevant) {
+      const res = tryApplyConversion(c, normFrom, normTo, qty);
+      if (res && res.possible) return res;
     }
   }
 

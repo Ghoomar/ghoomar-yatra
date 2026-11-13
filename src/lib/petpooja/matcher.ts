@@ -315,18 +315,54 @@ export async function loadMenuMasterLookupFromDb(supabase: any): Promise<MenuMas
 /**
  * Checks if an item description is an open / miscellaneous item.
  */
-export function isOpenItemDescription(name: string): boolean {
-  if (!name) return false;
-  const lower = name.toLowerCase().trim();
+export function isOpenItemDescription(name: string, rawCategory?: string, rawGroup?: string): boolean {
+  if (!name && !rawCategory && !rawGroup) return false;
+  const lower = (name || '').toLowerCase().trim();
+  const lowerCat = (rawCategory || '').toLowerCase().trim();
+  const lowerGrp = (rawGroup || '').toLowerCase().trim();
+
+  // Category or group indicates an open / miscellaneous line item
+  if (
+    lowerCat.includes('open item') ||
+    lowerCat.includes('open food') ||
+    lowerCat.includes('misc') ||
+    lowerGrp.includes('open item') ||
+    lowerGrp.includes('open food') ||
+    lowerGrp.includes('misc')
+  ) {
+    return true;
+  }
+
+  // Name indicates open / miscellaneous line item
   return (
     lower === 'open item' ||
     lower === 'open' ||
     lower === 'open food' ||
+    lower === 'open items' ||
+    lower === 'openitem' ||
     lower === 'misc' ||
     lower === 'misc item' ||
     lower === 'miscellaneous' ||
     lower.startsWith('open item') ||
-    lower.startsWith('open ')
+    lower.startsWith('open items') ||
+    lower.startsWith('open ') ||
+    lower.startsWith('open-') ||
+    lower.startsWith('open:') ||
+    lower.startsWith('open_') ||
+    lower.startsWith('misc ') ||
+    lower.startsWith('misc.') ||
+    lower.startsWith('misc-') ||
+    lower.startsWith('misc:') ||
+    lower.startsWith('miscellaneous') ||
+    lower.startsWith('custom item') ||
+    lower.startsWith('custom food') ||
+    lower.startsWith('adhoc') ||
+    lower.startsWith('ad-hoc') ||
+    lower.includes('(open item)') ||
+    lower.includes('(open)') ||
+    lower.includes('[open item]') ||
+    lower.includes('[open]') ||
+    lower.includes('(misc)')
   );
 }
 

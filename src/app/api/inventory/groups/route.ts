@@ -56,3 +56,76 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const caller = await resolveCallerAuth(request);
+    if (!caller.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!caller.canManageRecipes) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { name, name_hi, base_unit_symbol, inventory_class } = body;
+
+    if (!name || !name.trim()) {
+      return NextResponse.json({ error: 'Raw material name is required' }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    // Resolve base unit
+    const unitSymbol = base_unit_symbol?.trim() || 'g';
+    const { data: unitData } = await admin
+      .from('units')
+      .select('id, symbol, symbol_hi, name, name_hi')
+      .eq('symbol', unitSymbol)
+      .maybeSingle();
+
+    let baseUnitId = unitData?.id;
+    if (!baseUnitId) {
+      const { data: fallbackUnit } = await admin
+        .from('units')
+        .select('id, symbol, symbol_hi, name, name_hi')
+        .eq('symbol', 'g')
+        .single();
+      baseUnitId = fallbackUnit?.id;
+    }
+
+    const cleanName = name.trim();
+    const codeSuffix = Math.floor(1000 + Math.random() * 9000);
+    const groupCode = `GRP-FOOD-${codeSuffix}`;
+
+    const { data: group, error: insertErr } = await admin
+      .from('logical_ingredient_groups')
+      .insert({
+        group_code: groupCode,
+        name: cleanName,
+        name_hi: name_hi?.trim() || null,
+        inventory_class: inventory_class || 'Food Raw Material',
+        base_unit_id: baseUnitId,
+        is_active: true,
+      })
+      .select(`
+        id,
+        group_code,
+        name,
+        name_hi,
+        inventory_class,
+        search_family,
+        last_valid_wac,
+        base_unit:units!logical_ingredient_groups_base_unit_id_fkey(id, symbol, symbol_hi, name, name_hi)
+      `)
+      .single();
+
+    if (insertErr) throw insertErr;
+
+    return NextResponse.json({ success: true, group }, { status: 201 });
+  } catch (err: any) {
+    console.error('API POST /api/inventory/groups error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  }
+}

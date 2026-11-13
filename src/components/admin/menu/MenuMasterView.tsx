@@ -1127,6 +1127,10 @@ export function MenuMasterView() {
           setMappingItem(src);
           setMapModalOpen(true);
         }}
+        onMerge={(src) => {
+          setMergeSourceItem(src);
+          setMergeModalOpen(true);
+        }}
         categories={categoriesList}
         parents={parentsList}
         item={editingItem}

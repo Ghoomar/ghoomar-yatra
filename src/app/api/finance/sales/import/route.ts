@@ -146,8 +146,10 @@ export async function POST(request: NextRequest) {
 
         if (!resolution.isMatched || resolution.category === 'Uncategorized') {
           const cleanName = item.item_name.trim();
-          if (!unmappedItemsMap.has(cleanName)) {
-            unmappedItemsMap.set(cleanName, Number(item.unit_price) || 0);
+          if (!isOpenItemDescription(cleanName, item.raw_category, item.raw_group_name)) {
+            if (!unmappedItemsMap.has(cleanName)) {
+              unmappedItemsMap.set(cleanName, Number(item.unit_price) || 0);
+            }
           }
         }
 

@@ -510,7 +510,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
       // 2. Update 4-tier recipe formulation
       const formulationId = selectedFormulationId || canonicalDish?.default_formulation_id || canonicalDish?.formulations?.[0]?.id;
       if (formulationId) {
-        await fetch(`/api/sops/formulations/${formulationId}`, {
+        const formRes = await fetch(`/api/sops/formulations/${formulationId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -527,6 +527,11 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
             })),
           }),
         });
+
+        if (!formRes.ok) {
+          const formErrData = await formRes.json().catch(() => ({}));
+          throw new Error(formErrData.error || 'Failed to update recipe formulation');
+        }
       }
 
       // 3. Mirror update to legacy yatra_recipes for compatibility
@@ -623,24 +628,18 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
       if (rate == null) {
         return { rate: null, rateUnit: baseUnit, lineCost: null, conversionError: false, errorMsg: 'Uncosted raw material' };
       }
-      // Check verified conversions first
-      const verified = conversionsList.find((c: any) =>
-        (c.ingredient_group_id === group.id || c.inventory_item_id === row.inventory_item_id) &&
-        c.from_unit?.toLowerCase() === row.unit?.toLowerCase() &&
-        c.to_unit?.toLowerCase() === baseUnit.toLowerCase()
-      );
-      if (verified && (verified.conversion_factor || verified.multiplier)) {
-        const factor = Number(verified.conversion_factor || verified.multiplier);
-        const lineCost = qty * factor * Number(rate);
-        return { rate: Number(rate), rateUnit: baseUnit, lineCost: Math.round(lineCost * 100) / 100, conversionError: false, errorMsg: '' };
-      }
 
-      const conv = convertDirectQuantity(qty, row.unit, baseUnit);
+      const conv = convertDirectQuantity(qty, row.unit, baseUnit, {
+        conversions: conversionsList,
+        ingredientGroupId: group.id,
+        inventoryItemId: row.inventory_item_id,
+      });
+
       if (conv.possible && conv.converted !== undefined) {
         const lineCost = conv.converted * Number(rate);
         return { rate: Number(rate), rateUnit: baseUnit, lineCost: Math.round(lineCost * 100) / 100, conversionError: false, errorMsg: '' };
       } else {
-        return { rate: Number(rate), rateUnit: baseUnit, lineCost: null, conversionError: true, errorMsg: `Cannot convert ${row.unit} to ${baseUnit}` };
+        return { rate: Number(rate), rateUnit: baseUnit, lineCost: null, conversionError: true, errorMsg: conv.error || `Cannot convert ${row.unit} to ${baseUnit}` };
       }
     } else {
       // PREPARATION: resolve against sub-recipe unit costs instead of foodGroups!
@@ -733,6 +732,36 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
       });
     } catch (err: any) {
       alert(`Error creating preparation: ${err.message}`);
+    }
+  };
+
+  const handleQuickAddRawMaterialInline = async (idx: number, term: string) => {
+    try {
+      const res = await fetch('/api/inventory/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: term.trim(),
+          inventory_class: 'Food Raw Material',
+          base_unit_symbol: 'g',
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed to create raw material');
+      }
+      const d = await res.json();
+      const newGroup = d.group;
+      setFoodGroups((prev) => [...prev, newGroup]);
+      handleUpdateIngredient(idx, {
+        ingredient_group_id: newGroup.id,
+        selected_item_name: newGroup.name,
+        selected_item_name_hi: newGroup.name_hi,
+        unit: newGroup.base_unit?.symbol || 'g',
+        base_unit_symbol: newGroup.base_unit?.symbol || 'g',
+      });
+    } catch (err: any) {
+      alert(`Error creating raw material: ${err.message}`);
     }
   };
 
@@ -1494,6 +1523,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                                   unit: bUnit,
                                 });
                               }}
+                              onAddNew={(term) => handleQuickAddRawMaterialInline(idx, term)}
                               labelKey="display_label"
                               valueKey="id"
                               secondaryLabelKey="name_hi"
@@ -1861,19 +1891,38 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                 <p className="text-xs text-stone-400 italic">None</p>
               ) : (
                 <ul className="space-y-2">
-                  {whereUsed.combos.map((c: any, idx: number) => (
-                    <li key={idx} className="text-xs bg-white p-2 rounded border border-[#E7E2D8] flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-stone-900">{c.name}</div>
-                        <div className="text-[10px] text-stone-500 font-mono">
-                          {c.componentName} ({c.portionQuantity} {c.portionUnit})
+                  {whereUsed.combos.map((c: any, idx: number) => {
+                    const comboId = c.menuItemId || c.id;
+                    const comboName = c.menuItemName || c.name || 'Combo';
+                    const comboPrice = c.price ?? c.sellingPrice;
+                    const portionDesc = c.configName
+                      ? `${c.configName} (x${c.quantity || 1})`
+                      : c.portionQuantity
+                      ? `${c.componentName || ''} (${c.portionQuantity} ${c.portionUnit || ''})`
+                      : '';
+
+                    return (
+                      <li key={idx} className="text-xs bg-white p-2 rounded border border-[#E7E2D8] flex items-center justify-between hover:bg-amber-50/40 transition-colors">
+                        <div>
+                          {comboId ? (
+                            <Link href={`/sops/menu/${comboId}`} className="font-medium text-amber-800 hover:underline">
+                              {comboName}
+                            </Link>
+                          ) : (
+                            <div className="font-medium text-stone-900">{comboName}</div>
+                          )}
+                          {portionDesc && (
+                            <div className="text-[10px] text-stone-500 font-mono">
+                              {portionDesc}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                      <span className="font-mono text-[11px] text-stone-700 font-semibold">
-                        {c.sellingPrice ? formatINR(c.sellingPrice) : '—'}
-                      </span>
-                    </li>
-                  ))}
+                        <span className="font-mono text-[11px] text-stone-700 font-semibold">
+                          {comboPrice ? formatINR(comboPrice) : '—'}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
-import { AlertCircle, Link2, UtensilsCrossed } from 'lucide-react';
+import { AlertCircle, Link2, UtensilsCrossed, GitMerge } from 'lucide-react';
 
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
@@ -13,6 +13,7 @@ interface MenuItemModalProps {
   onClose: () => void;
   onSuccess: () => void;
   onMapToExisting?: (item: { id?: string; name: string; price?: number }) => void;
+  onMerge?: (item: any) => void;
   categories: Array<{
     id: string;
     name: string;
@@ -47,6 +48,7 @@ export function MenuItemModal({
   onClose,
   onSuccess,
   onMapToExisting,
+  onMerge,
   categories,
   parents = [],
   item,
@@ -522,17 +524,53 @@ export function MenuItemModal({
             </label>
           </div>
 
-          <div className="pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={loading}>
-              {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
-            </Button>
-            <Button type="submit" variant="primary" size="sm" disabled={loading}>
-              {loading
-                ? locale === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...'
-                : item
-                ? locale === 'hi' ? 'आइटम अपडेट करें' : 'Update Item'
-                : locale === 'hi' ? 'आइटम बनाएं' : 'Create Item'}
-            </Button>
+          <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              {item && onMerge && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onMerge(item);
+                  }}
+                  className="text-amber-800 border-amber-300 hover:bg-amber-50 text-xs flex items-center gap-1.5 cursor-pointer"
+                  title={locale === 'hi' ? 'अन्य अधिकृत आइटम में मिलाएं' : 'Merge item into target'}
+                >
+                  <GitMerge className="h-3.5 w-3.5 text-amber-700" />
+                  <span>{locale === 'hi' ? 'आइटम मिलाएं' : 'Merge'}</span>
+                </Button>
+              )}
+              {item && onMapToExisting && (item.needs_setup || item.category === 'Uncategorized') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onMapToExisting(item);
+                  }}
+                  className="text-stone-700 border-stone-300 hover:bg-stone-50 text-xs flex items-center gap-1.5 cursor-pointer"
+                  title={locale === 'hi' ? 'मौजूदा आइटम से मैप करें' : 'Map to Existing'}
+                >
+                  <Link2 className="h-3.5 w-3.5 text-stone-600" />
+                  <span>{locale === 'hi' ? 'मैप करें' : 'Map'}</span>
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={loading}>
+                {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
+              </Button>
+              <Button type="submit" variant="primary" size="sm" disabled={loading}>
+                {loading
+                  ? locale === 'hi' ? 'सहेजा जा रहा है...' : 'Saving...'
+                  : item
+                  ? locale === 'hi' ? 'आइटम अपडेट करें' : 'Update Item'
+                  : locale === 'hi' ? 'आइटम बनाएं' : 'Create Item'}
+              </Button>
+            </div>
           </div>
         </form>
       </div>

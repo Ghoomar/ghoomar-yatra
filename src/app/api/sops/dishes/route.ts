@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const categoryFilter = searchParams.get('category');
     const searchTerm = searchParams.get('search')?.toLowerCase().trim();
+    const includeInactive = searchParams.get('include_inactive') === 'true';
 
     const admin = createAdminClient();
 
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest) {
         menu_items:pos_menu_items(id, name, name_hi, price, category, parent_category, product_type, is_active)
       `)
       .order('name');
+
+    if (!includeInactive) {
+      query = query.eq('is_active', true);
+    }
 
     if (categoryFilter && categoryFilter !== 'ALL') {
       query = query.eq('category', categoryFilter);

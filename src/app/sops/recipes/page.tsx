@@ -835,8 +835,6 @@ function RecipesContent() {
                 >
                   <option value="PREPARATION">{t('sops.recipes.preparations')}</option>
                   <option value="FINAL_DISH">{t('sops.recipes.finalDishes')}</option>
-                  <option value="COMBO_PORTION">{t('sops.recipes.comboPortions')}</option>
-                  <option value="BULK_CATERING">{t('sops.recipes.bulkCatering')}</option>
                 </select>
               </div>
 
@@ -872,38 +870,40 @@ function RecipesContent() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    {t('sops.recipes.portionQuantity')}
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={newForm.portion_size_quantity}
-                    onChange={(e) => setNewForm({ ...newForm, portion_size_quantity: e.target.value })}
-                    placeholder="e.g. 250"
-                    className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                  />
+              {newForm.category !== 'PREPARATION' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {t('sops.recipes.portionQuantity')}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={newForm.portion_size_quantity}
+                      onChange={(e) => setNewForm({ ...newForm, portion_size_quantity: e.target.value })}
+                      placeholder="e.g. 250"
+                      className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 mb-1">
+                      {t('sops.recipes.portionUnit')}
+                    </label>
+                    <select
+                      value={newForm.portion_size_unit}
+                      onChange={(e) => setNewForm({ ...newForm, portion_size_unit: e.target.value })}
+                      className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="">{t('sops.recipes.selectUnit')}</option>
+                      {getCompatibleUnitOptions('g', centralUnits, undefined, locale).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    {t('sops.recipes.portionUnit')}
-                  </label>
-                  <select
-                    value={newForm.portion_size_unit}
-                    onChange={(e) => setNewForm({ ...newForm, portion_size_unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-[#E7E2D8] rounded-lg text-sm text-stone-900 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 cursor-pointer"
-                  >
-                    <option value="">{t('sops.recipes.selectUnit')}</option>
-                    {getCompatibleUnitOptions('g', centralUnits, undefined, locale).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              )}
 
               {/* Optional Primary Ingredient with filterLogicalIngredientGroups */}
               <div className="pt-2 border-t border-[#E7E2D8] space-y-2">
