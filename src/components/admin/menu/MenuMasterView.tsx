@@ -771,19 +771,25 @@ export function MenuMasterView() {
                           <th className="p-3 text-center">GST Rate</th>
                           <th className="p-3">POS Aliases</th>
                           <th className="p-3 text-center">Status</th>
-                          <th className="p-3 text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-100">
                         {filteredItems.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="p-8 text-center text-stone-400 italic">
+                            <td colSpan={7} className="p-8 text-center text-stone-400 italic">
                               No menu items match your search filters.
                             </td>
                           </tr>
                         ) : (
                           filteredItems.map((item) => (
-                            <tr key={item.id} className="hover:bg-stone-50/50">
+                            <tr
+                              key={item.id}
+                              onClick={() => {
+                                setEditingItem(item);
+                                setItemModalOpen(true);
+                              }}
+                              className="hover:bg-amber-50/40 cursor-pointer transition-colors"
+                            >
                               <td className="p-3 font-semibold text-stone-900">
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -820,6 +826,7 @@ export function MenuMasterView() {
                                     )}
                                     <Link
                                       href={`/sops/menu/${item.id}`}
+                                      onClick={(e) => e.stopPropagation()}
                                       className="text-[11px] text-amber-700 hover:text-amber-900 inline-flex items-center gap-0.5"
                                       title="View Menu Engineering"
                                     >
@@ -829,6 +836,7 @@ export function MenuMasterView() {
                                     {item.canonical_dish_id && (
                                       <Link
                                         href={`/sops/recipes/${item.canonical_dish_id}`}
+                                        onClick={(e) => e.stopPropagation()}
                                         className="text-[11px] text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5"
                                         title="View Recipe SOP"
                                       >
@@ -880,65 +888,6 @@ export function MenuMasterView() {
                                   <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-500">
                                     Inactive
                                   </span>
-                                )}
-                              </td>
-                              <td className="p-3 text-center">
-                                {item.needs_setup || item.category === 'Uncategorized' || !item.category ? (
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setEditingItem(item);
-                                        setItemModalOpen(true);
-                                      }}
-                                      className="text-stone-700 h-7 px-2 text-xs flex items-center gap-1 hover:bg-stone-100"
-                                      title={locale === 'hi' ? 'नया आइटम कॉन्फ़िगर करें' : 'Configure New Item'}
-                                    >
-                                      <Edit2 className="h-3 w-3" />
-                                      <span>{locale === 'hi' ? 'कॉन्फ़िगर' : 'Configure'}</span>
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setMappingItem(item);
-                                        setMapModalOpen(true);
-                                      }}
-                                      className="text-amber-700 border-amber-300 hover:bg-amber-50 h-7 px-2 text-xs flex items-center gap-1"
-                                      title={locale === 'hi' ? 'मौजूदा आइटम से मैप करें' : 'Map to Existing Item'}
-                                    >
-                                      <Link2 className="h-3 w-3" />
-                                      <span>{locale === 'hi' ? 'मैप करें' : 'Map'}</span>
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setEditingItem(item);
-                                        setItemModalOpen(true);
-                                      }}
-                                      className="text-stone-500 hover:text-stone-900 h-7 w-7 p-0"
-                                      title={locale === 'hi' ? 'संपादित करें' : 'Edit'}
-                                    >
-                                      <Edit2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setMergeSourceItem(item);
-                                        setMergeModalOpen(true);
-                                      }}
-                                      className="text-stone-500 hover:text-amber-800 h-7 w-7 p-0"
-                                      title={locale === 'hi' ? 'अन्य आइटम में मिलाएं' : 'Merge item'}
-                                    >
-                                      <GitMerge className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
                                 )}
                               </td>
                             </tr>

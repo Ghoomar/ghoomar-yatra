@@ -123,6 +123,7 @@ export interface MenuMasterLookup {
   exactMap: Map<string, MenuItemMapping>;
   normalizedMap: Map<string, MenuItemMapping>;
   aliasMap: Map<string, MenuItemMapping>;
+  openItemMap?: Map<string, MenuItemMapping>;
   categoryToParentMap: Map<string, string>;
 }
 
@@ -156,11 +157,25 @@ export function buildMenuMasterLookup(
   dbCategories?: Array<{
     name: string;
     parent_category_name: string;
+  }>,
+  openItemMappings?: Array<{
+    raw_description: string;
+    normalized_description: string;
+    target_menu_item_id: string;
+    pos_menu_items?: {
+      id?: string;
+      name: string;
+      category: string;
+      parent_category: string;
+      price?: number;
+      needs_setup?: boolean | null;
+    } | null;
   }>
 ): MenuMasterLookup {
   const exactMap = new Map<string, MenuItemMapping>();
   const normalizedMap = new Map<string, MenuItemMapping>();
   const aliasMap = new Map<string, MenuItemMapping>();
+  const openItemMap = new Map<string, MenuItemMapping>();
   const categoryToParentMap = new Map<string, string>();
 
   // 1. Populate category to parent from database if provided
@@ -243,7 +258,39 @@ export function buildMenuMasterLookup(
     }
   });
 
-  return { exactMap, normalizedMap, aliasMap, categoryToParentMap };
+  // 4. Populate open item mappings
+  (openItemMappings || []).forEach((o: any) => {
+    const target = o.pos_menu_items || (o.target_menu_item_id ? exactMap.get(o.target_menu_item_id) : null);
+    if (target) {
+      const parentCat = resolveParentCategory(
+        target.category,
+        target.parent_category,
+        categoryToParentMap
+      );
+      const itemData: MenuItemMapping = {
+        id: target.id || o.target_menu_item_id,
+        name: target.name,
+        category: target.category,
+        parentCategory: parentCat,
+        price: target.price ? Number(target.price) : undefined,
+        needsSetup: Boolean(target.needs_setup),
+      };
+      if (o.raw_description) {
+        openItemMap.set(o.raw_description, itemData);
+        openItemMap.set(o.raw_description.toLowerCase().trim(), itemData);
+      }
+      if (o.normalized_description) {
+        openItemMap.set(o.normalized_description, itemData);
+        openItemMap.set(o.normalized_description.toLowerCase().trim(), itemData);
+      }
+      const norm = normalizeItemName(o.raw_description || o.normalized_description);
+      if (norm) {
+        openItemMap.set(norm, itemData);
+      }
+    }
+  });
+
+  return { exactMap, normalizedMap, aliasMap, openItemMap, categoryToParentMap };
 }
 
 /**
@@ -254,13 +301,33 @@ export async function loadMenuMasterLookupFromDb(supabase: any): Promise<MenuMas
     { data: categories },
     { data: menuItems },
     { data: aliases },
+    { data: openItemMappings },
   ] = await Promise.all([
     supabase.from('pos_categories').select('name, parent_category_name').eq('is_active', true),
     supabase.from('pos_menu_items').select('id, name, parent_category, category, price, normalized_name, needs_setup').eq('is_active', true),
     supabase.from('pos_menu_item_aliases').select('alias, normalized_alias, menu_item_id, pos_menu_items(id, name, category, parent_category, price, needs_setup)'),
+    supabase.from('pos_open_item_mappings').select('raw_description, normalized_description, target_menu_item_id, pos_menu_items:target_menu_item_id(id, name, category, parent_category, price, needs_setup)'),
   ]);
 
-  return buildMenuMasterLookup(menuItems || [], (aliases as any) || [], categories || []);
+  return buildMenuMasterLookup(menuItems || [], (aliases as any) || [], categories || [], (openItemMappings as any) || []);
+}
+
+/**
+ * Checks if an item description is an open / miscellaneous item.
+ */
+export function isOpenItemDescription(name: string): boolean {
+  if (!name) return false;
+  const lower = name.toLowerCase().trim();
+  return (
+    lower === 'open item' ||
+    lower === 'open' ||
+    lower === 'open food' ||
+    lower === 'misc' ||
+    lower === 'misc item' ||
+    lower === 'miscellaneous' ||
+    lower.startsWith('open item') ||
+    lower.startsWith('open ')
+  );
 }
 
 /**
@@ -268,6 +335,7 @@ export async function loadMenuMasterLookupFromDb(supabase: any): Promise<MenuMas
  * 1. Exact match on raw item name
  * 2. Normalized match on normalizeItemName(rawName)
  * 3. Authoritative alias match
+ * 3.5. Open item mapping
  * 4. Fallback: Uncategorized (never guess or invent)
  */
 export function resolveItemCategory(
@@ -324,6 +392,21 @@ export function resolveItemCategory(
       matchedItemId: aliasMatch.id,
       matchType: 'alias',
     };
+  }
+
+  // Priority 3.5: Configured Open Item Mapping
+  if (lookup.openItemMap) {
+    const openMatch = lookup.openItemMap.get(cleanRaw) || lookup.openItemMap.get(lowerRaw) || lookup.openItemMap.get(norm);
+    if (openMatch && !openMatch.needsSetup && openMatch.category !== 'Uncategorized') {
+      return {
+        category: openMatch.category,
+        parentCategory: openMatch.parentCategory,
+        isMatched: true,
+        matchedItemName: openMatch.name,
+        matchedItemId: openMatch.id,
+        matchType: 'alias',
+      };
+    }
   }
 
   // Priority 4: Genuinely unmatched

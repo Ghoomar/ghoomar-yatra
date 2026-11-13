@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ combos, channel, hasCostAccess: caller.hasCostAccess });
     }
 
-    const includeCombos = view !== 'catalog';
+    const includeCombos = true;
 
     // Sales aggregation, menu data, and WAC resolution are independent database reads.
     // Start them together so the sales scan does not wait for recipe calculations.
@@ -169,9 +169,7 @@ export async function GET(request: NextRequest) {
             sub_recipe:yatra_recipes!yatra_recipe_ingredients_sub_recipe_id_fkey(id, name, name_hi, category, batch_yield_quantity, batch_yield_unit)
           )
         `),
-      includeCombos
-        ? fetchActiveCombos(admin)
-        : Promise.resolve({ data: [], error: null }),
+      fetchActiveCombos(admin),
       admin.rpc('get_menu_sales_aggregation', {
         p_date_from: dateFrom || null,
         p_date_to: dateTo || null,
@@ -186,8 +184,14 @@ export async function GET(request: NextRequest) {
     if (comboRes.error) throw comboRes.error;
     if (salesRes.error) throw salesRes.error;
 
-    // 2. Resolve WAC and DAG calculations
+    // 2. Resolve WAC and DAG calculations + combos
     const recipeCalcs = calculateAllRecipes(recipeRes.data || [], groupWacMap);
+    const calculatedCombos = calculateCombos(comboRes.data, recipeCalcs, costingChannel, caller.hasCostAccess);
+    const comboMap = new Map<string, any>();
+    calculatedCombos.forEach((c) => {
+      if (c.id) comboMap.set(c.id, c);
+      if (c.name) comboMap.set(c.name.trim().toLowerCase(), c);
+    });
 
     // 3. Index the already-fetched sales aggregation for the menu and BCG calculations.
     const salesMap = new Map<string, {
@@ -270,6 +274,21 @@ export async function GET(request: NextRequest) {
         }
         return vCalc || v;
       });
+
+      // If item is a combo or has no variant but matches a combo calculation, synthesize variant calculation
+      const matchedCombo = comboMap.get(item.id) || comboMap.get(item.name?.trim().toLowerCase());
+      if (!defaultVariantCalc && matchedCombo) {
+        defaultVariantCalc = {
+          id: `combo_${matchedCombo.id}`,
+          variant_name: `Combo (${matchedCombo.components?.length || 0} items)`,
+          selling_price: matchedCombo.selling_price ?? Number(item.price) ?? 0,
+          food_cost: matchedCombo.food_cost ?? null,
+          food_cost_pct: matchedCombo.food_cost_pct ?? null,
+          margin_amount: matchedCombo.margin_amount ?? null,
+          costing_status: matchedCombo.costing_status || 'COSTED_ELIGIBLE',
+          is_combo: true,
+        };
+      }
       // Matrix input record
       matrixInputs.push({
         menuItemId: item.id,
@@ -329,10 +348,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 8. Calculate combos
-    const calculatedCombos = calculateCombos(comboRes.data, recipeCalcs, costingChannel, caller.hasCostAccess);
-
-    // 9. Build lightweight backward-compatible matrix projection
+    // 8. Build lightweight backward-compatible matrix projection
     const sanitizedMatrix = {
       state: matrixResult.state,
       totalUnitsSold: matrixResult.totalUnitsSold,

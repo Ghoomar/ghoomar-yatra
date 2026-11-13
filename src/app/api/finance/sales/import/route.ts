@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
-import { loadMenuMasterLookupFromDb, resolveItemCategory, normalizeItemName } from '@/lib/petpooja/matcher';
+import { loadMenuMasterLookupFromDb, resolveItemCategory, normalizeItemName, isOpenItemDescription } from '@/lib/petpooja/matcher';
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 import { marketingError } from '@/lib/marketing/http';
 
@@ -290,6 +290,10 @@ export async function POST(request: NextRequest) {
 
         const newItemsToRegister: any[] = [];
         for (const [name, price] of unmappedItemsMap.entries()) {
+          if (isOpenItemDescription(name)) {
+            // Unmapped open items must NEVER create permanent dummy records in pos_menu_items
+            continue;
+          }
           const norm = normalizeItemName(name);
           if (!existingNames.has(name.toLowerCase()) && !existingNorms.has(norm)) {
             newItemsToRegister.push({
@@ -316,20 +320,26 @@ export async function POST(request: NextRequest) {
         }
       }
     } else if (reportType === 'MENU_MASTER') {
-      // Fetch existing items to preserve human-customized Hindi names
+      // Fetch existing items to preserve human-customized Hindi names and selling prices
       const names = data.map((d: any) => d.name).filter(Boolean);
       const { data: existingMenuItems } = await supabase
         .from('pos_menu_items')
-        .select('name, name_hi, name_hi_is_custom')
+        .select('name, name_hi, name_hi_is_custom, price')
         .in('name', names);
 
       const existingMap = new Map((existingMenuItems || []).map((m: any) => [m.name, m]));
 
       const enrichedMenuItems = data.map((item: any) => {
         const existing = existingMap.get(item.name);
+        // Selling price protection: existing / manually maintained prices must never be overwritten
+        const finalPrice = (existing?.price != null && Number(existing.price) > 0)
+          ? Number(existing.price)
+          : (item.price != null ? Number(item.price) : 0);
+
         if (existing?.name_hi && existing?.name_hi_is_custom) {
           return {
             ...item,
+            price: finalPrice,
             name_hi: existing.name_hi,
             name_hi_is_custom: true,
             needs_setup: false,
@@ -338,6 +348,7 @@ export async function POST(request: NextRequest) {
         const hindi = existing?.name_hi || suggestHindiName(item.name, 'menu_item').suggestion;
         return {
           ...item,
+          price: finalPrice,
           name_hi: hindi,
           name_hi_is_custom: false,
           needs_setup: !item.category || item.category === 'Uncategorized',

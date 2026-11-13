@@ -140,6 +140,8 @@ export async function POST(request: NextRequest) {
         is_active: is_active !== false,
         online_name: cleanName,
         category_online_display: cat.name,
+        canonical_dish_id: body.canonical_dish_id || null,
+        serving_configuration_id: body.serving_configuration_id || null,
       })
       .select()
       .single();
@@ -268,6 +270,12 @@ export async function PUT(request: NextRequest) {
     }
     if (body.product_type !== undefined) {
       updatePayload.product_type = body.product_type;
+    }
+    if (body.canonical_dish_id !== undefined) {
+      updatePayload.canonical_dish_id = body.canonical_dish_id || null;
+    }
+    if (body.serving_configuration_id !== undefined) {
+      updatePayload.serving_configuration_id = body.serving_configuration_id || null;
     }
 
     // Preserve GST = 5%, Tax Type = Forward Tax (do not overwrite)

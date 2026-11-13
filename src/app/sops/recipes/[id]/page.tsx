@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, use, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -77,6 +77,15 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
   const [conversionModalOpen, setConversionModalOpen] = useState(false);
   const [conversionsList, setConversionsList] = useState<any[]>([]);
 
+  // Conversion creation form state
+  const [newConvGroupId, setNewConvGroupId] = useState('');
+  const [newConvFromUnit, setNewConvFromUnit] = useState('');
+  const [newConvToUnit, setNewConvToUnit] = useState('g');
+  const [newConvMultiplier, setNewConvMultiplier] = useState('');
+  const [newConvNotes, setNewConvNotes] = useState('');
+  const [convSaving, setConvSaving] = useState(false);
+  const [convError, setConvError] = useState<string | null>(null);
+
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
@@ -90,7 +99,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
   const [mastersLoaded, setMastersLoaded] = useState(false);
   const [mastersLoading, setMastersLoading] = useState(false);
 
-  // Dialog states for category transitions
+  // Dialog states for category transitions and delete
   const [blockerDialog, setBlockerDialog] = useState<{
     open: boolean;
     title: string;
@@ -111,15 +120,33 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
     setMastersLoading(true);
     try {
       const supabase = createClient();
-      const [grpRes, recRes, unitRes] = await Promise.all([
+      const [grpRes, dishesRes, unitRes, convRes] = await Promise.all([
         fetch('/api/inventory/groups?class=Food Raw Material').then((r) => r.ok ? r.json() : { groups: [], aliasesMap: {} }),
-        fetch('/api/sops/recipes').then((r) => r.ok ? r.json() : { recipes: [] }),
+        fetch('/api/sops/dishes').then((r) => r.ok ? r.json() : { dishes: [] }),
         supabase.from('units').select('id, name, name_hi, symbol, symbol_hi, is_active').eq('is_active', true).order('name'),
+        fetch('/api/sops/conversions').then((r) => r.ok ? r.json() : { conversions: [] }),
       ]);
       setFoodGroups(grpRes.groups || []);
       setAliasesMap(grpRes.aliasesMap || {});
-      setAllRecipes(recRes.recipes || []);
+      const rawDishes = dishesRes.dishes || [];
+      const mappedDishes = rawDishes.map((d: any) => {
+        const form = d.formulations?.find((f: any) => f.id === d.default_formulation_id) || d.formulations?.[0];
+        const batchYield = form?.batch_yield_quantity != null ? Number(form.batch_yield_quantity) : null;
+        const batchCost = form?.batch_cost != null ? Number(form.batch_cost) : null;
+        return {
+          id: d.id,
+          name: d.name,
+          name_hi: d.name_hi,
+          category: d.category,
+          batch_yield_quantity: batchYield,
+          batch_yield_unit: form?.batch_yield_unit || 'kg',
+          total_batch_cost: batchCost,
+          cost_per_output_unit: (batchCost != null && batchYield && batchYield > 0) ? Math.round((batchCost / batchYield) * 100) / 100 : null,
+        };
+      });
+      setAllRecipes(mappedDishes);
       if (unitRes.data) setCentralUnits(unitRes.data as CentralUnit[]);
+      if (convRes.conversions) setConversionsList(convRes.conversions);
       setMastersLoaded(true);
     } catch (err) {
       console.error('Failed to load recipe masters:', err);
@@ -132,33 +159,129 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/sops/recipes/${id}`);
+      let res = await fetch(`/api/sops/dishes/${id}`);
+      let is4Tier = true;
+      if (!res.ok) {
+        res = await fetch(`/api/sops/recipes/${id}`);
+        is4Tier = false;
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to fetch recipe details');
       }
       const data = await res.json();
-      setRecipe(data.recipe);
-      setCanonicalDish(data.canonicalDish || null);
-      if (data.canonicalDish?.configurations?.length) {
-        setSelectedConfigId(data.canonicalDish.configurations[0].id);
+
+      if (is4Tier && data.dish) {
+        const dish = data.dish;
+        const defaultForm = dish.formulations?.find((f: any) => f.id === (selectedFormulationId || dish.default_formulation_id)) || dish.formulations?.[0];
+        const defaultCfg = dish.configurations?.find((c: any) => c.id === selectedConfigId) || dish.configurations?.[0];
+
+        const mappedRecipe = {
+          id: dish.id,
+          name: dish.name,
+          name_hi: dish.name_hi,
+          category: dish.category,
+          is_preparation: dish.is_preparation,
+          batch_yield_quantity: defaultForm?.batch_yield_quantity ?? null,
+          batch_yield_unit: defaultForm?.batch_yield_unit || 'kg',
+          portion_size_quantity: defaultCfg?.portion_size_quantity ?? null,
+          portion_size_unit: defaultCfg?.portion_size_unit || 'g',
+          description: dish.description || null,
+          ingredients: (defaultForm?.ingredients || []).map((fi: any) => ({
+            id: fi.id,
+            ingredient_type: fi.ingredient_type,
+            ingredient_group_id: fi.ingredient_group_id,
+            inventory_item_id: fi.inventory_item_id,
+            sub_recipe_id: fi.sub_preparation_dish_id || fi.sub_recipe_id,
+            quantity: fi.quantity,
+            unit: fi.unit,
+            sort_order: fi.sort_order,
+            notes: fi.notes,
+            ingredient_group: fi.ingredient_group,
+            inventory_item: fi.inventory_item,
+            sub_recipe: fi.sub_preparation_dish || fi.sub_recipe,
+            unit_rate: fi.unit_rate,
+            line_cost: fi.line_cost,
+          })),
+          formulations: dish.formulations || [],
+          configurations: dish.configurations || [],
+          default_formulation_id: dish.default_formulation_id,
+        };
+
+        setRecipe(mappedRecipe);
+        setCanonicalDish(dish);
+        if (defaultCfg?.id) setSelectedConfigId(defaultCfg.id);
+        if (defaultForm?.id) setSelectedFormulationId(defaultForm.id);
+
+        const batchCost = defaultForm?.batch_cost != null ? Number(defaultForm.batch_cost) : null;
+        const yieldQty = defaultForm?.batch_yield_quantity != null ? Number(defaultForm.batch_yield_quantity) : null;
+        const unitCost = (batchCost != null && yieldQty && yieldQty > 0) ? Math.round((batchCost / yieldQty) * 100) / 100 : null;
+        const servingCost = defaultCfg?.serving_cost != null ? Number(defaultCfg.serving_cost) : null;
+        const portionQty = defaultCfg?.portion_size_quantity != null ? Number(defaultCfg.portion_size_quantity) : null;
+        const servingsPerBatch = (yieldQty && portionQty && portionQty > 0)
+          ? Math.round((yieldQty / (defaultCfg.portion_size_unit === 'kg' ? portionQty : portionQty / 1000)) * 10) / 10
+          : null;
+
+        setCalculation({
+          status: defaultForm?.costing_status || 'UNCOSTED',
+          totalBatchCost: batchCost,
+          costPerOutputUnit: unitCost,
+          costPerServing: servingCost,
+          servingsPerBatch: servingsPerBatch,
+          reasons: defaultForm?.costing_reasons || [],
+          ingredientLineCosts: (defaultForm?.ingredients || []).map((fi: any) => ({
+            ingredientName: fi.ingredient_group?.name || fi.inventory_item?.name || fi.sub_preparation_dish?.name,
+            unitRate: fi.unit_rate,
+            lineCost: fi.line_cost,
+            status: fi.line_cost != null ? 'COSTED_ELIGIBLE' : 'UNCOSTED',
+            rateUnit: fi.ingredient_group?.base_unit?.symbol || fi.sub_preparation_dish?.batch_yield_unit || fi.unit,
+          })),
+        });
+
+        setWhereUsed({
+          recipes: (data.whereUsed?.formulations || []).map((f: any) => ({
+            id: f.dishId,
+            name: f.dishName,
+            category: f.dishCategory,
+            quantity: f.quantity,
+            unit: f.unit,
+          })),
+          menuItems: data.whereUsed?.menuItems || [],
+          combos: data.whereUsed?.combos || [],
+        });
+
+        setEditForm({
+          name: dish.name,
+          name_hi: dish.name_hi || '',
+          category: dish.category,
+          batch_yield_quantity: defaultForm?.batch_yield_quantity ?? '',
+          batch_yield_unit: defaultForm?.batch_yield_unit || 'kg',
+          portion_size_quantity: defaultCfg?.portion_size_quantity ?? '',
+          portion_size_unit: defaultCfg?.portion_size_unit || 'g',
+          notes: dish.description || '',
+        });
+      } else {
+        setRecipe(data.recipe);
+        setCanonicalDish(data.canonicalDish || null);
+        if (data.canonicalDish?.configurations?.length) {
+          setSelectedConfigId(data.canonicalDish.configurations[0].id);
+        }
+        if (data.canonicalDish?.formulations?.length) {
+          setSelectedFormulationId(data.canonicalDish.formulations[0].id);
+        }
+        setCalculation(data.calculation);
+        setWhereUsed(data.whereUsed || { recipes: [], menuItems: [], combos: [] });
+        setEditForm({
+          name: data.recipe.name,
+          name_hi: data.recipe.name_hi || '',
+          category: data.recipe.category,
+          batch_yield_quantity: data.recipe.batch_yield_quantity || '',
+          batch_yield_unit: data.recipe.batch_yield_unit || '',
+          portion_size_quantity: data.recipe.portion_size_quantity || '',
+          portion_size_unit: data.recipe.portion_size_unit || '',
+          notes: data.recipe.notes || '',
+        });
       }
-      if (data.canonicalDish?.formulations?.length) {
-        setSelectedFormulationId(data.canonicalDish.formulations[0].id);
-      }
-      setCalculation(data.calculation);
-      setWhereUsed(data.whereUsed || { recipes: [], menuItems: [], combos: [] });
-      setEditForm({
-        name: data.recipe.name,
-        name_hi: data.recipe.name_hi || '',
-        category: data.recipe.category,
-        batch_yield_quantity: data.recipe.batch_yield_quantity || '',
-        batch_yield_unit: data.recipe.batch_yield_unit || '',
-        portion_size_quantity: data.recipe.portion_size_quantity || '',
-        portion_size_unit: data.recipe.portion_size_unit || '',
-        instructions: data.recipe.instructions || '',
-        notes: data.recipe.notes || '',
-      });
     } catch (err: any) {
       console.error('Fetch recipe error:', err);
       setError(err.message || 'Error fetching recipe');
@@ -247,6 +370,40 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
     });
   };
 
+  const handleCategoryChange = (newCat: string) => {
+    if (newCat === editForm.category) return;
+    if (newCat === 'FINAL_DISH') {
+      if (whereUsed.recipes.length > 0) {
+        setBlockerDialog({
+          open: true,
+          title: t('sops.recipeDetail.categoryChangeBlockTitle'),
+          message: t('sops.recipeDetail.categoryChangeBlockDesc'),
+          items: whereUsed.recipes.map((r: any) => r.name),
+        });
+        return;
+      }
+    } else if (editForm.category === 'FINAL_DISH' && newCat === 'PREPARATION') {
+      if (whereUsed.menuItems.length > 0 || whereUsed.combos.length > 0) {
+        setWarningDialog({
+          open: true,
+          title: locale === 'hi' ? 'श्रेणी परिवर्तन चेतावनी' : 'Category Change Warning',
+          message: locale === 'hi'
+            ? 'इस रेसिपी से मेन्यू आइटम या कॉम्बो जुड़े हैं। पूर्व-तैयारी में बदलने पर सुनिश्चित करें कि बैच यील्ड सही है।'
+            : 'Active menu items or combos are linked to this dish. Converting to Preparation will treat it as a sub-assembly.',
+          items: [
+            ...whereUsed.menuItems.map((m: any) => `Menu: ${m.menuItemName || m.name}`),
+            ...whereUsed.combos.map((c: any) => `Combo: ${c.name || c.componentName}`),
+          ],
+          onConfirm: () => {
+            setEditForm((prev: any) => ({ ...prev, category: newCat }));
+          },
+        });
+        return;
+      }
+    }
+    setEditForm((prev: any) => ({ ...prev, category: newCat }));
+  };
+
   const handleSaveRecipe = async () => {
     // 1. Check yield unit for invalid unit
     if (editForm.batch_yield_unit && getUnitDimension(editForm.batch_yield_unit) === 'UNKNOWN') {
@@ -330,7 +487,50 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/sops/recipes/${id}`, {
+      // 1. Update 4-tier canonical dish
+      const dishRes = await fetch(`/api/sops/dishes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          name_hi: editForm.name_hi || null,
+          category: editForm.category,
+          description: editForm.notes || null,
+          configurations: editForm.category === 'FINAL_DISH' && editForm.portion_size_quantity ? [
+            {
+              id: canonicalDish?.configurations?.[0]?.id,
+              name: 'Standard',
+              portion_size_quantity: Number(editForm.portion_size_quantity),
+              portion_size_unit: editForm.portion_size_unit || 'g',
+            }
+          ] : [],
+        }),
+      });
+
+      // 2. Update 4-tier recipe formulation
+      const formulationId = selectedFormulationId || canonicalDish?.default_formulation_id || canonicalDish?.formulations?.[0]?.id;
+      if (formulationId) {
+        await fetch(`/api/sops/formulations/${formulationId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            batch_yield_quantity: editForm.batch_yield_quantity ? Number(editForm.batch_yield_quantity) : null,
+            batch_yield_unit: editForm.batch_yield_unit || null,
+            ingredients: sanitizedIngredients.map((ing) => ({
+              ingredient_type: ing.ingredient_type,
+              ingredient_group_id: ing.ingredient_group_id,
+              sub_preparation_dish_id: ing.sub_recipe_id,
+              quantity: ing.quantity,
+              unit: ing.unit,
+              sort_order: ing.sort_order,
+              notes: ing.notes,
+            })),
+          }),
+        });
+      }
+
+      // 3. Mirror update to legacy yatra_recipes for compatibility
+      await fetch(`/api/sops/recipes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -341,14 +541,13 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
           batch_yield_unit: editForm.batch_yield_unit || null,
           portion_size_quantity: editForm.portion_size_quantity ? Number(editForm.portion_size_quantity) : null,
           portion_size_unit: editForm.portion_size_unit || null,
-          instructions: editForm.instructions || null,
           notes: editForm.notes || null,
           ingredients: sanitizedIngredients,
         }),
-      });
+      }).catch(() => {});
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      if (!dishRes.ok) {
+        const data = await dishRes.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update recipe');
       }
 
@@ -358,6 +557,230 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
       alert(`Error updating recipe: ${err.message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleInitiateDelete = async () => {
+    // Check active dependencies in whereUsed
+    const activeVariants = (whereUsed.menuItems || []).filter((m: any) => m.is_active !== false);
+    const activeCombos = whereUsed.combos || [];
+    const activeFormulations = whereUsed.recipes || [];
+
+    const hasDeps = activeVariants.length > 0 || activeCombos.length > 0 || activeFormulations.length > 0;
+    if (hasDeps) {
+      const items: string[] = [
+        ...activeVariants.map((m: any) => `Menu Item: ${m.menuItemName || m.name}`),
+        ...activeCombos.map((c: any) => `Combo: ${c.name || c.menuItemName}`),
+        ...activeFormulations.map((f: any) => `Parent Recipe: ${f.name}`),
+      ];
+      setBlockerDialog({
+        open: true,
+        title: locale === 'hi' ? 'हटाना अवरुद्ध: सक्रिय निर्भरताएं मौजूद हैं' : 'Cannot Delete: Active Dependencies Exist',
+        message: locale === 'hi'
+          ? 'इस रेसिपी को हटाया या संग्रहीत नहीं किया जा सकता क्योंकि अन्य मेन्यू आइटम या रेसिपी इस पर निर्भर हैं। कृपया पहले इन निर्भरताओं को हटाएं:'
+          : 'This recipe SOP cannot be deleted or archived while active items depend on it. Please unlink or reassign the following items first:',
+        items,
+      });
+      return;
+    }
+
+    setWarningDialog({
+      open: true,
+      title: locale === 'hi' ? 'रेसिपी संग्रहीत करें?' : 'Archive Recipe SOP?',
+      message: locale === 'hi'
+        ? `क्या आप वाकई "${recipe?.name}" को संग्रहीत करना चाहते हैं? यह निष्क्रिय हो जाएगा और सक्रिय सूचियों से हटा दिया जाएगा।`
+        : `Are you sure you want to archive "${recipe?.name}"? It will be marked inactive and removed from active recipe lists.`,
+      items: [],
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/sops/dishes/${id}`, { method: 'DELETE' });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            alert(json.error || 'Failed to archive recipe');
+            return;
+          }
+          alert(json.message || 'Recipe successfully archived');
+          router.push('/sops/recipes');
+        } catch (err: any) {
+          alert(`Error archiving recipe: ${err.message}`);
+        }
+      },
+    });
+  };
+
+  // Helper to compute live costing for an ingredient row
+  const getIngredientLiveCost = (row: any) => {
+    if (!row.quantity || Number(row.quantity) <= 0 || !row.unit) {
+      return { rate: null, rateUnit: '', lineCost: null, conversionError: false, errorMsg: '' };
+    }
+    const qty = Number(row.quantity);
+
+    if (row.ingredient_type === 'RAW_MATERIAL') {
+      const group = foodGroups.find((g) => g.id === row.ingredient_group_id);
+      if (!group) return { rate: null, rateUnit: '', lineCost: null, conversionError: false, errorMsg: '' };
+      const rate = group.current_weighted_average_cost ?? group.wac ?? null;
+      const baseUnit = group.base_unit?.symbol || 'g';
+      if (rate == null) {
+        return { rate: null, rateUnit: baseUnit, lineCost: null, conversionError: false, errorMsg: 'Uncosted raw material' };
+      }
+      // Check verified conversions first
+      const verified = conversionsList.find((c: any) =>
+        (c.ingredient_group_id === group.id || c.inventory_item_id === row.inventory_item_id) &&
+        c.from_unit?.toLowerCase() === row.unit?.toLowerCase() &&
+        c.to_unit?.toLowerCase() === baseUnit.toLowerCase()
+      );
+      if (verified && (verified.conversion_factor || verified.multiplier)) {
+        const factor = Number(verified.conversion_factor || verified.multiplier);
+        const lineCost = qty * factor * Number(rate);
+        return { rate: Number(rate), rateUnit: baseUnit, lineCost: Math.round(lineCost * 100) / 100, conversionError: false, errorMsg: '' };
+      }
+
+      const conv = convertDirectQuantity(qty, row.unit, baseUnit);
+      if (conv.possible && conv.converted !== undefined) {
+        const lineCost = conv.converted * Number(rate);
+        return { rate: Number(rate), rateUnit: baseUnit, lineCost: Math.round(lineCost * 100) / 100, conversionError: false, errorMsg: '' };
+      } else {
+        return { rate: Number(rate), rateUnit: baseUnit, lineCost: null, conversionError: true, errorMsg: `Cannot convert ${row.unit} to ${baseUnit}` };
+      }
+    } else {
+      // PREPARATION: resolve against sub-recipe unit costs instead of foodGroups!
+      const sub = allRecipes.find((r) => r.id === row.sub_recipe_id || r.id === row.sub_preparation_dish_id);
+      if (!sub) return { rate: null, rateUnit: '', lineCost: null, conversionError: false, errorMsg: '' };
+      const rate = sub.cost_per_output_unit ?? (sub.total_batch_cost && sub.batch_yield_quantity ? sub.total_batch_cost / sub.batch_yield_quantity : null);
+      const baseUnit = sub.batch_yield_unit || 'kg';
+      if (rate == null) {
+        return { rate: null, rateUnit: baseUnit, lineCost: null, conversionError: false, errorMsg: 'Uncosted sub-preparation' };
+      }
+      const conv = convertDirectQuantity(qty, row.unit, baseUnit);
+      if (conv.possible && conv.converted !== undefined) {
+        const lineCost = conv.converted * Number(rate);
+        return { rate: Number(rate), rateUnit: baseUnit, lineCost: Math.round(lineCost * 100) / 100, conversionError: false, errorMsg: '' };
+      } else {
+        return { rate: Number(rate), rateUnit: baseUnit, lineCost: null, conversionError: true, errorMsg: `Cannot convert ${row.unit} to ${baseUnit}` };
+      }
+    }
+  };
+
+  const liveBatchCost = useMemo(() => {
+    let sum = 0;
+    let hasValid = false;
+    for (const row of editableIngredients) {
+      const res = getIngredientLiveCost(row);
+      if (res.lineCost != null) {
+        sum += res.lineCost;
+        hasValid = true;
+      }
+    }
+    return hasValid ? Math.round(sum * 100) / 100 : null;
+  }, [editableIngredients, foodGroups, allRecipes, conversionsList]);
+
+  const liveCostPerOutputUnit = useMemo(() => {
+    if (liveBatchCost != null && Number(editForm.batch_yield_quantity) > 0) {
+      return Math.round((liveBatchCost / Number(editForm.batch_yield_quantity)) * 100) / 100;
+    }
+    return null;
+  }, [liveBatchCost, editForm.batch_yield_quantity]);
+
+  const formattedFoodGroups = useMemo(() => {
+    return foodGroups.map((g) => {
+      const rate = g.current_weighted_average_cost ?? g.wac ?? null;
+      const unitSymbol = g.base_unit?.symbol || 'g';
+      const rateLabel = rate != null && Number(rate) > 0 ? ` — ₹${Math.round(Number(rate))}/${unitSymbol}` : '';
+      return {
+        ...g,
+        display_label: `${g.name}${rateLabel}`,
+      };
+    });
+  }, [foodGroups]);
+
+  const formattedPreparations = useMemo(() => {
+    return allRecipes.filter((r) => r.id !== recipe?.id).map((r) => {
+      const rate = r.cost_per_output_unit ?? (r.total_batch_cost && r.batch_yield_quantity ? r.total_batch_cost / r.batch_yield_quantity : null);
+      const unitSymbol = r.batch_yield_unit || 'kg';
+      const rateLabel = rate != null && Number(rate) > 0 ? ` — ₹${Math.round(Number(rate))}/${unitSymbol}` : '';
+      return {
+        ...r,
+        display_label: `${r.name}${rateLabel}`,
+      };
+    });
+  }, [allRecipes, recipe?.id]);
+
+  const handleQuickAddPrepInline = async (idx: number, term: string) => {
+    try {
+      const res = await fetch('/api/sops/dishes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: term.trim(),
+          category: 'PREPARATION',
+          batch_yield_unit: 'kg',
+          ingredients: [],
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Failed to create preparation');
+      }
+      const d = await res.json();
+      const newDish = d.dish;
+      setAllRecipes((prev) => [...prev, newDish]);
+      handleUpdateIngredient(idx, {
+        sub_recipe_id: newDish.id,
+        selected_item_name: newDish.name,
+        selected_item_name_hi: newDish.name_hi,
+        unit: 'kg',
+        base_unit_symbol: 'kg',
+      });
+    } catch (err: any) {
+      alert(`Error creating preparation: ${err.message}`);
+    }
+  };
+
+  const handleOpenConversionModalFor = (row: any) => {
+    if (row.ingredient_group_id) {
+      setNewConvGroupId(row.ingredient_group_id);
+    }
+    if (row.unit) {
+      setNewConvFromUnit(row.unit);
+    }
+    if (row.base_unit_symbol) {
+      setNewConvToUnit(row.base_unit_symbol);
+    }
+    setConversionModalOpen(true);
+  };
+
+  const handleSaveConversion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newConvGroupId || !newConvFromUnit || !newConvToUnit || !newConvMultiplier) {
+      setConvError('All conversion fields are required');
+      return;
+    }
+    setConvSaving(true);
+    setConvError(null);
+    try {
+      const res = await fetch('/api/sops/conversions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredient_group_id: newConvGroupId,
+          from_unit: newConvFromUnit.trim(),
+          to_unit: newConvToUnit.trim(),
+          conversion_factor: Number(newConvMultiplier),
+          notes: newConvNotes.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to save conversion');
+      setConversionsList((prev) => [data.conversion, ...prev]);
+      setNewConvFromUnit('');
+      setNewConvMultiplier('');
+      setNewConvNotes('');
+      const ref = await fetch('/api/sops/conversions').then((r) => r.ok ? r.json() : { conversions: [] });
+      if (ref.conversions) setConversionsList(ref.conversions);
+    } catch (err: any) {
+      setConvError(err.message || 'Error saving conversion');
+    } finally {
+      setConvSaving(false);
     }
   };
 
@@ -434,7 +857,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
   const lineCosts = calculation?.ingredientLineCosts || [];
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isEditing ? 'pb-24' : ''}`}>
       {/* Sticky Top Nav & Header Bar */}
       <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 border-b border-[#E7E2D8] flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3 truncate">
@@ -469,6 +892,18 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
             <Scale className="h-3.5 w-3.5 text-amber-600" />
             <span className="hidden sm:inline">Unit Conversions</span>
           </Button>
+
+          {canManage && !isEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleInitiateDelete}
+              className="gap-1.5 border-rose-200 text-rose-600 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+              <span>{locale === 'hi' ? 'संग्रहीत करें' : 'Archive / Delete'}</span>
+            </Button>
+          )}
 
           {canManage && (
             isEditing ? (
@@ -624,7 +1059,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
         <div className="flex items-center gap-4 bg-[#FAF8F5] border border-[#E7E2D8] rounded-lg p-3">
           <div className="text-right">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-500">
-              {recipe.category === 'PREPARATION' || recipe.category === 'COMBO_PORTION' || recipe.category === 'BULK_CATERING'
+              {(isEditing ? editForm.category : recipe.category) === 'PREPARATION' || (isEditing ? editForm.category : recipe.category) === 'COMBO_PORTION' || (isEditing ? editForm.category : recipe.category) === 'BULK_CATERING'
                 ? 'Cost / Yield Unit'
                 : 'Cost / Serving'}
             </div>
@@ -633,6 +1068,15 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                 <span className="inline-flex items-center gap-1 text-xs text-stone-400">
                   <Lock className="h-3.5 w-3.5" /> {t('sops.recipes.costRestricted')}
                 </span>
+              ) : isEditing ? (
+                liveCostPerOutputUnit != null ? (
+                  <span>
+                    {formatINR(liveCostPerOutputUnit)}
+                    <span className="text-xs text-stone-500 font-normal ml-0.5">/{editForm.batch_yield_unit || 'unit'}</span>
+                  </span>
+                ) : (
+                  <span className="text-stone-400">—</span>
+                )
               ) : calculation?.costPerOutputUnit != null ? (
                 <span>
                   {formatINR(calculation.costPerOutputUnit)}
@@ -660,6 +1104,12 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                 <span className="inline-flex items-center gap-1 text-xs text-stone-400">
                   <Lock className="h-3.5 w-3.5" />
                 </span>
+              ) : isEditing ? (
+                liveBatchCost != null ? (
+                  formatINR(liveBatchCost)
+                ) : (
+                  <span className="text-stone-400">—</span>
+                )
               ) : calculation?.totalBatchCost != null ? (
                 formatINR(calculation.totalBatchCost)
               ) : (
@@ -694,181 +1144,154 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
         </div>
       )}
 
-      {/* Grid: Card 1 (Specs) & Card 3 (Instructions) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Card 1: Recipe Specs */}
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Scale className="h-4 w-4 text-amber-600" />
-              {t('sops.recipeDetail.recipeOverview')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isEditing ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Batch Yield Quantity
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editForm.batch_yield_quantity}
-                    onChange={(e) => setEditForm({ ...editForm, batch_yield_quantity: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    {t('sops.recipes.yieldUnit')}
-                  </label>
-                  <select
-                    value={editForm.batch_yield_unit}
-                    onChange={(e) => setEditForm({ ...editForm, batch_yield_unit: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
-                  >
-                    <option value="">{t('sops.recipes.selectUnit')}</option>
-                    {['kg', 'g', 'pcs'].map((u) => (
-                      <option key={u} value={u}>
-                        {u === 'kg' ? (locale === 'hi' ? 'kg (किलोग्राम)' : 'kg (Kilograms)') : u === 'g' ? (locale === 'hi' ? 'g (ग्राम)' : 'g (Grams)') : (locale === 'hi' ? 'pcs (पीस)' : 'pcs (Pieces)')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    {t('sops.recipes.portionQuantity')}
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editForm.portion_size_quantity}
-                    onChange={(e) => setEditForm({ ...editForm, portion_size_quantity: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    {t('sops.recipes.portionUnit')}
-                  </label>
-                  <select
-                    value={editForm.portion_size_unit}
-                    onChange={(e) => setEditForm({ ...editForm, portion_size_unit: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
-                  >
-                    <option value="">{t('sops.recipes.selectUnit')}</option>
-                    {getCompatibleUnitOptions('g', centralUnits, undefined, locale).map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3 text-sm divide-y divide-[#E7E2D8]">
-                <div className="flex justify-between py-1">
-                  <span className="text-stone-500">{t('sops.recipes.colBatchYield')}</span>
-                  <span className="font-mono font-medium text-stone-900 flex items-center">
-                    {recipe.batch_yield_quantity != null
-                      ? `${recipe.batch_yield_quantity} ${recipe.batch_yield_unit || ''}`
-                      : '—'}
-                    {recipe.batch_yield_unit && getUnitDimension(recipe.batch_yield_unit) === 'UNKNOWN' && (
-                      <Badge variant="danger" className="ml-2 font-mono text-[10px]">
-                        {t('sops.recipes.invalidUnit')}: {recipe.batch_yield_unit}
-                      </Badge>
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 pt-2">
-                  <span className="text-stone-500">{t('sops.recipes.colPortion')}</span>
-                  <span className="font-mono font-medium text-stone-900">
-                    {recipe.portion_size_quantity != null
-                      ? `${recipe.portion_size_quantity} ${recipe.portion_size_unit || ''}`
-                      : '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 pt-2">
-                  <span className="text-stone-500">Servings / Batch</span>
-                  <span className="font-mono font-medium text-stone-900">
-                    {calculation?.servingsPerBatch != null
-                      ? Math.round(calculation.servingsPerBatch * 100) / 100
-                      : '—'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 pt-2">
-                  <span className="text-stone-500">Ingredient Count</span>
-                  <span className="font-mono font-medium text-stone-900">
-                    {ingredients.length} items
-                  </span>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Card 3: Instructions & Notes */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-amber-600" />
-              {t('sops.recipeDetail.instructionsTitle')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isEditing ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Instructions
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={editForm.instructions}
-                    onChange={(e) => setEditForm({ ...editForm, instructions: e.target.value })}
-                    className="w-full p-2.5 border border-[#E7E2D8] rounded text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Culinary Notes
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={editForm.notes}
-                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                    className="w-full p-2.5 border border-[#E7E2D8] rounded text-sm"
-                  />
-                </div>
-              </div>
-            ) : (
+      {/* Card 1: Recipe Overview */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Scale className="h-4 w-4 text-amber-600" />
+            {t('sops.recipeDetail.recipeOverview')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isEditing ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                {recipe.instructions ? (
-                  <p className="text-sm text-stone-800 whitespace-pre-line leading-relaxed">
-                    {recipe.instructions}
-                  </p>
-                ) : (
-                  <p className="text-xs text-stone-400 italic">
-                    {t('sops.recipeDetail.noInstructions')}
-                  </p>
-                )}
-
-                {recipe.notes && (
-                  <div className="mt-4 pt-3 border-t border-[#E7E2D8]">
-                    <div className="text-xs font-semibold text-stone-700 mb-1">
-                      {t('sops.recipeDetail.notesTitle')}
-                    </div>
-                    <p className="text-xs text-stone-600 whitespace-pre-line">
-                      {recipe.notes}
-                    </p>
-                  </div>
-                )}
+                <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                  {locale === 'hi' ? 'रेसिपी श्रेणी' : 'Recipe Category'}
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCategoryChange('FINAL_DISH')}
+                    className={`py-1.5 px-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      editForm.category === 'FINAL_DISH'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white text-stone-700 border-[#E7E2D8] hover:bg-stone-50'
+                    }`}
+                  >
+                    {t('sops.recipes.finalDishes')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCategoryChange('PREPARATION')}
+                    className={`py-1.5 px-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      editForm.category === 'PREPARATION'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white text-stone-700 border-[#E7E2D8] hover:bg-stone-50'
+                    }`}
+                  >
+                    {t('sops.recipes.preparations')}
+                  </button>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                  Batch Yield Quantity
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={editForm.batch_yield_quantity}
+                  onChange={(e) => setEditForm({ ...editForm, batch_yield_quantity: e.target.value })}
+                  className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                  {t('sops.recipes.yieldUnit')}
+                </label>
+                <select
+                  value={editForm.batch_yield_unit}
+                  onChange={(e) => setEditForm({ ...editForm, batch_yield_unit: e.target.value })}
+                  className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
+                >
+                  <option value="">{t('sops.recipes.selectUnit')}</option>
+                  {['kg', 'g', 'pcs'].map((u) => (
+                    <option key={u} value={u}>
+                      {u === 'kg' ? (locale === 'hi' ? 'kg (किलोग्राम)' : 'kg (Kilograms)') : u === 'g' ? (locale === 'hi' ? 'g (ग्राम)' : 'g (Grams)') : (locale === 'hi' ? 'pcs (पीस)' : 'pcs (Pieces)')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {editForm.category !== 'PREPARATION' && (
+                <>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                      {t('sops.recipes.portionQuantity')}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editForm.portion_size_quantity}
+                      onChange={(e) => setEditForm({ ...editForm, portion_size_quantity: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                      {t('sops.recipes.portionUnit')}
+                    </label>
+                    <select
+                      value={editForm.portion_size_unit}
+                      onChange={(e) => setEditForm({ ...editForm, portion_size_unit: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-sm bg-white cursor-pointer"
+                    >
+                      <option value="">{t('sops.recipes.selectUnit')}</option>
+                      {getCompatibleUnitOptions('g', centralUnits, undefined, locale).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm divide-y sm:divide-y-0 sm:divide-x divide-[#E7E2D8]">
+              <div className="py-1 sm:py-0 sm:px-3">
+                <span className="text-xs text-stone-500 block">{t('sops.recipes.colBatchYield')}</span>
+                <span className="font-mono font-bold text-stone-900 flex items-center mt-0.5">
+                  {recipe.batch_yield_quantity != null
+                    ? `${recipe.batch_yield_quantity} ${recipe.batch_yield_unit || ''}`
+                    : '—'}
+                  {recipe.batch_yield_unit && getUnitDimension(recipe.batch_yield_unit) === 'UNKNOWN' && (
+                    <Badge variant="danger" className="ml-2 font-mono text-[10px]">
+                      {t('sops.recipes.invalidUnit')}: {recipe.batch_yield_unit}
+                    </Badge>
+                  )}
+                </span>
+              </div>
+              {recipe.category !== 'PREPARATION' && (
+                <>
+                  <div className="py-1 sm:py-0 sm:px-3">
+                    <span className="text-xs text-stone-500 block">{t('sops.recipes.colPortion')}</span>
+                    <span className="font-mono font-bold text-stone-900 mt-0.5 block">
+                      {recipe.portion_size_quantity != null
+                        ? `${recipe.portion_size_quantity} ${recipe.portion_size_unit || ''}`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="py-1 sm:py-0 sm:px-3">
+                    <span className="text-xs text-stone-500 block">Servings / Batch</span>
+                    <span className="font-mono font-bold text-stone-900 mt-0.5 block">
+                      {calculation?.servingsPerBatch != null
+                        ? Math.round(calculation.servingsPerBatch * 100) / 100
+                        : '—'}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="py-1 sm:py-0 sm:px-3">
+                <span className="text-xs text-stone-500 block">Ingredient Count</span>
+                <span className="font-mono font-bold text-stone-900 mt-0.5 block">
+                  {ingredients.length} items
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Card 2: Ingredients & Formulation Table */}
       <Card>
@@ -1038,8 +1461,8 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                         {/* Searchable Item Selector */}
                         <div className="flex-1 min-w-[200px]">
                           {isPrep ? (
-                            <SearchableSelect
-                              options={availablePreps}
+                            <SearchableSelect<any>
+                              options={formattedPreparations}
                               value={row.sub_recipe_id}
                               onChange={(val, opt) => {
                                 handleUpdateIngredient(idx, {
@@ -1050,15 +1473,16 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                                   unit: opt?.batch_yield_unit || 'kg',
                                 });
                               }}
-                              labelKey="name"
+                              onAddNew={(term) => handleQuickAddPrepInline(idx, term)}
+                              labelKey="display_label"
                               valueKey="id"
                               secondaryLabelKey="name_hi"
                               placeholder={locale === 'hi' ? 'पूर्व-तैयारी चुनें...' : 'Select preparation...'}
                               className="text-xs"
                             />
                           ) : (
-                            <SearchableSelect
-                              options={foodGroups}
+                            <SearchableSelect<any>
+                              options={formattedFoodGroups}
                               value={row.ingredient_group_id}
                               onChange={(val, opt) => {
                                 const bUnit = opt?.base_unit?.symbol || 'g';
@@ -1070,10 +1494,10 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                                   unit: bUnit,
                                 });
                               }}
-                              labelKey="name"
+                              labelKey="display_label"
                               valueKey="id"
-                              secondaryLabelKey={(g) => g.name_hi || g.group_code}
-                              getSearchableText={(g) => getSearchableItemText(g, aliasesMap)}
+                              secondaryLabelKey="name_hi"
+                              getSearchableText={(g: any) => getSearchableItemText(g, aliasesMap)}
                               placeholder={locale === 'hi' ? 'कच्ची सामग्री चुनें...' : 'Select raw material...'}
                               className="text-xs"
                             />
@@ -1094,7 +1518,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                         </div>
 
                         {/* Unit Select Dropdown */}
-                        <div className="w-32 shrink-0">
+                        <div className="w-28 shrink-0">
                           <select
                             value={row.unit}
                             onChange={(e) => handleUpdateIngredient(idx, { unit: e.target.value })}
@@ -1109,35 +1533,44 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                         </div>
 
                         {/* Notes Input */}
-                        <div className="w-32 shrink-0">
+                        <div className="w-28 shrink-0 hidden sm:block">
                           <input
                             type="text"
                             value={row.notes || ''}
                             onChange={(e) => handleUpdateIngredient(idx, { notes: e.target.value })}
-                            placeholder={locale === 'hi' ? 'टिप्पणी (वैकल्पिक)' : 'Notes (optional)'}
+                            placeholder={locale === 'hi' ? 'टिप्पणी' : 'Notes'}
                             className="w-full px-2 py-1.5 border border-[#E7E2D8] rounded-lg text-xs bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
 
-                        {/* Live Cost Display */}
-                        {hasCostAccess && (
-                          <div className="w-20 text-right shrink-0">
-                            <span className="text-[10px] text-stone-400 block font-mono">Cost</span>
-                            <span className="font-mono text-xs font-semibold text-emerald-700">
-                              {(() => {
-                                const matched = foodGroups.find((g) => g.id === row.ingredient_group_id);
-                                const rate = matched?.current_weighted_average_cost || matched?.wac;
-                                if (rate && Number(row.quantity) > 0) {
-                                  const conv = convertDirectQuantity(Number(row.quantity), row.unit, matched.base_unit?.symbol || 'g');
-                                  if (conv.possible && conv.converted !== undefined) {
-                                    return formatINR(Math.round(conv.converted * Number(rate) * 100) / 100);
-                                  }
-                                }
-                                return '—';
-                              })()}
-                            </span>
-                          </div>
-                        )}
+                        {/* Live Cost & Conversion Warning Display */}
+                        {hasCostAccess && (() => {
+                          const liveCost = getIngredientLiveCost(row);
+                          return (
+                            <div className="w-32 text-right shrink-0">
+                              {liveCost.conversionError ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenConversionModalFor(row)}
+                                  className="inline-flex items-center gap-1 text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded cursor-pointer hover:bg-rose-100 font-sans"
+                                  title={liveCost.errorMsg}
+                                >
+                                  <AlertTriangle className="h-3 w-3 text-rose-500 shrink-0" />
+                                  <span className="truncate max-w-[80px]">No Conv</span>
+                                </button>
+                              ) : (
+                                <>
+                                  <div className="text-[10px] text-stone-400 font-mono">
+                                    {liveCost.rate != null ? `@ ₹${Math.round(liveCost.rate)}/${liveCost.rateUnit}` : '—'}
+                                  </div>
+                                  <div className="font-mono text-xs font-semibold text-emerald-700">
+                                    {liveCost.lineCost != null ? formatINR(liveCost.lineCost) : '—'}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Delete Button */}
                         <button
@@ -1159,120 +1592,191 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
               No ingredients added to this formulation.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
-                    <th className="py-2.5 px-4">#</th>
-                    <th className="py-2.5 px-4">{t('sops.recipeDetail.colIngredient')}</th>
-                    <th className="py-2.5 px-4">{t('sops.recipeDetail.colType')}</th>
-                    <th className="py-2.5 px-4">{t('sops.recipeDetail.colQuantity')}</th>
-                    <th className="py-2.5 px-4 text-right">{t('sops.recipeDetail.colUnitRate')}</th>
-                    <th className="py-2.5 px-4 text-right">{t('sops.recipeDetail.colLineCost')}</th>
-                    <th className="py-2.5 px-4">{t('sops.recipes.colStatus')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E7E2D8]">
-                  {ingredients.map((ing: any, idx: number) => {
-                    const line = lineCosts[idx] || {};
-                    const isPrep = ing.ingredient_type === 'PREPARATION';
-                    const targetName = isPrep
-                      ? ing.sub_recipe?.name
-                      : ing.ingredient_group?.name || ing.inventory_item?.name;
-                    const targetNameHi = isPrep
-                      ? ing.sub_recipe?.name_hi
-                      : ing.ingredient_group?.name_hi || ing.inventory_item?.name_hi;
+            <div>
+              {/* Desktop 7-Column Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
+                      <th className="py-2.5 px-4">#</th>
+                      <th className="py-2.5 px-4">{t('sops.recipeDetail.colIngredient')}</th>
+                      <th className="py-2.5 px-4">{t('sops.recipeDetail.colType')}</th>
+                      <th className="py-2.5 px-4">{t('sops.recipeDetail.colQuantity')}</th>
+                      <th className="py-2.5 px-4 text-right">{t('sops.recipeDetail.colUnitRate')}</th>
+                      <th className="py-2.5 px-4 text-right">{t('sops.recipeDetail.colLineCost')}</th>
+                      <th className="py-2.5 px-4">{t('sops.recipes.colStatus')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E7E2D8]">
+                    {ingredients.map((ing: any, idx: number) => {
+                      const line = lineCosts[idx] || {};
+                      const isPrep = ing.ingredient_type === 'PREPARATION';
+                      const targetName = isPrep
+                        ? ing.sub_recipe?.name
+                        : ing.ingredient_group?.name || ing.inventory_item?.name;
+                      const targetNameHi = isPrep
+                        ? ing.sub_recipe?.name_hi
+                        : ing.ingredient_group?.name_hi || ing.inventory_item?.name_hi;
 
-                    return (
-                      <tr key={ing.id || idx} className="hover:bg-amber-50/20">
-                        <td className="py-3 px-4 font-mono text-xs text-stone-400">
-                          {idx + 1}
-                        </td>
+                      return (
+                        <tr key={ing.id || idx} className="hover:bg-amber-50/20">
+                          <td className="py-3 px-4 font-mono text-xs text-stone-400">
+                            {idx + 1}
+                          </td>
 
-                        <td className="py-3 px-4">
-                          <div className="font-medium text-stone-900">
+                          <td className="py-3 px-4">
+                            <div className="font-medium text-stone-900">
+                              {isPrep ? (
+                                <Link
+                                  href={`/sops/recipes/${ing.sub_recipe_id}`}
+                                  className="text-amber-700 hover:underline flex items-center gap-1"
+                                >
+                                  {targetName}
+                                  <ExternalLink className="h-3 w-3" />
+                                </Link>
+                              ) : (
+                                <span>{targetName}</span>
+                              )}
+                            </div>
+                            {targetNameHi && (
+                              <div className="text-xs text-stone-500 font-sans">{targetNameHi}</div>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
                             {isPrep ? (
-                              <Link
-                                href={`/sops/recipes/${ing.sub_recipe_id}`}
-                                className="text-amber-700 hover:underline flex items-center gap-1"
-                              >
-                                {targetName}
-                                <ExternalLink className="h-3 w-3" />
+                              <Badge variant="info" className="text-[10px]">
+                                {t('sops.recipeDetail.typePrep')}
+                              </Badge>
+                            ) : (
+                              <Badge variant="default" className="text-[10px]">
+                                {t('sops.recipeDetail.typeRaw')}
+                              </Badge>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 font-mono text-xs text-stone-800">
+                            {Number(ing.quantity)} {ing.unit}
+                          </td>
+
+                          <td className="py-3 px-4 text-right font-mono text-xs text-stone-700">
+                            {!hasCostAccess ? (
+                              <Lock className="h-3 w-3 inline text-stone-400" />
+                            ) : line.unitRate != null ? (
+                              <span>
+                                {formatINR(line.unitRate)}
+                                <span className="text-[10px] text-stone-400 ml-0.5">/{line.rateUnit || ''}</span>
+                              </span>
+                            ) : (
+                              <span className="text-stone-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 text-right font-mono text-xs font-medium text-stone-900">
+                            {!hasCostAccess ? (
+                              <Lock className="h-3 w-3 inline text-stone-400" />
+                            ) : line.lineCost != null ? (
+                              formatINR(line.lineCost)
+                            ) : (
+                              <span className="text-stone-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {line.status === 'COSTED_ELIGIBLE' ? (
+                              <Badge variant="success" className="text-[10px]">
+                                Ready
+                              </Badge>
+                            ) : line.status === 'UNCOSTED' ? (
+                              <Badge variant="warning" className="text-[10px]" title={line.error || ''}>
+                                Uncosted
+                              </Badge>
+                            ) : (
+                              <Badge variant="danger" className="text-[10px]" title={line.error || ''}>
+                                Incomplete
+                              </Badge>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Responsive Cards */}
+              <div className="block md:hidden divide-y divide-[#E7E2D8] p-3 space-y-3">
+                {ingredients.map((ing: any, idx: number) => {
+                  const line = lineCosts[idx] || {};
+                  const isPrep = ing.ingredient_type === 'PREPARATION';
+                  const targetName = isPrep
+                    ? ing.sub_recipe?.name
+                    : ing.ingredient_group?.name || ing.inventory_item?.name;
+                  const targetNameHi = isPrep
+                    ? ing.sub_recipe?.name_hi
+                    : ing.ingredient_group?.name_hi || ing.inventory_item?.name_hi;
+
+                  return (
+                    <div key={ing.id || idx} className="pt-3 first:pt-0 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-medium text-stone-900 text-sm">
+                            {isPrep ? (
+                              <Link href={`/sops/recipes/${ing.sub_recipe_id}`} className="text-amber-700 hover:underline flex items-center gap-1">
+                                {targetName} <ExternalLink className="h-3 w-3" />
                               </Link>
                             ) : (
                               <span>{targetName}</span>
                             )}
                           </div>
-                          {targetNameHi && (
-                            <div className="text-xs text-stone-500 font-sans">{targetNameHi}</div>
-                          )}
-                        </td>
+                          {targetNameHi && <div className="text-xs text-stone-500 font-sans">{targetNameHi}</div>}
+                        </div>
+                        <Badge variant={isPrep ? 'info' : 'default'} className="text-[10px]">
+                          {isPrep ? t('sops.recipeDetail.typePrep') : t('sops.recipeDetail.typeRaw')}
+                        </Badge>
+                      </div>
 
-                        <td className="py-3 px-4">
-                          {isPrep ? (
-                            <Badge variant="info" className="text-[10px]">
-                              {t('sops.recipeDetail.typePrep')}
-                            </Badge>
-                          ) : (
-                            <Badge variant="default" className="text-[10px]">
-                              {t('sops.recipeDetail.typeRaw')}
-                            </Badge>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 font-mono text-xs text-stone-800">
-                          {Number(ing.quantity)} {ing.unit}
-                        </td>
-
-                        <td className="py-3 px-4 text-right font-mono text-xs text-stone-700">
-                          {!hasCostAccess ? (
-                            <Lock className="h-3 w-3 inline text-stone-400" />
-                          ) : line.unitRate != null ? (
-                            <span>
-                              {formatINR(line.unitRate)}
-                              <span className="text-[10px] text-stone-400 ml-0.5">/{line.rateUnit || ''}</span>
-                            </span>
-                          ) : (
-                            <span className="text-stone-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 text-right font-mono text-xs font-medium text-stone-900">
-                          {!hasCostAccess ? (
-                            <Lock className="h-3 w-3 inline text-stone-400" />
-                          ) : line.lineCost != null ? (
-                            formatINR(line.lineCost)
-                          ) : (
-                            <span className="text-stone-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4">
-                          {line.status === 'COSTED_ELIGIBLE' ? (
-                            <Badge variant="success" className="text-[10px]">
-                              Ready
-                            </Badge>
-                          ) : line.status === 'UNCOSTED' ? (
-                            <Badge variant="warning" className="text-[10px]" title={line.error || ''}>
-                              Uncosted
-                            </Badge>
-                          ) : (
-                            <Badge variant="danger" className="text-[10px]" title={line.error || ''}>
-                              Incomplete
-                            </Badge>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                      <div className="grid grid-cols-3 gap-2 text-xs bg-[#FAF8F5] p-2 rounded-lg border border-[#E7E2D8]">
+                        <div>
+                          <span className="text-[10px] text-stone-400 block uppercase tracking-wider">{t('sops.recipeDetail.colQuantity')}</span>
+                          <span className="font-mono font-medium text-stone-800">{Number(ing.quantity)} {ing.unit}</span>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-[10px] text-stone-400 block uppercase tracking-wider">{t('sops.recipeDetail.colUnitRate')}</span>
+                          <span className="font-mono text-stone-700">
+                            {!hasCostAccess ? (
+                              <Lock className="h-3 w-3 inline text-stone-400" />
+                            ) : line.unitRate != null ? (
+                              `₹${line.unitRate}/${line.rateUnit || ''}`
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-stone-400 block uppercase tracking-wider">{t('sops.recipeDetail.colLineCost')}</span>
+                          <span className="font-mono font-bold text-stone-900">
+                            {!hasCostAccess ? (
+                              <Lock className="h-3 w-3 inline text-stone-400" />
+                            ) : line.lineCost != null ? (
+                              formatINR(line.lineCost)
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Card 4: Where-Used Dependency Graph (Reverse dependencies) */}
+      {/* Card 4: Where-Used Dependency Graph (Reverse dependencies - only in read-only mode) */}
+      {!isEditing && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -1376,6 +1880,7 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Category Change Blocker Dialog */}
       {blockerDialog?.open && (
@@ -1526,34 +2031,142 @@ export default function RecipeDetailPage({ params }: RecipeDetailPageProps) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-              <p className="text-xs text-stone-600">
-                Active item-specific and group-level verified conversions supporting recipe costing.
-              </p>
-              {conversionsList.length === 0 ? (
-                <div className="p-4 text-center text-stone-400 text-xs bg-stone-50 rounded-lg">
-                  No verified conversions registered.
-                </div>
-              ) : (
-                <div className="divide-y divide-stone-100 border border-[#E7E2D8] rounded-lg">
-                  {conversionsList.map((c: any) => (
-                    <div key={c.id} className="p-3 text-xs flex items-center justify-between">
-                      <div>
-                        <span className="font-mono font-bold text-stone-900">
-                          1 {c.from_unit} = {c.conversion_factor} {c.to_unit}
-                        </span>
-                        {c.source && (
-                          <span className="text-[10px] text-stone-400 block font-sans">Source: {c.source}</span>
-                        )}
-                      </div>
-                      <Badge variant={c.is_verified ? 'success' : 'warning'} className="text-[10px]">
-                        {c.is_verified ? 'Verified' : 'Pending'}
-                      </Badge>
+
+            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+              {/* Interactive Add Conversion Form */}
+              <form onSubmit={handleSaveConversion} className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                  <Plus className="h-3.5 w-3.5 text-amber-600" />
+                  Add / Configure Verified Conversion
+                </h3>
+                {convError && (
+                  <div className="text-xs text-rose-600 bg-rose-50 p-2 rounded border border-rose-200">
+                    {convError}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                      Ingredient Group
+                    </label>
+                    <select
+                      value={newConvGroupId}
+                      onChange={(e) => {
+                        const gId = e.target.value;
+                        setNewConvGroupId(gId);
+                        const g = foodGroups.find((fg) => fg.id === gId);
+                        if (g?.base_unit?.symbol) {
+                          setNewConvToUnit(g.base_unit.symbol);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-900 cursor-pointer"
+                    >
+                      <option value="">Select ingredient group...</option>
+                      {foodGroups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name} ({g.base_unit?.symbol || 'g'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                        From Unit (Recipe Unit)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. piece, cup, bunch"
+                        value={newConvFromUnit}
+                        onChange={(e) => setNewConvFromUnit(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-xs bg-white font-mono"
+                      />
                     </div>
-                  ))}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                        To Unit (Base Unit)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. g, kg"
+                        value={newConvToUnit}
+                        onChange={(e) => setNewConvToUnit(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-xs bg-white font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                        Multiplier (1 [From] = ? [To])
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g. 50"
+                        value={newConvMultiplier}
+                        onChange={(e) => setNewConvMultiplier(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-xs bg-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                        Notes / Reference
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1 piece ~ 50g"
+                        value={newConvNotes}
+                        onChange={(e) => setNewConvNotes(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-[#E7E2D8] rounded text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      disabled={convSaving}
+                      className="bg-amber-600 hover:bg-amber-700 text-white cursor-pointer text-xs"
+                    >
+                      {convSaving ? 'Saving...' : 'Save Conversion'}
+                    </Button>
+                  </div>
                 </div>
-              )}
+              </form>
+
+              {/* Verified conversions list */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
+                  Active Verified Conversions ({conversionsList.length})
+                </h4>
+                {conversionsList.length === 0 ? (
+                  <div className="p-4 text-center text-stone-400 text-xs bg-stone-50 rounded-lg">
+                    No verified conversions registered.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-stone-100 border border-[#E7E2D8] rounded-lg max-h-48 overflow-y-auto">
+                    {conversionsList.map((c: any) => (
+                      <div key={c.id} className="p-3 text-xs flex items-center justify-between">
+                        <div>
+                          <span className="font-mono font-bold text-stone-900">
+                            1 {c.from_unit} = {c.conversion_factor || c.multiplier} {c.to_unit}
+                          </span>
+                          {c.notes && (
+                            <span className="text-[10px] text-stone-400 block font-sans">{c.notes}</span>
+                          )}
+                        </div>
+                        <Badge variant={c.is_verified ? 'success' : 'warning'} className="text-[10px]">
+                          {c.is_verified ? 'Verified' : 'Active'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+
             <div className="px-6 py-3 border-t border-[#E7E2D8] bg-[#FAF8F5] flex justify-end">
               <Button variant="outline" size="sm" onClick={() => setConversionModalOpen(false)}>
                 Close

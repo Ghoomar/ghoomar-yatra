@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, ChevronDown, Check, X } from 'lucide-react';
+import { Search, ChevronDown, Check, X, Plus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { normalizeSearchTokens, buildSearchableText } from '@/lib/inventory/search';
 
@@ -29,6 +29,7 @@ export interface SearchableSelectProps<T = any> {
   name?: string;
   id?: string;
   isOptionDisabled?: (option: T) => boolean;
+  onAddNew?: (searchTerm: string) => void;
 }
 
 export function SearchableSelect<T = any>({
@@ -54,6 +55,7 @@ export function SearchableSelect<T = any>({
   name,
   id,
   isOptionDisabled,
+  onAddNew,
 }: SearchableSelectProps<T>) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -332,8 +334,22 @@ export function SearchableSelect<T = any>({
         className="flex-1 overflow-y-auto overscroll-contain p-1 divide-y divide-stone-100 max-h-[300px] sm:max-h-[320px]"
       >
         {visibleOptions.length === 0 ? (
-          <div className="py-6 text-center text-xs text-stone-400">
-            {effectiveEmptyMessage}
+          <div className="py-6 px-4 text-center text-xs text-stone-400 space-y-2">
+            <div>{effectiveEmptyMessage}</div>
+            {onAddNew && query.trim() && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddNew(query.trim());
+                  setIsOpen(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>+ Add &ldquo;{query.trim()}&rdquo;</span>
+              </button>
+            )}
           </div>
         ) : (
           visibleOptions.map((opt, idx) => {

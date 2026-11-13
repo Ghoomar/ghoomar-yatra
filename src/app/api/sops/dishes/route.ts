@@ -150,6 +150,11 @@ export async function POST(request: NextRequest) {
       category,
       description,
       configurations,
+      batch_yield_quantity,
+      batch_yield_unit,
+      portion_size_quantity,
+      portion_size_unit,
+      ingredients,
     } = body;
 
     if (!name || !name.trim()) {
@@ -206,6 +211,70 @@ export async function POST(request: NextRequest) {
 
       const { error: cfgErr } = await admin.from('yatra_serving_configurations').insert(configRows);
       if (cfgErr) console.warn('Failed to insert initial configurations:', cfgErr);
+    } else if (!isPreparation && portion_size_quantity) {
+      await admin.from('yatra_serving_configurations').insert({
+        canonical_dish_id: dish.id,
+        name: 'Standard',
+        name_hi: 'मानक',
+        portion_size_quantity: Number(portion_size_quantity) || 0,
+        portion_size_unit: portion_size_unit?.trim() || 'g',
+        is_active: true,
+      });
+    }
+
+    // Create initial default formulation if batch specs or ingredients provided
+    const hasBatchSpecs = batch_yield_quantity || batch_yield_unit || (Array.isArray(ingredients) && ingredients.length > 0);
+    if (hasBatchSpecs || isPreparation) {
+      const { data: formulation, error: formErr } = await admin
+        .from('yatra_recipe_formulations')
+        .insert({
+          canonical_dish_id: dish.id,
+          name: `${name.trim()} (Standard)`,
+          batch_yield_quantity: batch_yield_quantity ? Number(batch_yield_quantity) : null,
+          batch_yield_unit: batch_yield_unit?.trim() || (isPreparation ? 'kg' : null),
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (!formErr && formulation) {
+        await admin
+          .from('yatra_canonical_dishes')
+          .update({ default_formulation_id: formulation.id })
+          .eq('id', dish.id);
+
+        if (Array.isArray(ingredients) && ingredients.length > 0) {
+          const ingRows = ingredients.map((ing: any, idx: number) => ({
+            formulation_id: formulation.id,
+            ingredient_type: ing.ingredient_type || 'RAW_MATERIAL',
+            ingredient_group_id: ing.ingredient_type === 'PREPARATION' ? null : (ing.ingredient_group_id || null),
+            inventory_item_id: ing.ingredient_type === 'PREPARATION' ? null : (ing.inventory_item_id || null),
+            sub_preparation_dish_id: ing.ingredient_type === 'PREPARATION' ? (ing.sub_preparation_dish_id || ing.sub_recipe_id || null) : null,
+            quantity: Number(ing.quantity) || 0,
+            unit: ing.unit?.trim() || 'g',
+            sort_order: ing.sort_order ?? idx + 1,
+            notes: ing.notes || null,
+          }));
+          await admin.from('yatra_recipe_formulation_ingredients').insert(ingRows);
+        }
+      }
+    }
+
+    // Also mirror to legacy yatra_recipes for compatibility
+    try {
+      await admin.from('yatra_recipes').upsert({
+        id: dish.id,
+        name: dish.name,
+        name_hi: dish.name_hi,
+        category: dish.category,
+        batch_yield_quantity: batch_yield_quantity ? Number(batch_yield_quantity) : null,
+        batch_yield_unit: batch_yield_unit?.trim() || (isPreparation ? 'kg' : null),
+        portion_size_quantity: portion_size_quantity ? Number(portion_size_quantity) : null,
+        portion_size_unit: portion_size_unit?.trim() || 'g',
+        is_active: true,
+      }, { onConflict: 'id' });
+    } catch (mirrorErr) {
+      console.warn('yatra_recipes mirror note:', mirrorErr);
     }
 
     return NextResponse.json({ success: true, dish }, { status: 201 });

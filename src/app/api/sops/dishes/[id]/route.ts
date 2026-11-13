@@ -25,7 +25,7 @@ export async function GET(
     const admin = createAdminClient();
 
     // Query canonical dish with formulations, ingredients, and configurations
-    const { data: dish, error: dishErr } = await admin
+    let { data: dish, error: dishErr } = await admin
       .from('yatra_canonical_dishes')
       .select(`
         *,
@@ -44,6 +44,33 @@ export async function GET(
       `)
       .eq('id', id)
       .maybeSingle();
+
+    if (!dish) {
+      // Check if id corresponds to legacy recipe name
+      const { data: legacyRec } = await admin.from('yatra_recipes').select('name').eq('id', id).maybeSingle();
+      if (legacyRec?.name) {
+        const { data: matchedDish } = await admin
+          .from('yatra_canonical_dishes')
+          .select(`
+            *,
+            configurations:yatra_serving_configurations(*),
+            formulations:yatra_recipe_formulations(
+              *,
+              ingredients:yatra_recipe_formulation_ingredients(
+                *,
+                ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+                inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
+                sub_preparation_dish:yatra_canonical_dishes!yatra_recipe_formulation_ingredients_sub_preparation_dish_id_fkey(id, name, name_hi, category, is_preparation)
+              ),
+              config_links:yatra_configuration_formulations(*)
+            ),
+            menu_items:pos_menu_items(id, name, name_hi, price, category, parent_category, product_type, serving_configuration_id, is_active)
+          `)
+          .eq('name', legacyRec.name)
+          .maybeSingle();
+        if (matchedDish) dish = matchedDish;
+      }
+    }
 
     if (dishErr) throw dishErr;
     if (!dish) {
@@ -202,6 +229,7 @@ export async function PUT(
     const {
       name,
       name_hi,
+      category,
       description,
       is_active,
       default_formulation_id,
@@ -228,6 +256,10 @@ export async function PUT(
     if (name_hi !== undefined) updatePayload.name_hi = name_hi?.trim() || null;
     if (description !== undefined) updatePayload.description = description?.trim() || null;
     if (is_active !== undefined) updatePayload.is_active = Boolean(is_active);
+    if (category !== undefined) {
+      updatePayload.category = category;
+      updatePayload.is_preparation = category === 'PREPARATION';
+    }
 
     const { data: updatedDish, error: updateErr } = await admin
       .from('yatra_canonical_dishes')
@@ -270,6 +302,133 @@ export async function PUT(
     return NextResponse.json({ success: true, dish: updatedDish });
   } catch (err: any) {
     console.error('API PUT /api/sops/dishes/[id] error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json({ error: 'Dish ID is required' }, { status: 400 });
+    }
+
+    const caller = await resolveCallerAuth(request);
+
+    if (!caller.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!caller.canManageRecipes) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
+    }
+
+    const admin = createAdminClient();
+
+    // Verify dish exists
+    const { data: dish, error: findErr } = await admin
+      .from('yatra_canonical_dishes')
+      .select('id, name')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findErr) throw findErr;
+    if (!dish) {
+      return NextResponse.json({ error: 'Canonical dish not found' }, { status: 404 });
+    }
+
+    // 1. Pre-flight check: active POS menu items linked to this dish
+    const { data: linkedMenuItems } = await admin
+      .from('pos_menu_items')
+      .select('id, name, price')
+      .eq('canonical_dish_id', id)
+      .eq('is_active', true);
+
+    // 2. Pre-flight check: active combo/thali compositions
+    const { data: comboCompositions } = await admin
+      .from('yatra_menu_item_compositions')
+      .select('id, menu_item:pos_menu_items!yatra_menu_item_compositions_menu_item_id_fkey(id, name, is_active)')
+      .eq('component_dish_id', id);
+
+    const activeCombos = (comboCompositions || [])
+      .filter((c: any) => c.menu_item && c.menu_item.is_active)
+      .map((c: any) => ({ id: c.menu_item.id, name: c.menu_item.name }));
+
+    // 3. Pre-flight check: parent formulations using this as sub-preparation
+    const { data: parentFormIngredients } = await admin
+      .from('yatra_recipe_formulation_ingredients')
+      .select(`
+        id,
+        formulation:yatra_recipe_formulations!yatra_recipe_formulation_ingredients_formulation_id_fkey(
+          id, name, is_active,
+          canonical_dish:yatra_canonical_dishes!yatra_recipe_formulations_canonical_dish_id_fkey(id, name, is_active)
+        )
+      `)
+      .eq('sub_preparation_dish_id', id);
+
+    const activeParentFormulations = (parentFormIngredients || [])
+      .filter((pi: any) => pi.formulation?.is_active && pi.formulation?.canonical_dish?.is_active)
+      .map((pi: any) => ({
+        formulationId: pi.formulation.id,
+        formulationName: pi.formulation.name,
+        dishName: pi.formulation.canonical_dish.name,
+      }));
+
+    const hasDependencies =
+      (linkedMenuItems && linkedMenuItems.length > 0) ||
+      activeCombos.length > 0 ||
+      activeParentFormulations.length > 0;
+
+    if (hasDependencies) {
+      return NextResponse.json(
+        {
+          error: `Cannot delete or archive "${dish.name}": active dependencies exist. Please unlink all menu items, combo components, and parent formulations first.`,
+          canDelete: false,
+          dependencies: {
+            menuItems: linkedMenuItems || [],
+            combos: activeCombos,
+            parentFormulations: activeParentFormulations,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    // Safe to delete/archive:
+    // Mark canonical dish inactive
+    await admin
+      .from('yatra_canonical_dishes')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    // Mark formulations inactive
+    await admin
+      .from('yatra_recipe_formulations')
+      .update({ is_active: false })
+      .eq('canonical_dish_id', id);
+
+    // Mark serving configurations inactive
+    await admin
+      .from('yatra_serving_configurations')
+      .update({ is_active: false })
+      .eq('canonical_dish_id', id);
+
+    // Sync legacy recipe if present
+    await admin
+      .from('yatra_recipes')
+      .update({ is_active: false })
+      .or(`id.eq.${id},name.eq.${dish.name}`);
+
+    return NextResponse.json({
+      success: true,
+      message: `"${dish.name}" has been safely archived.`,
+      archived: true,
+    });
+  } catch (err: any) {
+    console.error('API DELETE /api/sops/dishes/[id] error:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 }

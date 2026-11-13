@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName } from '@/lib/i18n/master-data';
-import { AlertCircle, Link2 } from 'lucide-react';
+import { AlertCircle, Link2, UtensilsCrossed } from 'lucide-react';
 
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
 
@@ -37,6 +37,8 @@ interface MenuItemModalProps {
     is_active: boolean;
     product_type?: string;
     aliases?: string[];
+    canonical_dish_id?: string | null;
+    serving_configuration_id?: string | null;
   } | null;
 }
 
@@ -60,9 +62,24 @@ export function MenuItemModal({
   const [isActive, setIsActive] = useState(true);
   const [aliasInput, setAliasInput] = useState('');
   const [aliases, setAliases] = useState<string[]>([]);
+  const [canonicalDishes, setCanonicalDishes] = useState<any[]>([]);
+  const [canonicalDishId, setCanonicalDishId] = useState<string>('');
+  const [servingConfigId, setServingConfigId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflictItem, setConflictItem] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/sops/dishes')
+      .then((res) => (res.ok ? res.json() : { dishes: [] }))
+      .then((data) => {
+        if (data.dishes) {
+          setCanonicalDishes(data.dishes.filter((d: any) => d.category !== 'PREPARATION'));
+        }
+      })
+      .catch(() => {});
+  }, [isOpen]);
 
   // Compute parent items with localization
   const parentList = React.useMemo(() => {
@@ -95,6 +112,8 @@ export function MenuItemModal({
       setPrice(item.price !== undefined ? item.price : 0);
       setIsActive(item.is_active !== false);
       setAliases(item.aliases || []);
+      setCanonicalDishId(item.canonical_dish_id || '');
+      setServingConfigId(item.serving_configuration_id || '');
     } else {
       setName('');
       setNameHi('');
@@ -107,11 +126,21 @@ export function MenuItemModal({
       setPrice(0);
       setIsActive(true);
       setAliases([]);
+      setCanonicalDishId('');
+      setServingConfigId('');
     }
     setAliasInput('');
     setError(null);
     setConflictItem(null);
   }, [item, categories, parentList, isOpen]);
+
+  const selectedDish = React.useMemo(() => {
+    return canonicalDishes.find((d) => d.id === canonicalDishId);
+  }, [canonicalDishes, canonicalDishId]);
+
+  const availableConfigs = React.useMemo(() => {
+    return selectedDish?.configurations || [];
+  }, [selectedDish]);
 
   const availableCategories = React.useMemo(() => {
     if (!selectedParent) return categories;
@@ -174,6 +203,8 @@ export function MenuItemModal({
         price: Number(price) || 0,
         is_active: isActive,
         aliases,
+        canonical_dish_id: productType === 'INDIVIDUAL_DISH' && canonicalDishId ? canonicalDishId : null,
+        serving_configuration_id: productType === 'INDIVIDUAL_DISH' && servingConfigId ? servingConfigId : null,
       };
       if (item) {
         payload.id = item.id;
@@ -300,6 +331,60 @@ export function MenuItemModal({
               <option value="STANDALONE_PURCHASED">{locale === 'hi' ? 'तैयार/पैकेज्ड उत्पाद (Retail/Packaged)' : 'Standalone Purchased (Retail/Packaged)'}</option>
             </select>
           </div>
+
+          {productType === 'INDIVIDUAL_DISH' && (
+            <div className="bg-[#FAF8F5] border border-[#E7E2D8] rounded-xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                  <UtensilsCrossed className="h-3.5 w-3.5 text-amber-600" />
+                  {locale === 'hi' ? 'संबद्ध रेसिपी डिश (4-टियर)' : 'Linked 4-Tier SOP Dish'}
+                </label>
+                <span className="text-[10px] text-stone-400">Direct SOP link</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-stone-600 mb-1">
+                    {locale === 'hi' ? 'कैनोनिकल डिश' : 'Canonical Dish'}
+                  </label>
+                  <select
+                    value={canonicalDishId}
+                    onChange={(e) => {
+                      const newDishId = e.target.value;
+                      setCanonicalDishId(newDishId);
+                      const d = canonicalDishes.find((cd) => cd.id === newDishId);
+                      setServingConfigId(d?.configurations?.[0]?.id || '');
+                    }}
+                    className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white text-stone-900 cursor-pointer"
+                  >
+                    <option value="">{locale === 'hi' ? '-- कोई डिश नहीं --' : '-- None / Unlinked --'}</option>
+                    {canonicalDishes.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} {d.name_hi ? `(${d.name_hi})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-stone-600 mb-1">
+                    {locale === 'hi' ? 'सर्विंग कॉन्फ़िगरेशन' : 'Serving Config'}
+                  </label>
+                  <select
+                    value={servingConfigId}
+                    onChange={(e) => setServingConfigId(e.target.value)}
+                    disabled={!canonicalDishId || availableConfigs.length === 0}
+                    className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs bg-white text-stone-900 disabled:opacity-50 cursor-pointer"
+                  >
+                    <option value="">{locale === 'hi' ? '-- मानक --' : '-- Standard Portion --'}</option>
+                    {availableConfigs.map((cfg: any) => (
+                      <option key={cfg.id} value={cfg.id}>
+                        {cfg.name} ({cfg.portion_size_quantity} {cfg.portion_size_unit})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

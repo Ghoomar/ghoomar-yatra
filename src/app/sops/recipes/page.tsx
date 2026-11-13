@@ -62,15 +62,12 @@ function RecipesContent() {
   const hasCostAccess = canViewCosting(activeRole, permissions);
 
   const [recipes, setRecipes] = useState<RecipeListItem[]>([]);
-  const [combos, setCombos] = useState<any[]>([]);
   const [foodGroups, setFoodGroups] = useState<any[]>([]);
   const [aliasesMap, setAliasesMap] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Lazy loading state for secondary tab data and modal autocomplete
-  const [combosLoaded, setCombosLoaded] = useState(false);
-  const [combosLoading, setCombosLoading] = useState(false);
+  // Lazy loading state for modal autocomplete
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [groupsLoading, setGroupsLoading] = useState(false);
 
@@ -110,21 +107,54 @@ function RecipesContent() {
     batch_yield_unit: 'kg',
     portion_size_quantity: '',
     portion_size_unit: 'g',
-    instructions: '',
-    notes: '',
   });
 
   const fetchRecipes = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/sops/recipes');
+      const res = await fetch('/api/sops/dishes');
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to load recipes');
       }
       const data = await res.json();
-      setRecipes(data.recipes || []);
+      const rawDishes = data.dishes || [];
+      const mappedRecipes: RecipeListItem[] = rawDishes.map((dish: any) => {
+        const defaultForm = dish.formulations?.find((f: any) => f.id === dish.default_formulation_id) || dish.formulations?.[0];
+        const defaultCfg = dish.configurations?.[0];
+        const batchYieldQty = defaultForm?.batch_yield_quantity != null ? Number(defaultForm.batch_yield_quantity) : null;
+        const batchYieldUnit = defaultForm?.batch_yield_unit || null;
+        const portionQty = defaultCfg?.portion_size_quantity != null ? Number(defaultCfg.portion_size_quantity) : null;
+        const portionUnit = defaultCfg?.portion_size_unit || null;
+        const batchCost = defaultForm?.batch_cost != null ? Number(defaultForm.batch_cost) : null;
+        const costPerOutputUnit = (batchCost != null && batchYieldQty && batchYieldQty > 0)
+          ? Math.round((batchCost / batchYieldQty) * 100) / 100
+          : null;
+        const costPerServing = defaultCfg?.serving_cost != null ? Number(defaultCfg.serving_cost) : null;
+        const servingsPerBatch = (batchYieldQty && portionQty && portionQty > 0)
+          ? Math.round((batchYieldQty / (portionUnit === 'kg' ? portionQty : portionQty / 1000)) * 10) / 10
+          : null;
+
+        return {
+          id: dish.id,
+          name: dish.name,
+          name_hi: dish.name_hi,
+          category: dish.category,
+          batch_yield_quantity: batchYieldQty,
+          batch_yield_unit: batchYieldUnit,
+          portion_size_quantity: portionQty,
+          portion_size_unit: portionUnit,
+          costing_status: defaultForm?.costing_status || 'UNCOSTED',
+          costing_reasons: defaultForm?.costing_reasons || [],
+          total_batch_cost: batchCost,
+          cost_per_output_unit: costPerOutputUnit,
+          cost_per_serving: costPerServing,
+          servings_per_batch: servingsPerBatch,
+          ingredients: defaultForm?.ingredients || [],
+        };
+      });
+      setRecipes(mappedRecipes);
     } catch (err: any) {
       console.error('Fetch recipes error:', err);
       setError(err.message || 'Error fetching recipes');
@@ -133,22 +163,7 @@ function RecipesContent() {
     }
   };
 
-  const fetchCombos = async () => {
-    if (combosLoaded || combosLoading) return;
-    setCombosLoading(true);
-    try {
-      const res = await fetch('/api/sops/menu?channel=DINE_IN&view=combos');
-      if (res.ok) {
-        const data = await res.json();
-        setCombos(data.combos || []);
-        setCombosLoaded(true);
-      }
-    } catch (err) {
-      console.error('Fetch combos error:', err);
-    } finally {
-      setCombosLoading(false);
-    }
-  };
+
 
   const fetchFoodGroups = async () => {
     if (groupsLoaded || groupsLoading) return;
@@ -191,13 +206,14 @@ function RecipesContent() {
     setQuickPrepCreating(true);
     setQuickPrepError(null);
     try {
-      const res = await fetch('/api/sops/recipes', {
+      const res = await fetch('/api/sops/dishes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: quickPrepName.trim(),
           name_hi: quickPrepNameHi?.trim() || null,
           category: 'PREPARATION',
+          batch_yield_unit: 'kg',
           ingredients: [],
         }),
       });
@@ -212,19 +228,14 @@ function RecipesContent() {
       setQuickPrepName('');
       setQuickPrepNameHi('');
       setIsQuickCustomHindi(false);
-      router.push(`/sops/recipes/${data.recipe.id}`);
+      const targetId = data.dish?.id || data.recipe?.id;
+      router.push(`/sops/recipes/${targetId}`);
     } catch (err: any) {
       setQuickPrepError(err.message || 'Error creating preparation');
     } finally {
       setQuickPrepCreating(false);
     }
   };
-
-  useEffect(() => {
-    if (categoryTab === 'COMBOS' && !combosLoaded) {
-      fetchCombos();
-    }
-  }, [categoryTab, combosLoaded]);
 
   // Filtered food groups for Recipe Builder via filterLogicalIngredientGroups
   const matchingFoodGroups = useMemo(() => {
@@ -253,7 +264,7 @@ function RecipesContent() {
           ]
         : [];
 
-      const res = await fetch('/api/sops/recipes', {
+      const res = await fetch('/api/sops/dishes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,8 +275,6 @@ function RecipesContent() {
           batch_yield_unit: newForm.batch_yield_unit || null,
           portion_size_quantity: newForm.portion_size_quantity ? Number(newForm.portion_size_quantity) : null,
           portion_size_unit: newForm.portion_size_unit || null,
-          instructions: newForm.instructions || null,
-          notes: newForm.notes || null,
           ingredients: initialIngredients,
         }),
       });
@@ -281,7 +290,8 @@ function RecipesContent() {
       setSelectedInitialGroup(null);
       setGroupSearchQuery('');
       setInitialQty('');
-      router.push(`/sops/recipes/${data.recipe.id}`);
+      const targetId = data.dish?.id || data.recipe?.id;
+      router.push(`/sops/recipes/${targetId}`);
     } catch (err: any) {
       setCreateError(err.message || 'Error creating recipe');
     } finally {
@@ -436,8 +446,6 @@ function RecipesContent() {
                   batch_yield_unit: 'kg',
                   portion_size_quantity: '',
                   portion_size_unit: 'g',
-                  instructions: '',
-                  notes: '',
                 });
                 setIsCustomHindi(false);
                 setSelectedInitialGroup(null);
@@ -463,8 +471,6 @@ function RecipesContent() {
         {[
           { key: 'FINAL_DISH', label: t('sops.recipes.finalDishes') },
           { key: 'PREPARATION', label: locale === 'hi' ? 'पूर्व-तैयारियां (YM)' : 'Preparations (YM)' },
-          { key: 'ALL', label: t('sops.recipes.allCategories') },
-          { key: 'COMBOS', label: `${locale === 'hi' ? 'कॉम्बो और थाली' : 'Combos & Thalis'}${combos.length ? ` (${combos.length})` : ''}` },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -516,7 +522,7 @@ function RecipesContent() {
         </div>
       </div>
 
-      {/* Recipes or Combos Table Card */}
+      {/* Recipes Table Card */}
       <Card>
         <CardContent className="p-0">
           {loading ? (
@@ -533,85 +539,6 @@ function RecipesContent() {
                 {locale === 'hi' ? 'पुनः प्रयास करें' : 'Try Again'}
               </Button>
             </div>
-          ) : categoryTab === 'COMBOS' ? (
-            combosLoading ? (
-              <div className="p-12 text-center text-stone-400 flex flex-col items-center gap-2">
-                <RefreshCw className="h-8 w-8 animate-spin text-amber-600" />
-                <p className="text-sm font-medium text-stone-600">
-                  {locale === 'hi' ? 'कॉम्बो और थाली लोड हो रहे हैं...' : 'Loading combos & thalis...'}
-                </p>
-              </div>
-            ) : combos.length === 0 ? (
-              <div className="p-12 text-center text-stone-400 flex flex-col items-center gap-2">
-                <BookOpen className="h-8 w-8 text-stone-300" />
-                <p className="text-sm font-medium text-stone-600">No combos or thalis configured.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-[#E7E2D8] bg-[#FAF8F5] text-xs font-semibold text-stone-600">
-                      <th className="py-3 px-4">Combo / Thali Name</th>
-                      <th className="py-3 px-4">Product Type</th>
-                      <th className="py-3 px-4">Components</th>
-                      <th className="py-3 px-4 text-right">Selling Price</th>
-                      <th className="py-3 px-4 text-right">Food Cost</th>
-                      <th className="py-3 px-4 text-right">Margin</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E7E2D8]">
-                    {combos.map((c: any) => (
-                      <tr key={c.id} className="hover:bg-amber-50/20 transition-colors">
-                        <td className="py-3.5 px-4 font-medium text-stone-900">
-                          <div>{c.name}</div>
-                          {c.name_hi && <div className="text-xs text-stone-500 font-sans">{c.name_hi}</div>}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <Badge variant="maroon" className="text-[10px]">{c.product_type}</Badge>
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-stone-600">
-                          {c.components?.length || 0} items
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-mono text-sm font-medium text-stone-900">
-                          {c.selling_price ? formatINR(c.selling_price) : '—'}
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-mono text-sm font-medium text-emerald-700">
-                          {!hasCostAccess ? (
-                            <Lock className="h-3 w-3 inline text-stone-400" />
-                          ) : c.food_cost != null ? (
-                            formatINR(c.food_cost)
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-mono text-sm font-medium text-stone-900">
-                          {!hasCostAccess ? (
-                            <Lock className="h-3 w-3 inline text-stone-400" />
-                          ) : c.margin_amount != null ? (
-                            formatINR(c.margin_amount)
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          {getStatusBadge(c.status || c.costing_status || 'UNCOSTED', c.incomplete_reasons)}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <Link href="/sops/menu?tab=combos">
-                            <Button variant="ghost" size="sm" className="h-8 px-2 text-stone-600 hover:text-amber-700">
-                              <span className="text-xs mr-1">{t('sops.recipes.viewDetails')}</span>
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            </Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
           ) : filteredRecipes.length === 0 ? (
             <div className="p-12 text-center text-stone-400 flex flex-col items-center gap-2">
               <BookOpen className="h-8 w-8 text-stone-300" />
