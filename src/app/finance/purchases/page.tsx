@@ -11,6 +11,7 @@ import { VendorModal } from '@/components/vendors/VendorModal';
 import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
 import { VendorsView } from '@/components/purchases/VendorsView';
 import { PurchaseInvoicesView, PurchaseInvoiceRecord } from '@/components/purchases/PurchaseInvoicesView';
+import { PurchaseModal } from '@/components/purchases/PurchaseModal';
 import { getSearchableItemText } from '@/lib/inventory/search';
 import {
   ShoppingBag,
@@ -26,24 +27,6 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
-import { SearchableSelect } from '@/components/ui/SearchableSelect';
-
-interface PurchaseLineForm {
-  item_id: string;
-  quantity: number;
-  rate: number;
-  use_pack?: boolean;
-  packaging_unit_id?: string | null;
-  brand_name?: string;
-  pack_unit?: string;
-  pack_quantity?: number;
-  pack_rate?: number;
-  conversion_factor?: number;
-  is_custom_pack?: boolean;
-  destination_location_id?: string;
-  previous_rate?: number;
-  previous_date?: string;
-}
 
 function PurchasesContent() {
   const { t, locale } = useI18n();
@@ -76,6 +59,9 @@ function PurchasesContent() {
   const [vendors, setVendors] = useState<VendorOutstandingSummary[]>([]);
   const [rawVendors, setRawVendors] = useState<Vendor[]>([]);
   const [items, setItems] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [units, setUnits] = useState<any[]>([]);
   const [packagingUnits, setPackagingUnits] = useState<any[]>([]);
   const [aliases, setAliases] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
@@ -101,9 +87,6 @@ function PurchasesContent() {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showQuickVendorModal, setShowQuickVendorModal] = useState(false);
   const [selectedVendorId, setSelectedVendorId] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [lines, setLines] = useState<PurchaseLineForm[]>([{ item_id: '', quantity: 1, rate: 0 }]);
-  const [purchaseSaving, setPurchaseSaving] = useState(false);
   const [vendorPriceMemory, setVendorPriceMemory] = useState<Record<string, { rate: number; date: string }>>({});
 
   // Payment Modal State
@@ -164,15 +147,18 @@ function PurchasesContent() {
         { data: viData },
         { data: vcData },
         { data: pHeadersData, error: pErr },
+        { data: grpData },
+        { data: catData },
+        { data: unitData },
       ] = await Promise.all([
         supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
         supabase.from('vendors').select('*').order('name'),
         supabase
           .from('inventory_items')
           .select(`
-            id, item_code, name, name_hi, unit_id, secondary_unit_id, conversion_factor, is_active, current_stock, current_weighted_average_cost,
-            unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi),
-            sec_unit:units!inventory_items_secondary_unit_id_fkey(symbol, symbol_hi, name, name_hi)
+            id, item_code, name, name_hi, group_id, brand_name, variant_name, category_id, inventory_class, unit_id, secondary_unit_id, conversion_factor, is_active, current_stock, current_weighted_average_cost,
+            unit:units!inventory_items_unit_id_fkey(id, symbol, symbol_hi, name, name_hi),
+            sec_unit:units!inventory_items_secondary_unit_id_fkey(id, symbol, symbol_hi, name, name_hi)
           `)
           .order('name'),
         supabase.from('item_packaging_units').select('*, pack_unit:units!item_packaging_units_pack_unit_id_fkey(symbol, symbol_hi, name, name_hi)').eq('is_active', true),
@@ -224,6 +210,23 @@ function PurchasesContent() {
             )
           `)
           .order('purchase_date', { ascending: false }),
+        supabase
+          .from('logical_ingredient_groups')
+          .select(`
+            id,
+            group_code,
+            name,
+            name_hi,
+            category_id,
+            inventory_class,
+            base_unit_id,
+            search_family,
+            base_unit:units!logical_ingredient_groups_base_unit_id_fkey(id, symbol, symbol_hi, name, name_hi)
+          `)
+          .eq('is_active', true)
+          .order('name'),
+        supabase.from('inventory_categories').select('id, name, name_hi, inventory_class').order('name'),
+        supabase.from('units').select('id, symbol, symbol_hi, name, name_hi').order('symbol'),
       ]);
 
       if (vErr) throw vErr;
@@ -240,6 +243,9 @@ function PurchasesContent() {
       setPaymentMethods(pmData || []);
       setVendorItems(viData || []);
       setVendorCategories(vcData || []);
+      setGroups(grpData || []);
+      setCategories(catData || []);
+      setUnits(unitData || []);
 
       // Parse invoices
       const parsedInvoices: PurchaseInvoiceRecord[] = (pHeadersData || []).map((p: any) => {
@@ -449,200 +455,6 @@ function PurchasesContent() {
       loadData();
     } catch (err: any) {
       setMessage({ type: 'error', text: 'Failed to delete vendor: ' + err.message });
-    }
-  };
-
-  // Purchase Bill line handlers
-  const handleAddLine = () => {
-    setLines([...lines, { item_id: '', quantity: 1, rate: 0 }]);
-  };
-
-  const handleRemoveLine = (idx: number) => {
-    if (lines.length > 1) {
-      setLines(lines.filter((_, i) => i !== idx));
-    }
-  };
-
-  const calculatePurchaseTotal = () => {
-    return lines.reduce((acc, l) => {
-      if (l.use_pack) {
-        return acc + ((l.pack_quantity || 0) * (l.pack_rate || 0));
-      }
-      return acc + (l.quantity * l.rate || 0);
-    }, 0);
-  };
-
-  const handleCreatePurchase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedVendorId) {
-      alert(t('purchases.bills.errSelectVendor'));
-      return;
-    }
-
-    const vSelected = vendors.find((v) => v.vendor_id === selectedVendorId);
-    if (vSelected && vSelected.is_active === false) {
-      alert(t('purchases.bills.errVendorInactive'));
-      return;
-    }
-
-    const defaultStoreLoc = locations.find(
-      (location) => location.code?.toUpperCase() === 'STORE' && location.is_active
-    )?.id;
-    if (!defaultStoreLoc) {
-      alert(t('purchases.bills.errStoreLocationUnavailable'));
-      return;
-    }
-
-    setPurchaseSaving(true);
-    setMessage(null);
-
-    try {
-      const netTotal = calculatePurchaseTotal();
-      const purchaseNumber = `PO-${Date.now().toString().slice(-6)}`;
-
-      const { data: header, error: headerErr } = await supabase
-        .from('purchase_headers')
-        .insert({
-          purchase_number: purchaseNumber,
-          vendor_id: selectedVendorId,
-          purchase_date: businessDate,
-          business_date: businessDate,
-          invoice_number: invoiceNumber,
-          total_amount: netTotal,
-          net_amount: netTotal,
-        })
-        .select()
-        .single();
-
-      if (headerErr) throw headerErr;
-
-      for (const line of lines) {
-        const currentItem = items.find((i) => i.id === line.item_id);
-        let baseQty: number;
-        let baseRate: number;
-        let pkgUnitId: string | null = null;
-        let brandSnapshot: string | null = null;
-        let packUnitSnapshot: string | null = null;
-        let packQty: number | null = null;
-        let packRate: number | null = null;
-        let convFactorSnapshot: number | null = null;
-
-        if (line.use_pack) {
-          const conv = Number(line.conversion_factor) || Number(currentItem?.conversion_factor) || 1;
-          baseQty = (line.pack_quantity || 0) * conv;
-          baseRate = conv > 0 ? (line.pack_rate || 0) / conv : (line.pack_rate || 0);
-          pkgUnitId = line.packaging_unit_id || null;
-          brandSnapshot = line.brand_name?.trim() || null;
-          packUnitSnapshot = line.pack_unit?.trim() || currentItem?.sec_unit?.symbol || 'Pack';
-          packQty = line.pack_quantity || 0;
-          packRate = line.pack_rate || 0;
-          convFactorSnapshot = conv;
-
-          // Persist custom packaging definition to item_packaging_units for future reuse
-          if (line.is_custom_pack && brandSnapshot && packUnitSnapshot && conv > 0 && !pkgUnitId) {
-            try {
-              const pkgRes = await fetch('/api/inventory/packaging', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  inventory_item_id: line.item_id,
-                  brand_name: brandSnapshot,
-                  pack_unit_name: packUnitSnapshot,
-                  pack_size_in_base_units: conv,
-                  vendor_id: selectedVendorId || null,
-                  is_default: false,
-                }),
-              });
-
-              if (pkgRes.ok) {
-                const pkgJson = await pkgRes.json();
-                if (pkgJson.packaging?.id) pkgUnitId = pkgJson.packaging.id;
-              } else {
-                const errData = await pkgRes.json().catch(() => ({}));
-                const errMsg = errData.error || 'Failed to persist custom packaging unit';
-                setMessage({ type: 'error', text: `${errMsg} for "${brandSnapshot}"` });
-                throw new Error(errMsg);
-              }
-            } catch (pkgErr: any) {
-              console.error('Could not persist custom packaging unit:', pkgErr);
-              setMessage({
-                type: 'error',
-                text: pkgErr.message || 'Error saving custom packaging definition',
-              });
-              throw pkgErr;
-            }
-          }
-        } else {
-          baseQty = line.quantity;
-          baseRate = line.rate;
-        }
-
-        if (!line.item_id || baseQty <= 0) continue;
-        const lineTotal = line.use_pack ? (packQty || 0) * (packRate || 0) : baseQty * baseRate;
-
-        // Insert purchase line in base units with immutable packaging snapshot
-        const { error: lineErr } = await supabase.from('purchase_lines').insert({
-          purchase_id: header.id,
-          item_id: line.item_id,
-          quantity: baseQty,
-          rate: baseRate,
-          total_amount: lineTotal,
-          packaging_unit_id: pkgUnitId,
-          brand_name_snapshot: brandSnapshot,
-          pack_unit_snapshot: packUnitSnapshot,
-          pack_quantity: packQty,
-          pack_rate: packRate,
-          conversion_factor_snapshot: convFactorSnapshot,
-        });
-        if (lineErr) throw lineErr;
-
-        // Inward stock into target location (Central Store) using atomic procedure
-        const targetDestLoc = line.destination_location_id || defaultStoreLoc;
-
-        const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
-          p_item_id: line.item_id,
-          p_business_date: businessDate,
-          p_movement_type: 'purchase',
-          p_quantity: baseQty,
-          p_unit_cost: baseRate,
-          p_destination_location_id: targetDestLoc,
-          p_purpose: 'Vendor Inward Receipt',
-          p_reference_id: header.id,
-          p_reference_type: 'purchase_header',
-          p_notes: `PO ${purchaseNumber} - ${vSelected?.vendor_name || 'Vendor'}`,
-        });
-
-        if (txErr) throw txErr;
-
-        // Atomic Upsert vendor-item price memory
-        try {
-          await supabase
-            .from('vendor_items')
-            .upsert(
-              {
-                vendor_id: selectedVendorId,
-                inventory_item_id: line.item_id,
-                last_purchase_rate: baseRate,
-                last_purchase_date: businessDate,
-                is_preferred: true,
-              },
-              { onConflict: 'vendor_id,inventory_item_id' }
-            );
-        } catch (memErr) {
-          console.warn('Could not update vendor price memory:', memErr);
-        }
-      }
-
-      setMessage({ type: 'success', text: t('purchases.bills.invoiceRecorded', { number: purchaseNumber }) });
-      setShowPurchaseModal(false);
-      setLines([{ item_id: '', quantity: 1, rate: 0 }]);
-      setInvoiceNumber('');
-      loadData();
-    } catch (err: any) {
-      console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Failed to record purchase.' });
-    } finally {
-      setPurchaseSaving(false);
     }
   };
 
@@ -1094,419 +906,44 @@ function PurchasesContent() {
         </div>
       )}
 
-      {/* New Purchase Invoice Modal */}
-      {showPurchaseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-xl">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-lg font-bold text-stone-900">{t('purchases.bills.newPurchaseInvoice')}</h2>
-              <button onClick={() => setShowPurchaseModal(false)} className="text-stone-400 hover:text-stone-700 text-lg">✕</button>
-            </div>
-
-            <form onSubmit={handleCreatePurchase} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-medium text-stone-700">{t('purchases.bills.vendor')}</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickVendorModal(true)}
-                      className="text-[11px] text-amber-600 hover:text-amber-800 font-semibold hover:underline flex items-center gap-0.5"
-                    >
-                      <Plus className="h-3 w-3" /> {t('purchases.bills.quickAddVendor')}
-                    </button>
-                  </div>
-                  <select
-                    value={selectedVendorId}
-                    onChange={(e) => setSelectedVendorId(e.target.value)}
-                    required
-                    aria-label={t('purchases.bills.vendor')}
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="">{t('purchases.bills.selectVendor')}</option>
-                    {vendors
-                      .filter((v) => v.is_active !== false)
-                      .map((v) => (
-                        <option key={v.vendor_id} value={v.vendor_id}>
-                          {v.vendor_name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-medium text-stone-700 mb-1">{t('purchases.bills.invoiceNo')}</label>
-                  <input
-                    type="text"
-                    value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
-                    placeholder="e.g. INV-2026-88"
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t pt-3">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-stone-800">{t('purchases.bills.items')}</label>
-                  <Button type="button" variant="secondary" size="sm" onClick={handleAddLine} className="gap-1 text-xs">
-                    <Plus className="h-3 w-3" /> {t('purchases.bills.addItem')}
-                  </Button>
-                </div>
-
-                {lines.map((line, idx) => {
-                  const currentItem = items.find((i) => i.id === line.item_id);
-                  const itemPkgOptions = packagingUnits.filter((p) => (p.inventory_item_id || p.item_id) === line.item_id);
-                  const hasLegacyPack = Boolean(currentItem?.sec_unit && Number(currentItem.conversion_factor) > 1);
-                  const conv = Number(line.conversion_factor) || (line.use_pack ? Number(currentItem?.conversion_factor) || 1 : 1);
-
-                  const lineBaseQty = line.use_pack && conv > 0 ? (line.pack_quantity || 0) * conv : line.quantity;
-                  const lineBaseRate = line.use_pack && conv > 0 ? (line.pack_rate || 0) / conv : line.rate;
-                  const lineTotalVal = line.use_pack ? (line.pack_quantity || 0) * (line.pack_rate || 0) : line.quantity * line.rate;
-
-                  const isDeviation =
-                    line.previous_rate &&
-                    lineBaseRate > 0 &&
-                    Math.abs(lineBaseRate - line.previous_rate) / line.previous_rate > 0.2;
-                  const deviationPct = line.previous_rate
-                    ? Math.round(((lineBaseRate - line.previous_rate) / line.previous_rate) * 100)
-                    : 0;
-
-                  const secUnitSymbol = getLocalizedMasterSymbol(currentItem?.sec_unit, locale) || currentItem?.sec_unit?.symbol || (locale === 'hi' ? 'पैक' : 'Packs');
-                  const baseUnitSymbol = getLocalizedMasterSymbol(currentItem?.unit, locale) || currentItem?.unit?.symbol || (locale === 'hi' ? 'इकाई' : 'Units');
-                  const currentPackUnitLabel = line.pack_unit || secUnitSymbol;
-
-                  return (
-                    <div key={idx} className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2">
-                      {/* Top Row: Item Select, Packaging Selector, Qty, Rate, Total, Delete */}
-                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                        <SearchableSelect
-                          options={items.filter((i) => i.is_active !== false || i.id === line.item_id)}
-                          value={line.item_id}
-                          getSearchableText={(i) => getSearchableItemText(i, itemAliasesMap)}
-                          onChange={(selectedId) => {
-                            const next = [...lines];
-                            next[idx].item_id = selectedId;
-                            const selItem = items.find((it) => it.id === selectedId);
-                            const selPkgs = packagingUnits.filter((p) => (p.inventory_item_id || p.item_id) === selectedId);
-                            const defaultPkg = selPkgs.find((p) => p.is_default) || selPkgs[0];
-
-                            if (defaultPkg) {
-                              next[idx].use_pack = true;
-                              next[idx].is_custom_pack = false;
-                              next[idx].packaging_unit_id = defaultPkg.id;
-                              next[idx].brand_name = defaultPkg.brand_name || defaultPkg.packaging_name || '';
-                              next[idx].pack_unit = defaultPkg.pack_unit_name || defaultPkg.pack_unit?.symbol || defaultPkg.packaging_type || 'Pack';
-                              next[idx].conversion_factor = Number(defaultPkg.pack_size_in_base_units || defaultPkg.conversion_factor) || 1;
-                              next[idx].pack_rate = defaultPkg.default_purchase_rate ? Number(defaultPkg.default_purchase_rate) : undefined;
-                              next[idx].pack_quantity = 1;
-                            } else if (selItem?.secondary_unit_id && Number(selItem.conversion_factor) > 1) {
-                              next[idx].use_pack = true;
-                              next[idx].is_custom_pack = false;
-                              next[idx].packaging_unit_id = null;
-                              next[idx].conversion_factor = Number(selItem.conversion_factor);
-                              next[idx].pack_unit = selItem.sec_unit?.symbol || 'Pack';
-                              next[idx].pack_quantity = 1;
-                            } else {
-                              next[idx].use_pack = false;
-                              next[idx].is_custom_pack = false;
-                              next[idx].packaging_unit_id = null;
-                              next[idx].conversion_factor = 1;
-                              next[idx].quantity = 1;
-                            }
-
-                            const mem = vendorPriceMemory[selectedId];
-                            if (mem && mem.rate > 0) {
-                              next[idx].rate = mem.rate;
-                              next[idx].previous_rate = mem.rate;
-                              next[idx].previous_date = mem.date;
-                              if (next[idx].use_pack && next[idx].conversion_factor) {
-                                next[idx].pack_rate = mem.rate * Number(next[idx].conversion_factor);
-                              }
-                            } else {
-                              next[idx].previous_rate = undefined;
-                              next[idx].previous_date = undefined;
-                            }
-                            setLines(next);
-                          }}
-                          labelKey={(i) => (i.name_hi && locale === 'hi' ? i.name_hi : i.name)}
-                          secondaryLabelKey={(i) => i.item_code}
-                          placeholder={t('purchases.bills.selectItem')}
-                          required
-                          className="flex-1 min-w-[200px]"
-                          triggerClassName="bg-white p-2 text-xs"
-                          renderOption={(i) => {
-                            const itemAliases = itemAliasesMap[i.id] || [];
-                            return (
-                              <div className="w-full">
-                                <div className="flex items-center justify-between">
-                                  <div className="truncate font-medium">
-                                    {i.name_hi && locale === 'hi' ? i.name_hi : i.name}
-                                  </div>
-                                  <span className="font-mono text-[10px] text-stone-500 bg-stone-100 px-1 py-0.5 rounded ml-2 shrink-0">
-                                    {i.item_code}
-                                  </span>
-                                </div>
-                                {itemAliases.length > 0 && (
-                                  <div className="text-[10px] text-stone-400 truncate mt-0.5">
-                                    {itemAliases.slice(0, 3).join(', ')}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }}
-                        />
-
-                        {/* Packaging Selection Dropdown */}
-                        <div className="shrink-0">
-                          <select
-                            value={
-                              line.is_custom_pack
-                                ? 'CUSTOM'
-                                : line.packaging_unit_id
-                                ? line.packaging_unit_id
-                                : line.use_pack
-                                ? 'LEGACY'
-                                : 'BASE'
-                            }
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const next = [...lines];
-                              if (val === 'BASE') {
-                                next[idx].use_pack = false;
-                                next[idx].is_custom_pack = false;
-                                next[idx].packaging_unit_id = null;
-                                next[idx].conversion_factor = 1;
-                              } else if (val === 'CUSTOM') {
-                                next[idx].use_pack = true;
-                                next[idx].is_custom_pack = true;
-                                next[idx].packaging_unit_id = null;
-                                next[idx].pack_quantity = next[idx].pack_quantity || 1;
-                              } else if (val === 'LEGACY') {
-                                next[idx].use_pack = true;
-                                next[idx].is_custom_pack = false;
-                                next[idx].packaging_unit_id = null;
-                                next[idx].conversion_factor = Number(currentItem?.conversion_factor) || 1;
-                                next[idx].pack_unit = currentItem?.sec_unit?.symbol || 'Pack';
-                                next[idx].pack_quantity = next[idx].pack_quantity || 1;
-                              } else {
-                                const foundPkg = itemPkgOptions.find((p) => p.id === val);
-                                if (foundPkg) {
-                                  next[idx].use_pack = true;
-                                  next[idx].is_custom_pack = false;
-                                  next[idx].packaging_unit_id = foundPkg.id;
-                                  next[idx].brand_name = foundPkg.brand_name || foundPkg.packaging_name || '';
-                                  next[idx].pack_unit = foundPkg.pack_unit_name || foundPkg.pack_unit?.symbol || foundPkg.packaging_type || 'Pack';
-                                  next[idx].conversion_factor = Number(foundPkg.pack_size_in_base_units || foundPkg.conversion_factor) || 1;
-                                  if (foundPkg.default_purchase_rate) {
-                                    next[idx].pack_rate = Number(foundPkg.default_purchase_rate);
-                                  }
-                                  next[idx].pack_quantity = next[idx].pack_quantity || 1;
-                                }
-                              }
-                              setLines(next);
-                            }}
-                            className="rounded-md border border-stone-300 bg-white p-2 text-stone-800 text-xs font-medium focus:outline-none focus:border-amber-500 max-w-[150px]"
-                          >
-                            <option value="BASE">📏 {baseUnitSymbol} ({t('purchases.bills.base')})</option>
-                            {itemPkgOptions.map((pkg) => (
-                              <option key={pkg.id} value={pkg.id}>
-                                📦 {pkg.brand_name ? `${pkg.brand_name} - ` : ''}{pkg.pack_unit_name || pkg.packaging_name} ({pkg.pack_size_in_base_units || pkg.conversion_factor} {baseUnitSymbol})
-                              </option>
-                            ))}
-                            {hasLegacyPack && (
-                              <option value="LEGACY">
-                                📦 {secUnitSymbol} (×{currentItem?.conversion_factor})
-                              </option>
-                            )}
-                            <option value="CUSTOM">✨ + {t('purchases.bills.customPackaging')}</option>
-                          </select>
-                        </div>
-
-                        {/* Quantity Input */}
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            step="0.001"
-                            value={line.use_pack ? (line.pack_quantity || '') : (line.quantity || '')}
-                            onChange={(e) => {
-                              const next = [...lines];
-                              const val = parseFloat(e.target.value) || 0;
-                              if (line.use_pack) {
-                                next[idx].pack_quantity = val;
-                              } else {
-                                next[idx].quantity = val;
-                              }
-                              setLines(next);
-                            }}
-                            placeholder={t('purchases.bills.qty')}
-                            required
-                            className="w-16 rounded-md border border-stone-300 bg-white p-2 text-right text-stone-900 text-xs focus:outline-none"
-                          />
-                          <span className="px-1.5 py-1.5 bg-stone-200/80 border border-stone-300 rounded text-stone-700 font-mono text-[11px] font-bold">
-                            {line.use_pack ? currentPackUnitLabel : baseUnitSymbol}
-                          </span>
-                        </div>
-
-                        {/* Rate Input */}
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={line.use_pack ? (line.pack_rate || '') : (line.rate || '')}
-                            onChange={(e) => {
-                              const next = [...lines];
-                              const val = parseFloat(e.target.value) || 0;
-                              if (line.use_pack) {
-                                next[idx].pack_rate = val;
-                              } else {
-                                next[idx].rate = val;
-                              }
-                              setLines(next);
-                            }}
-                            placeholder={line.use_pack ? `₹ / ${currentPackUnitLabel}` : t('purchases.bills.rate')}
-                            required
-                            className={`w-24 rounded-md border p-2 text-right text-stone-900 text-xs focus:outline-none bg-white ${
-                              isDeviation ? 'border-amber-400 bg-amber-50/50' : 'border-stone-300'
-                            }`}
-                          />
-                        </div>
-
-                        <div className="w-24 text-right font-semibold text-stone-800">
-                          {formatINR(lineTotalVal)}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveLine(idx)}
-                          className="text-stone-400 hover:text-rose-600 p-1"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      {/* Custom Packaging Input Sub-Row if user selected Custom Pack */}
-                      {line.use_pack && line.is_custom_pack && (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-amber-50/50 p-2 rounded-md border border-amber-200 text-xs">
-                          <div>
-                            <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
-                              {t('purchases.bills.brandName')}
-                            </label>
-                            <input
-                              type="text"
-                              value={line.brand_name || ''}
-                              onChange={(e) => {
-                                const next = [...lines];
-                                next[idx].brand_name = e.target.value;
-                                setLines(next);
-                              }}
-                              placeholder="e.g. Fortune, Tata Salt"
-                              className="w-full rounded border border-amber-300 p-1 bg-white text-xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
-                              {t('purchases.bills.packUnitName')}
-                            </label>
-                            <input
-                              type="text"
-                              value={line.pack_unit || ''}
-                              onChange={(e) => {
-                                const next = [...lines];
-                                next[idx].pack_unit = e.target.value;
-                                setLines(next);
-                              }}
-                              placeholder="e.g. Tin, Can, Pkt, Box"
-                              className="w-full rounded border border-amber-300 p-1 bg-white text-xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-amber-900 mb-0.5">
-                              {t('purchases.bills.packSize')} ({baseUnitSymbol})
-                            </label>
-                            <input
-                              type="number"
-                              step="any"
-                              value={line.conversion_factor || ''}
-                              onChange={(e) => {
-                                const next = [...lines];
-                                next[idx].conversion_factor = parseFloat(e.target.value) || 1;
-                                setLines(next);
-                              }}
-                              placeholder="e.g. 15 for 15L tin"
-                              className="w-full rounded border border-amber-300 p-1 bg-white text-xs"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Live Packaging Conversion Strip */}
-                      {line.use_pack && (
-                        <div className="text-[11px] text-amber-900 bg-amber-50/80 border border-amber-200 rounded px-2.5 py-1 font-mono flex items-center justify-between flex-wrap gap-1">
-                          <span>
-                            {t('purchases.bills.conversion')} <strong>{line.brand_name ? `${line.brand_name} ` : ''}{line.pack_quantity || 0} {currentPackUnitLabel}</strong> × {conv} = <strong>{lineBaseQty.toFixed(2)} {baseUnitSymbol}</strong>
-                          </span>
-                          <span>
-                            {t('purchases.bills.derivedRate')} <strong>{formatINR(lineBaseRate)}</strong> / {baseUnitSymbol}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="pt-1 border-t border-stone-200/60 text-[11px] max-w-xs">
-                        <select
-                          value={line.destination_location_id || ''}
-                          onChange={(e) => {
-                            const next = [...lines];
-                            next[idx].destination_location_id = e.target.value;
-                            setLines(next);
-                          }}
-                          aria-label={t('purchases.bills.centralStoreRoom')}
-                          className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-800 text-[11px] focus:outline-none"
-                        >
-                          <option value="">{t('purchases.bills.centralStoreRoom')}</option>
-                          {locations.map((loc) => (
-                            <option key={loc.id} value={loc.id}>
-                              {t('purchases.bills.storeAt', { location: getLocalizedMasterName(loc, locale) || loc.name })} ({loc.code})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {line.previous_rate !== undefined && line.previous_rate > 0 && (
-                        <div className="flex items-center justify-between text-[11px] px-1 text-stone-500">
-                          <span>
-                            {t('purchases.bills.prevPurchase')} <strong className="text-stone-700">{formatINR(line.previous_rate)}</strong>
-                            {line.previous_date && ` ${t('purchases.bills.onDate', { date: line.previous_date })}`}
-                          </span>
-                          {isDeviation && (
-                            <span className="text-amber-700 font-bold bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
-                              ⚠️ {deviationPct > 0 ? t('purchases.bills.higherThanPrev', { pct: deviationPct }) : t('purchases.bills.lowerThanPrev', { pct: Math.abs(deviationPct) })}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between border-t pt-3">
-                <span className="font-bold text-stone-700 text-sm">{t('purchases.bills.invoiceTotal')}</span>
-                <span className="font-extrabold text-amber-600 text-lg">
-                  {formatINR(calculatePurchaseTotal())}
-                </span>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="secondary" onClick={() => setShowPurchaseModal(false)}>{t('purchases.bills.cancel')}</Button>
-                <Button type="submit" variant="amber" disabled={purchaseSaving}>
-                  {purchaseSaving ? t('purchases.bills.saving') : t('purchases.bills.postPurchase')}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Redesigned Simplified Purchase Invoice Modal */}
+      <PurchaseModal
+        isOpen={showPurchaseModal}
+        onClose={() => setShowPurchaseModal(false)}
+        vendors={vendors}
+        items={items}
+        groups={groups}
+        packagingUnits={packagingUnits}
+        categories={categories}
+        units={units}
+        locations={locations}
+        aliases={aliases}
+        invoices={invoices}
+        vendorPriceMemory={vendorPriceMemory}
+        businessDate={businessDate}
+        selectedVendorId={selectedVendorId}
+        setSelectedVendorId={setSelectedVendorId}
+        onOpenQuickVendor={() => setShowQuickVendorModal(true)}
+        onPurchaseSaved={(num) => {
+          setMessage({
+            type: 'success',
+            text: t('purchases.bills.invoiceRecorded', { number: num }),
+          });
+          loadData();
+        }}
+        onNewItemCreated={(newItem, newGroup) => {
+          setItems((prev) => {
+            if (prev.some((it) => it.id === newItem.id)) return prev;
+            return [...prev, newItem];
+          });
+          if (newGroup) {
+            setGroups((prev) => {
+              if (prev.some((grp) => grp.id === newGroup.id)) return prev;
+              return [...prev, newGroup];
+            });
+          }
+        }}
+      />
 
       {/* Record Payment Modal */}
       {showPaymentModal && (
@@ -1614,8 +1051,28 @@ function PurchasesContent() {
         isOpen={showQuickVendorModal}
         onClose={() => setShowQuickVendorModal(false)}
         onSaved={(newVendor) => {
-          loadData();
+          const newSummary: VendorOutstandingSummary = {
+            vendor_id: newVendor.id,
+            vendor_code: newVendor.vendor_code || '',
+            vendor_name: newVendor.name,
+            contact_person: newVendor.contact_person || undefined,
+            phone: newVendor.phone || undefined,
+            alternate_phone: newVendor.alternate_phone || undefined,
+            total_purchased: 0,
+            total_paid: 0,
+            outstanding_balance: 0,
+            last_purchase_date: undefined,
+            is_active: newVendor.is_active !== false,
+            payment_terms: newVendor.payment_terms || 'Net 7 Days',
+            payment_frequency: newVendor.payment_frequency || 'Weekly',
+            supplier_categories: newVendor.supplier_categories || [],
+          };
+          setVendors((prev) => {
+            if (prev.some((v) => v.vendor_id === newVendor.id)) return prev;
+            return [...prev, newSummary];
+          });
           setSelectedVendorId(newVendor.id);
+          loadData();
           setMessage({
             type: 'success',
             text: `Vendor "${newVendor.name}" (${newVendor.vendor_code}) created and selected!`,

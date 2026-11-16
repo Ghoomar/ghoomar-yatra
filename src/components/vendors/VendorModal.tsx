@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { createClient } from '@/lib/supabase/client';
 import { Vendor } from '@/lib/types/database';
-import { X, Check, Building2, AlertCircle } from 'lucide-react';
+import { X, Building2, AlertCircle, Plus } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
-import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 
 interface VendorModalProps {
   isOpen: boolean;
@@ -15,33 +14,12 @@ interface VendorModalProps {
   onSaved?: (vendor: Vendor) => void;
 }
 
-const DEFAULT_CATEGORIES: { name: string; name_hi: string }[] = [
-  { name: 'Vegetables & Fruits', name_hi: 'फल और सब्ज़ियाँ' },
-  { name: 'Groceries & Spices', name_hi: 'किराना और मसाले' },
-  { name: 'Dairy & Milk', name_hi: 'डेयरी और दूध' },
-  { name: 'LPG & Fuel', name_hi: 'एलपीजी और ईंधन' },
-  { name: 'Beverages', name_hi: 'बेवरेज' },
-  { name: 'Disposables & Packaging', name_hi: 'डिस्पोजेबल और पैकेजिंग' },
-  { name: 'Maintenance & Hardware', name_hi: 'मेंटेनेंस और हार्डवेयर' },
-  { name: 'Uniforms & Linens', name_hi: 'यूनिफॉर्म और लिनन' },
-  { name: 'Cleaning & Sanitation', name_hi: 'सफाई और स्वच्छता' },
-  { name: 'Other', name_hi: 'अन्य' },
-];
-
 const PAYMENT_TERMS_CONFIG = [
-  { id: 'Immediate / Cash on Delivery', en: 'Immediate / Cash on Delivery', hi: 'तत्काल / डिलीवरी पर नकद' },
   { id: 'Net 7 Days', en: 'Net 7 Days', hi: '7 दिन की अवधि' },
+  { id: 'Immediate / Cash on Delivery', en: 'Immediate / Cash on Delivery', hi: 'तत्काल / डिलीवरी पर नकद' },
   { id: 'Net 15 Days', en: 'Net 15 Days', hi: '15 दिन की अवधि' },
   { id: 'Net 30 Days', en: 'Net 30 Days', hi: '30 दिन की अवधि' },
   { id: 'Advance Payment', en: 'Advance Payment', hi: 'एडवांस पेमेंट' },
-];
-
-const PAYMENT_FREQUENCY_CONFIG = [
-  { id: 'Per Delivery', en: 'Per Delivery', hi: 'प्रत्येक डिलीवरी पर' },
-  { id: 'Weekly', en: 'Weekly', hi: 'साप्ताहिक' },
-  { id: 'Bi-weekly', en: 'Bi-weekly', hi: 'हर 15 दिन' },
-  { id: 'Monthly', en: 'Monthly', hi: 'मासिक' },
-  { id: 'As Needed', en: 'As Needed', hi: 'ज़रूरत के अनुसार' },
 ];
 
 export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalProps) {
@@ -49,85 +27,81 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
   const supabase = createClient();
   const isEdit = Boolean(vendor?.id);
 
+  // Form Fields
   const [vendorCode, setVendorCode] = useState('');
-  const [name, setName] = useState('');
-  const [contactPerson, setContactPerson] = useState('');
+  const [vendorName, setVendorName] = useState('');
   const [phone, setPhone] = useState('');
-  const [alternatePhone, setAlternatePhone] = useState('');
   const [address, setAddress] = useState('');
-  const [paymentTerms, setPaymentTerms] = useState('Net 7 Days');
-  const [paymentFrequency, setPaymentFrequency] = useState('Weekly');
-  const [preferredPaymentMethodId, setPreferredPaymentMethodId] = useState('');
-  const [supplierCategories, setSupplierCategories] = useState<string[]>([]);
-  const [customCategory, setCustomCategory] = useState('');
-  const [notes, setNotes] = useState('');
-  const [isActive, setIsActive] = useState(true);
 
-  const [paymentMethods, setPaymentMethods] = useState<{ id: string; name: string; name_hi?: string | null }[]>([]);
-  const [availableCategories, setAvailableCategories] = useState<{ name: string; name_hi?: string | null }[]>(DEFAULT_CATEGORIES);
+  // Expandable Optional Fields
+  const [showShopName, setShowShopName] = useState(false);
+  const [shopName, setShopName] = useState('');
+
+  const [showAltPhone, setShowAltPhone] = useState(false);
+  const [alternatePhone, setAlternatePhone] = useState('');
+
+  const [showPaymentTerms, setShowPaymentTerms] = useState(false);
+  const [paymentTerms, setPaymentTerms] = useState('Net 7 Days');
+
+  // Internal states
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Fetch payment methods and active vendor categories
+  // Input refs for sequential keyboard Enter navigation
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
+  const shopNameInputRef = useRef<HTMLInputElement>(null);
+  const altPhoneInputRef = useRef<HTMLInputElement>(null);
+  const paymentTermsSelectRef = useRef<HTMLSelectElement>(null);
+
+  // Auto-focus on vendorName when modal opens
   useEffect(() => {
-    async function fetchMasters() {
-      const [{ data: pmData }, { data: catData }] = await Promise.all([
-        supabase.from('payment_methods').select('id, name, name_hi').order('name'),
-        supabase.from('vendor_categories').select('name, name_hi').eq('is_active', true).order('name'),
-      ]);
-      if (pmData) setPaymentMethods(pmData);
-      if (catData && catData.length > 0) {
-        setAvailableCategories(catData);
-      }
-    }
     if (isOpen) {
-      fetchMasters();
-    }
-  }, [isOpen, supabase]);
+      setErrorMessage(null);
+      if (vendor) {
+        setVendorCode(vendor.vendor_code || '');
+        // If contact_person exists, vendor.name was the shop name and contact_person was vendor's person name
+        if (vendor.contact_person && vendor.contact_person !== vendor.name) {
+          setVendorName(vendor.contact_person);
+          setShopName(vendor.name || '');
+          setShowShopName(true);
+        } else {
+          setVendorName(vendor.name || '');
+          setShopName('');
+          setShowShopName(false);
+        }
+        setPhone(vendor.phone || '');
+        setAddress(vendor.address || '');
+        setAlternatePhone(vendor.alternate_phone || '');
+        setShowAltPhone(Boolean(vendor.alternate_phone));
+        setPaymentTerms(vendor.payment_terms || 'Net 7 Days');
+        setShowPaymentTerms(Boolean(vendor.payment_terms && vendor.payment_terms !== 'Net 7 Days'));
+      } else {
+        // Reset form for new vendor
+        setVendorName('');
+        setPhone('');
+        setAddress('');
+        setShopName('');
+        setShowShopName(false);
+        setAlternatePhone('');
+        setShowAltPhone(false);
+        setPaymentTerms('Net 7 Days');
+        setShowPaymentTerms(false);
+        generateNextVendorCode();
+      }
 
-  // Initialize or generate vendor code
-  useEffect(() => {
-    if (!isOpen) return;
-    setErrorMessage(null);
-
-    if (vendor) {
-      setVendorCode(vendor.vendor_code || '');
-      setName(vendor.name || '');
-      setContactPerson(vendor.contact_person || '');
-      setPhone(vendor.phone || '');
-      setAlternatePhone(vendor.alternate_phone || '');
-      setAddress(vendor.address || '');
-      setPaymentTerms(vendor.payment_terms || 'Net 7 Days');
-      setPaymentFrequency(vendor.payment_frequency || 'Weekly');
-      setPreferredPaymentMethodId(vendor.preferred_payment_method_id || '');
-      setSupplierCategories(vendor.supplier_categories || []);
-      setNotes(vendor.notes || '');
-      setIsActive(vendor.is_active !== false);
-    } else {
-      // Reset form
-      setName('');
-      setContactPerson('');
-      setPhone('');
-      setAlternatePhone('');
-      setAddress('');
-      setPaymentTerms('Net 7 Days');
-      setPaymentFrequency('Weekly');
-      setPreferredPaymentMethodId('');
-      setSupplierCategories([]);
-      setNotes('');
-      setIsActive(true);
-
-      // Generate next vendor code
-      generateNextVendorCode();
+      // Automatically focus on Name of Vendor
+      const timer = setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, vendor]);
 
   const generateNextVendorCode = async () => {
     try {
-      const { data } = await supabase
-        .from('vendors')
-        .select('vendor_code');
-
+      const { data } = await supabase.from('vendors').select('vendor_code');
       let maxNum = 0;
       if (data && data.length > 0) {
         for (const row of data) {
@@ -146,33 +120,48 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
     }
   };
 
-  const toggleCategory = (catName: string) => {
-    if (supplierCategories.includes(catName)) {
-      setSupplierCategories(supplierCategories.filter((c) => c !== catName));
+  // Keyboard Enter navigation handler
+  const handleKeyDown = (e: React.KeyboardEvent, currentField: 'name' | 'phone' | 'address' | 'shopName' | 'altPhone' | 'paymentTerms') => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+
+    // Determine the visible sequence of fields
+    const sequence: { key: string; ref: React.RefObject<HTMLElement | null> }[] = [
+      { key: 'name', ref: nameInputRef },
+      { key: 'phone', ref: phoneInputRef },
+      { key: 'address', ref: addressInputRef },
+    ];
+
+    if (showShopName) sequence.push({ key: 'shopName', ref: shopNameInputRef });
+    if (showAltPhone) sequence.push({ key: 'altPhone', ref: altPhoneInputRef });
+    if (showPaymentTerms) sequence.push({ key: 'paymentTerms', ref: paymentTermsSelectRef });
+
+    const currentIndex = sequence.findIndex((item) => item.key === currentField);
+
+    if (currentIndex !== -1 && currentIndex < sequence.length - 1) {
+      // Focus next visible field
+      const nextItem = sequence[currentIndex + 1];
+      nextItem.ref.current?.focus();
     } else {
-      setSupplierCategories([...supplierCategories, catName]);
+      // Last visible field: trigger submit
+      handleSubmit(e);
     }
   };
 
-  const handleAddCustomCategory = (e: React.KeyboardEvent | React.MouseEvent) => {
-    if ('key' in e && e.key !== 'Enter') return;
-    e.preventDefault();
-    const trimmed = customCategory.trim();
-    if (!trimmed) return;
-
-    if (!supplierCategories.includes(trimmed)) {
-      setSupplierCategories([...supplierCategories, trimmed]);
-    }
-    if (!availableCategories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
-      setAvailableCategories([...availableCategories, { name: trimmed }]);
-    }
-    setCustomCategory('');
+  const getEnterKeyHint = (fieldKey: 'name' | 'phone' | 'address' | 'shopName' | 'altPhone' | 'paymentTerms'): 'next' | 'done' => {
+    const sequence = ['name', 'phone', 'address'];
+    if (showShopName) sequence.push('shopName');
+    if (showAltPhone) sequence.push('altPhone');
+    if (showPaymentTerms) sequence.push('paymentTerms');
+    const idx = sequence.indexOf(fieldKey);
+    return idx === sequence.length - 1 ? 'done' : 'next';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    if (!vendorName.trim()) {
       setErrorMessage(locale === 'hi' ? 'कृपया वेंडर का नाम भरें।' : 'Vendor name is required.');
+      nameInputRef.current?.focus();
       return;
     }
 
@@ -180,19 +169,28 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
     setErrorMessage(null);
 
     try {
+      const trimmedName = vendorName.trim();
+      const trimmedShop = shopName.trim();
+
+      // Canonical database mapping:
+      // If shop name is entered: name = shopName, contact_person = vendorName
+      // If no shop name is entered: name = vendorName, contact_person = null
+      const finalName = trimmedShop || trimmedName;
+      const finalContact = trimmedShop ? trimmedName : (isEdit && vendor?.contact_person ? vendor.contact_person : null);
+
       const payload: Partial<Vendor> = {
-        name: name.trim(),
+        name: finalName,
+        contact_person: finalContact || undefined,
         vendor_code: vendorCode.trim() || undefined,
-        contact_person: contactPerson.trim() || undefined,
         phone: phone.trim() || undefined,
         alternate_phone: alternatePhone.trim() || undefined,
         address: address.trim() || undefined,
-        payment_terms: paymentTerms,
-        payment_frequency: paymentFrequency,
-        preferred_payment_method_id: preferredPaymentMethodId || undefined,
-        supplier_categories: supplierCategories,
-        notes: notes.trim() || undefined,
-        is_active: isActive,
+        payment_terms: paymentTerms || 'Net 7 Days',
+        payment_frequency: vendor?.payment_frequency || 'Weekly',
+        preferred_payment_method_id: vendor?.preferred_payment_method_id || undefined,
+        supplier_categories: vendor?.supplier_categories || [],
+        notes: vendor?.notes || undefined,
+        is_active: vendor?.is_active !== false,
         updated_at: new Date().toISOString(),
       };
 
@@ -237,267 +235,228 @@ export function VendorModal({ isOpen, onClose, vendor, onSaved }: VendorModalPro
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-xl max-w-2xl w-full my-8 shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-amber-100 text-amber-800 rounded-lg">
-              <Building2 className="h-5 w-5" />
+    <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div className="bg-white rounded-xl max-w-md w-full shadow-2xl border border-stone-200 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-5 py-3.5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-100 text-amber-800 rounded-lg">
+              <Building2 className="h-4 w-4" />
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-stone-900">
-                {isEdit ? t('purchases.vendors.modal.titleEdit') : t('purchases.vendors.modal.titleNew')}
-              </h2>
-            </div>
+            <h2 className="text-sm sm:text-base font-bold text-stone-900">
+              {isEdit ? t('purchases.vendors.modal.titleEdit') : t('purchases.vendors.modal.titleNew')}
+            </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-5 space-y-3.5 text-xs">
           {errorMessage && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 flex items-center gap-2">
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 flex items-center gap-2 text-xs">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
               <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* Section 1: Basic Identification */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5 flex items-center gap-2">
-              <span>{t('purchases.vendors.modal.vendorName')}</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block font-medium text-stone-700 mb-1">
-                  {t('purchases.vendors.modal.vendorName')} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={locale === 'hi' ? 'उदा. शर्मा फ्रेश वेजिटेबल्स' : 'e.g. Sharma Fresh Vegetables'}
-                  className="w-full rounded-md border border-stone-300 p-2.5 text-stone-900 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">
-                  {t('purchases.vendors.modal.vendorCode')}
-                </label>
-                <input
-                  type="text"
-                  value={vendorCode}
-                  onChange={(e) => setVendorCode(e.target.value)}
-                  placeholder="e.g. VEND-001"
-                  className="w-full rounded-md border border-stone-300 bg-stone-50 p-2.5 font-mono text-stone-800 text-sm focus:outline-none focus:border-amber-500"
-                />
-                <span className="text-[10px] text-stone-400 mt-0.5 block">{t('common.autoGenerated')}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.contactPerson')}</label>
-                <input
-                  type="text"
-                  value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)}
-                  placeholder={locale === 'hi' ? 'उदा. रमेश शर्मा' : 'e.g. Ramesh Sharma'}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.phone')}</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91 98765 43210"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.altPhone')}</label>
-                <input
-                  type="tel"
-                  value={alternatePhone}
-                  onChange={(e) => setAlternatePhone(e.target.value)}
-                  placeholder={locale === 'hi' ? 'वैकल्पिक फ़ोन नंबर' : 'Optional backup phone'}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.address')}</label>
-              <textarea
-                rows={2}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder={locale === 'hi' ? 'दुकान/मंडी नंबर, सड़क, शहर...' : 'Shop/Mandi number, street, city...'}
-                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 resize-none"
-              />
-            </div>
+          {/* 1. Mandatory: Name of Vendor */}
+          <div>
+            <label className="block font-semibold text-stone-800 mb-1">
+              {t('purchases.vendors.modal.vendorName')} <span className="text-rose-500">*</span>
+            </label>
+            <input
+              ref={nameInputRef}
+              type="text"
+              required
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'name')}
+              enterKeyHint={getEnterKeyHint('name')}
+              placeholder={t('purchases.vendors.modal.vendorNamePlaceholder')}
+              className="w-full rounded-md border border-stone-300 p-2.5 text-stone-900 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+            />
           </div>
 
-          {/* Section 2: Supplier Categories */}
-          <div className="space-y-2">
-            <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5">
-              {t('purchases.vendors.modal.categoriesLabel')}
-            </h3>
+          {/* 2. Optional: Phone Number */}
+          <div>
+            <label className="block font-medium text-stone-700 mb-1">
+              {t('purchases.vendors.modal.phone')}
+            </label>
+            <input
+              ref={phoneInputRef}
+              type="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'phone')}
+              enterKeyHint={getEnterKeyHint('phone')}
+              placeholder={t('purchases.vendors.modal.phonePlaceholder')}
+              className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
+            />
+          </div>
 
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {availableCategories.map((cat) => {
-                const isSelected = supplierCategories.includes(cat.name);
-                return (
-                  <button
-                    type="button"
-                    key={cat.name}
-                    onClick={() => toggleCategory(cat.name)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 ${
-                      isSelected
-                        ? 'bg-amber-100 text-amber-900 border-amber-300 font-semibold'
-                        : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
-                    }`}
-                  >
-                    {isSelected && <Check className="h-3 w-3 text-amber-700" />}
-                    {getLocalizedMasterName(cat, locale)}
-                  </button>
-                );
-              })}
-            </div>
+          {/* 3. Optional: Address */}
+          <div>
+            <label className="block font-medium text-stone-700 mb-1">
+              {t('purchases.vendors.modal.address')}
+            </label>
+            <input
+              ref={addressInputRef}
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, 'address')}
+              enterKeyHint={getEnterKeyHint('address')}
+              placeholder={t('purchases.vendors.modal.addressPlaceholder')}
+              className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
+            />
+          </div>
 
-            <div className="flex items-center gap-2 pt-1">
+          {/* Optional Expandable: Shop Name */}
+          {showShopName ? (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-medium text-stone-700">{t('purchases.vendors.modal.shopName')}</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowShopName(false);
+                    setShopName('');
+                  }}
+                  className="text-[10px] text-stone-400 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              </div>
               <input
+                ref={shopNameInputRef}
                 type="text"
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-                onKeyDown={handleAddCustomCategory}
-                placeholder={t('purchases.vendors.modal.customCategoryPlaceholder')}
-                className="rounded-md border border-stone-300 px-2 py-1 text-xs text-stone-900 w-48 focus:outline-none focus:border-amber-500"
+                value={shopName}
+                onChange={(e) => setShopName(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, 'shopName')}
+                enterKeyHint={getEnterKeyHint('shopName')}
+                placeholder={t('purchases.vendors.modal.shopPlaceholder')}
+                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
               />
+            </div>
+          ) : (
+            <div>
               <button
                 type="button"
-                onClick={handleAddCustomCategory}
-                className="px-2.5 py-1 bg-stone-100 text-stone-700 rounded-md hover:bg-stone-200 font-medium text-xs"
+                onClick={() => {
+                  setShowShopName(true);
+                  setTimeout(() => shopNameInputRef.current?.focus(), 50);
+                }}
+                className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold hover:underline flex items-center gap-1"
               >
-                + {t('common.add')}
+                <Plus className="h-3 w-3" />
+                {t('purchases.vendors.modal.addShopName')}
               </button>
             </div>
-          </div>
+          )}
 
-          {/* Section 3: Commercial & Payment Terms */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5">
-              {t('purchases.vendors.modal.paymentTerms')}
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.paymentTerms')}</label>
-                <select
-                  value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                >
-                  {PAYMENT_TERMS_CONFIG.map((term) => (
-                    <option key={term.id} value={term.id}>
-                      {locale === 'hi' ? term.hi : term.en}
-                    </option>
-                  ))}
-                  <option value="Custom">{locale === 'hi' ? 'अन्य शर्तें' : 'Custom Terms'}</option>
-                </select>
-                {paymentTerms === 'Custom' && (
-                  <input
-                    type="text"
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    placeholder={locale === 'hi' ? 'शर्तें दर्ज करें...' : 'Specify custom terms...'}
-                    className="mt-1.5 w-full rounded-md border border-stone-300 p-1.5 text-stone-900 focus:outline-none focus:border-amber-500 text-xs"
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.paymentFrequency')}</label>
-                <select
-                  value={paymentFrequency}
-                  onChange={(e) => setPaymentFrequency(e.target.value)}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                >
-                  {PAYMENT_FREQUENCY_CONFIG.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {locale === 'hi' ? f.hi : f.en}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.preferredPaymentMethod')}</label>
-                <select
-                  value={preferredPaymentMethodId}
-                  onChange={(e) => setPreferredPaymentMethodId(e.target.value)}
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                >
-                  <option value="">{t('purchases.vendors.modal.selectMethod')}</option>
-                  {paymentMethods.map((pm) => (
-                    <option key={pm.id} value={pm.id}>
-                      {getLocalizedMasterName(pm, locale) || pm.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 4: Notes & Status */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-stone-900 text-sm border-b border-stone-100 pb-1.5">
-              {t('purchases.vendors.modal.notes')}
-            </h3>
-
+          {/* Optional Expandable: Alternate Phone */}
+          {showAltPhone ? (
             <div>
-              <label className="block font-medium text-stone-700 mb-1">{t('purchases.vendors.modal.notes')}</label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={locale === 'hi' ? 'अतिरिक्त वेंडर विवरण, बैंक विवरण, आदि...' : 'Optional notes...'}
-                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 resize-none"
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-medium text-stone-700">{t('purchases.vendors.modal.altPhone')}</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAltPhone(false);
+                    setAlternatePhone('');
+                  }}
+                  className="text-[10px] text-stone-400 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <input
+                ref={altPhoneInputRef}
+                type="tel"
+                inputMode="tel"
+                value={alternatePhone}
+                onChange={(e) => setAlternatePhone(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, 'altPhone')}
+                enterKeyHint={getEnterKeyHint('altPhone')}
+                placeholder={t('purchases.vendors.modal.phonePlaceholder')}
+                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
               />
             </div>
-
-            <div className="flex items-center justify-between p-3 bg-stone-50 rounded-lg border border-stone-200">
-              <div className="font-semibold text-stone-800">{t('purchases.vendors.modal.isActive')}</div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-              </label>
+          ) : (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAltPhone(true);
+                  setTimeout(() => altPhoneInputRef.current?.focus(), 50);
+                }}
+                className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold hover:underline flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" />
+                {t('purchases.vendors.modal.addAltPhone')}
+              </button>
             </div>
-          </div>
+          )}
 
-          {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-stone-200">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+          {/* Optional Expandable: Payment Terms */}
+          {showPaymentTerms ? (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-medium text-stone-700">{t('purchases.vendors.modal.paymentTerms')}</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPaymentTerms(false);
+                    setPaymentTerms('Net 7 Days');
+                  }}
+                  className="text-[10px] text-stone-400 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              </div>
+              <select
+                ref={paymentTermsSelectRef}
+                value={paymentTerms}
+                onChange={(e) => setPaymentTerms(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, 'paymentTerms')}
+                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500"
+              >
+                {PAYMENT_TERMS_CONFIG.map((term) => (
+                  <option key={term.id} value={term.id}>
+                    {locale === 'hi' ? term.hi : term.en}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPaymentTerms(true);
+                  setTimeout(() => paymentTermsSelectRef.current?.focus(), 50);
+                }}
+                className="text-[11px] text-amber-700 hover:text-amber-900 font-semibold hover:underline flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" />
+                {t('purchases.vendors.modal.addPaymentTerms')}
+              </button>
+            </div>
+          )}
+
+          {/* Footer Buttons */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200">
+            <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={saving}>
               {t('purchases.vendors.modal.cancel')}
             </Button>
-            <Button type="submit" variant="amber" disabled={saving} className="gap-1.5">
+            <Button type="submit" variant="amber" size="sm" disabled={saving} className="gap-1.5 font-bold">
               {saving ? t('purchases.vendors.modal.saving') : t('purchases.vendors.modal.save')}
             </Button>
           </div>
