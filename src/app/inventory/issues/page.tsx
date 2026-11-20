@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { createClient } from '@/lib/supabase/client';
@@ -794,14 +795,13 @@ export default function StoreIssuesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-2.5 py-1 shadow-xs">
-            <Clock className="h-4 w-4 text-stone-400" />
+          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-2.5 py-0.5 shadow-xs">
             <span className="text-xs text-stone-500">{t('inventory.issues.issueDate')}</span>
-            <input
-              type="date"
+            <DatePicker
               value={businessDate}
-              onChange={(e) => setBusinessDate(e.target.value)}
-              className="text-xs font-mono font-semibold bg-transparent text-stone-800 focus:outline-none"
+              onChange={(val) => setBusinessDate(val)}
+              clearable={false}
+              triggerClassName="border-0 shadow-none bg-transparent p-0 text-xs font-semibold text-stone-800"
             />
           </div>
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-1.5 shadow-xs">

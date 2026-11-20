@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { createClient } from '@/lib/supabase/client';
 import { getTodayBusinessDate, getYesterdayBusinessDate, formatINR } from '@/lib/utils';
 import { 
@@ -284,13 +285,13 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-3 py-1.5 shadow-2xs text-xs font-medium">
+          <div className="flex items-center gap-1.5 bg-white border border-stone-200 rounded-lg px-2.5 py-1 shadow-2xs text-xs font-medium">
             <span className="text-stone-500">{t('dashboard.dateLabel')}</span>
-            <input
-              type="date"
+            <DatePicker
               value={businessDate}
-              onChange={(e) => setBusinessDate(e.target.value)}
-              className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
+              onChange={(val) => setBusinessDate(val)}
+              clearable={false}
+              triggerClassName="border-0 shadow-none bg-transparent p-0 font-semibold text-stone-900"
             />
           </div>
           <Button variant="outline" size="sm" onClick={loadDashboardData} disabled={loading} title={t('dashboard.refreshTitle')}>

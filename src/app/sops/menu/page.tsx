@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
@@ -644,18 +645,20 @@ function MenuMasterContent() {
           ))}
           {datePreset === 'custom' && (
             <div className="flex items-center gap-1 ml-2">
-              <input
-                type="date"
+              <DatePicker
                 value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="px-2 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
+                onChange={(val) => setCustomFrom(val)}
+                clearable={false}
+                max={customTo || undefined}
+                triggerClassName="px-1.5 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
               />
-              <span className="text-stone-400">to</span>
-              <input
-                type="date"
+              <span className="text-stone-400 text-xs">to</span>
+              <DatePicker
                 value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="px-2 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
+                onChange={(val) => setCustomTo(val)}
+                clearable={false}
+                min={customFrom || undefined}
+                triggerClassName="px-1.5 py-0.5 border border-[#E7E2D8] rounded text-xs bg-white text-stone-800"
               />
             </div>
           )}

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatNumber, formatDisplayDate } from '@/lib/utils';
@@ -760,14 +761,14 @@ async function fetchPagedRows<T = any>(
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-2 bg-white border border-[#E7E2D8] rounded-xl px-3 py-1.5 shadow-xs text-xs font-medium">
+          <div className="flex items-center gap-2 bg-white border border-[#E7E2D8] rounded-xl px-2.5 py-1 shadow-xs text-xs font-medium">
             <span className="text-stone-500">{t('reports.dateLabel')}</span>
-            <input
-              type="date"
+            <DatePicker
               data-testid="header-date-input"
               value={salesSelectedDate || ''}
-              onChange={(e) => handleSalesSelectDate(e.target.value ? e.target.value : null)}
-              className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer"
+              onChange={(val) => handleSalesSelectDate(val ? val : null)}
+              clearable={true}
+              triggerClassName="border-0 shadow-none bg-transparent p-0 font-semibold text-stone-900"
             />
             {salesSelectedDate && (
               <button

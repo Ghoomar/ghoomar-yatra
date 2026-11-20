@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { formatINR, getTodayBusinessDate, formatDisplayDate } from '@/lib/utils';
 import { SalesAnalyticsResponse } from '@/lib/types/sales';
@@ -423,26 +424,28 @@ export function SalesAnalyticsDashboard({
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-xs">
-                <div className="flex items-center bg-[#FAF8F5] border border-stone-200 rounded-lg px-2 py-1 shadow-2xs">
+                <div className="flex items-center bg-[#FAF8F5] border border-stone-200 rounded-lg px-2 py-0.5 shadow-2xs">
                   <span className="text-[10px] font-semibold text-stone-500 mr-1">
                     {t('finance.sales.analytics.drilldownBanner.from')}
                   </span>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={activeStartDate}
-                    onChange={(e) => handleCustomStartChange(e.target.value)}
-                    className="text-xs font-semibold text-stone-800 bg-transparent border-0 focus:outline-none cursor-pointer"
+                    onChange={(val) => handleCustomStartChange(val)}
+                    clearable={false}
+                    max={activeEndDate || undefined}
+                    triggerClassName="border-0 shadow-none bg-transparent p-0 font-semibold text-stone-800 text-xs"
                   />
                 </div>
-                <div className="flex items-center bg-[#FAF8F5] border border-stone-200 rounded-lg px-2 py-1 shadow-2xs">
+                <div className="flex items-center bg-[#FAF8F5] border border-stone-200 rounded-lg px-2 py-0.5 shadow-2xs">
                   <span className="text-[10px] font-semibold text-stone-500 mr-1">
                     {t('finance.sales.analytics.drilldownBanner.to')}
                   </span>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={activeEndDate}
-                    onChange={(e) => handleCustomEndChange(e.target.value)}
-                    className="text-xs font-semibold text-stone-800 bg-transparent border-0 focus:outline-none cursor-pointer"
+                    onChange={(val) => handleCustomEndChange(val)}
+                    clearable={false}
+                    min={activeStartDate || undefined}
+                    triggerClassName="border-0 shadow-none bg-transparent p-0 font-semibold text-stone-800 text-xs"
                   />
                 </div>
               </div>

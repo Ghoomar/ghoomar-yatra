@@ -16,6 +16,7 @@ import {
 } from "@/components/marketing/shared";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { Badge } from "@/components/ui/Badge";
 import { formatINR, formatNumber, formatNullablePrice } from "@/lib/utils";
 import {
@@ -193,26 +194,28 @@ export default function TaxiReport() {
           <div className="pt-2 border-t border-stone-200/80 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 text-xs font-medium text-stone-700">
               <span>{t("marketing.from")}:</span>
-              <input
-                type="date"
+              <DatePicker
                 value={from}
-                onChange={(e) => {
-                  setFrom(e.target.value);
+                onChange={(val) => {
+                  setFrom(val);
                   setPage(1);
                 }}
-                className="h-9 px-3 rounded-lg border border-stone-300 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                clearable={false}
+                max={to || undefined}
+                triggerClassName="h-9 px-2.5 rounded-lg border border-stone-300 text-xs text-stone-900"
               />
             </div>
             <div className="flex items-center gap-2 text-xs font-medium text-stone-700">
               <span>{t("marketing.to")}:</span>
-              <input
-                type="date"
+              <DatePicker
                 value={to}
-                onChange={(e) => {
-                  setTo(e.target.value);
+                onChange={(val) => {
+                  setTo(val);
                   setPage(1);
                 }}
-                className="h-9 px-3 rounded-lg border border-stone-300 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                clearable={false}
+                min={from || undefined}
+                triggerClassName="h-9 px-2.5 rounded-lg border border-stone-300 text-xs text-stone-900"
               />
             </div>
           </div>

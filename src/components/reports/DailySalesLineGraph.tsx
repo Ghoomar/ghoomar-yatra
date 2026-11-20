@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatDisplayDate } from '@/lib/utils';
@@ -402,28 +403,28 @@ export function DailySalesLineGraph({
 
             {/* Custom range date pickers */}
             {filterMode === 'custom' && (
-              <div className="flex items-center gap-1.5 bg-white border border-[#E7E2D8] rounded-lg px-2.5 py-1 shadow-xs">
+              <div className="flex items-center gap-1.5 bg-white border border-[#E7E2D8] rounded-lg px-2 py-1 shadow-xs">
                 <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.from')}</span>
-                <input
-                  type="date"
+                <DatePicker
                   value={activeStartDate}
-                  onChange={(e) => {
-                    const newStart = e.target.value;
+                  onChange={(newStart) => {
                     onSelectDate?.(null);
                     onPeriodChange?.(newStart, activeEndDate, 'custom', selectedMonth);
                   }}
-                  className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
+                  clearable={false}
+                  max={activeEndDate || undefined}
+                  triggerClassName="border-0 shadow-none bg-transparent p-0 font-semibold text-stone-900 text-xs"
                 />
                 <span className="text-stone-400 font-medium text-[11px]">{t('reports.salesLineGraph.to')}</span>
-                <input
-                  type="date"
+                <DatePicker
                   value={activeEndDate}
-                  onChange={(e) => {
-                    const newEnd = e.target.value;
+                  onChange={(newEnd) => {
                     onSelectDate?.(null);
                     onPeriodChange?.(activeStartDate, newEnd, 'custom', selectedMonth);
                   }}
-                  className="bg-transparent font-semibold text-stone-900 focus:outline-none cursor-pointer text-xs"
+                  clearable={false}
+                  min={activeStartDate || undefined}
+                  triggerClassName="border-0 shadow-none bg-transparent p-0 font-semibold text-stone-900 text-xs"
                 />
               </div>
             )}

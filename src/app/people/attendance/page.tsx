@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import {
   UploadCloud,
@@ -294,11 +295,11 @@ export default function BiometricAttendancePage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
 
-            <input
-              type="date"
+            <DatePicker
               value={businessDate}
-              onChange={(e) => setBusinessDate(e.target.value)}
-              className="px-2 text-xs font-semibold text-stone-900 bg-transparent border-0 focus:outline-none cursor-pointer"
+              onChange={(val) => setBusinessDate(val)}
+              clearable={false}
+              triggerClassName="border-0 shadow-none bg-transparent p-0 text-xs font-semibold text-stone-900"
             />
 
             <Button

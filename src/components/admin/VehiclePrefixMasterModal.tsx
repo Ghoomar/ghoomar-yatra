@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { VehicleRegistrationPrefix } from '@/lib/types/database';
@@ -1342,21 +1343,12 @@ export function VehiclePrefixMasterModal({
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-xs">
-                    <Calendar className="h-3.5 w-3.5 text-stone-400" />
-                    <input
-                      type="date"
+                    <DatePicker
                       value={filterDate}
-                      onChange={(e) => handleDateChange(e.target.value)}
-                      className="px-2.5 py-1.5 rounded-xl border border-stone-200 text-xs bg-white focus:ring-1 focus:ring-amber-500"
+                      onChange={(val) => handleDateChange(val)}
+                      clearable={true}
+                      triggerClassName="px-2 py-0.5 rounded-xl border border-stone-200 text-xs bg-white"
                     />
-                    {filterDate && (
-                      <button
-                        onClick={handleClearDate}
-                        className="text-[11px] text-stone-400 hover:text-stone-600 cursor-pointer"
-                      >
-                        {locale === 'hi' ? 'हटाएं' : 'Clear'}
-                      </button>
-                    )}
                   </div>
                 )}
 

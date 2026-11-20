@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { VendorOutstandingSummary } from '@/lib/types/database';
@@ -928,12 +929,13 @@ export function PurchaseModal({
               <label className="block font-semibold text-stone-700 mb-1">
                 {t('purchases.bills.purchaseDate')} <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="date"
+              <DatePicker
                 required
                 value={purchaseDate}
-                onChange={(e) => setPurchaseDate(e.target.value)}
-                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500 bg-white"
+                onChange={(val) => setPurchaseDate(val)}
+                clearable={false}
+                className="w-full"
+                triggerClassName="w-full rounded-md border border-stone-300 p-0.5 text-stone-900 text-xs bg-white"
               />
             </div>
 

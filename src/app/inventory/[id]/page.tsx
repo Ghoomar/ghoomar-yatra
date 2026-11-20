@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { formatINR, formatNumber } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
@@ -441,22 +442,22 @@ export default function InventoryDetailPage({ params }: InventoryDetailPageProps
               </CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1">
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="text-xs bg-white border border-stone-200 rounded px-1.5 py-1 text-stone-700 focus:outline-none"
+                    onChange={(val) => setDateFrom(val)}
+                    placeholder={t('inventory.detail.dateFrom')}
                     aria-label={t('inventory.detail.dateFrom')}
-                    title={t('inventory.detail.dateFrom')}
+                    max={dateTo || undefined}
+                    triggerClassName="w-32 bg-white border border-stone-200 rounded px-1 py-0.5 text-xs text-stone-700"
                   />
                   <span className="text-stone-400 text-xs">→</span>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="text-xs bg-white border border-stone-200 rounded px-1.5 py-1 text-stone-700 focus:outline-none"
+                    onChange={(val) => setDateTo(val)}
+                    placeholder={t('inventory.detail.dateTo')}
                     aria-label={t('inventory.detail.dateTo')}
-                    title={t('inventory.detail.dateTo')}
+                    min={dateFrom || undefined}
+                    triggerClassName="w-32 bg-white border border-stone-200 rounded px-1 py-0.5 text-xs text-stone-700"
                   />
                   {(dateFrom || dateTo) && (
                     <Button

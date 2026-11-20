@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { createClient } from '@/lib/supabase/client';
 import { Department, Team, EmployeeRole, EmploymentStatus } from '@/lib/types/database';
 import { X, User, Plus, AlertCircle, Phone, Calendar, IndianRupee } from 'lucide-react';
@@ -279,12 +280,13 @@ export function EmployeeModal({ isOpen, onClose, employee, onSaved }: EmployeeMo
 
                 <div>
                   <label className="block font-medium text-stone-700 mb-1">{t('people.modal.joiningDate')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     required
                     value={joiningDate}
-                    onChange={(e) => setJoiningDate(e.target.value)}
-                    className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                    onChange={(val) => setJoiningDate(val)}
+                    clearable={false}
+                    className="w-full"
+                    triggerClassName="w-full rounded-md border border-stone-300 p-0.5 text-stone-900"
                   />
                 </div>
               </div>

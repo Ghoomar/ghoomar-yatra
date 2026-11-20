@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate } from '@/lib/utils';
@@ -301,11 +302,11 @@ export default function StockCountPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <input
-            type="date"
+          <DatePicker
             value={businessDate}
-            onChange={(e) => setBusinessDate(e.target.value)}
-            className="px-3 py-1.5 border border-stone-300 rounded-lg text-xs font-mono bg-white text-stone-900"
+            onChange={(val) => setBusinessDate(val)}
+            clearable={false}
+            triggerClassName="px-2.5 py-1 border border-stone-300 rounded-lg text-xs bg-white text-stone-900 shadow-2xs"
           />
           <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-1.5">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-amber-600' : ''}`} /> {t('common.refresh')}

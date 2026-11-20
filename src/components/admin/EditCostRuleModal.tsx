@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { FinancialCostRule } from '@/lib/types/database';
@@ -362,12 +363,14 @@ export function EditCostRuleModal({
                 <Calendar className="h-3.5 w-3.5 text-stone-400" />
                 Start Date <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs"
+              <DatePicker
                 required
+                value={startDate}
+                onChange={(val) => setStartDate(val)}
+                clearable={false}
+                max={endDate || undefined}
+                className="w-full"
+                triggerClassName="w-full px-1.5 py-0.5 border border-stone-300 rounded-lg text-xs"
               />
             </div>
 
@@ -376,11 +379,13 @@ export function EditCostRuleModal({
                 <Calendar className="h-3.5 w-3.5 text-stone-400" />
                 End Date (Optional)
               </label>
-              <input
-                type="date"
+              <DatePicker
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-xs"
+                onChange={(val) => setEndDate(val)}
+                clearable={true}
+                min={startDate || undefined}
+                className="w-full"
+                triggerClassName="w-full px-1.5 py-0.5 border border-stone-300 rounded-lg text-xs"
               />
             </div>
           </div>

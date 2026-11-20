@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { formatINR, getTodayBusinessDate, formatNumber } from '@/lib/utils';
@@ -443,12 +444,12 @@ export default function DailyOperationsPage() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="flex items-center px-2 py-1 text-xs font-semibold text-stone-800">
-              <input
-                type="date"
+            <div className="flex items-center px-1 text-xs font-semibold text-stone-800">
+              <DatePicker
                 value={businessDate}
-                onChange={(e) => setBusinessDate(e.target.value)}
-                className="bg-transparent focus:outline-none cursor-pointer text-xs font-semibold"
+                onChange={(val) => setBusinessDate(val)}
+                clearable={false}
+                triggerClassName="border-0 shadow-none bg-transparent p-0 text-xs font-semibold"
               />
             </div>
             <button

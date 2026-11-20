@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { DateTimePicker } from '@/components/ui/DateTimePicker';
 import { createClient } from '@/lib/supabase/client';
 import { formatNumber, formatINR } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
@@ -31,6 +32,10 @@ export function ElectricityTab({
   const supabase = createClient();
   const { t, locale } = useI18n();
   const [newReading, setNewReading] = useState<string>('');
+  const [readingTimestamp, setReadingTimestamp] = useState<string>(() => {
+    const timeStr = new Date().toTimeString().slice(0, 5);
+    return `${businessDate}T${timeStr}`;
+  });
   const [isReset, setIsReset] = useState(false);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -140,7 +145,7 @@ export function ElectricityTab({
       const { error } = await supabase.from('meter_readings').insert({
         meter_id: selectedMeterId,
         business_date: businessDate,
-        reading_timestamp: new Date().toISOString(),
+        reading_timestamp: readingTimestamp ? new Date(readingTimestamp).toISOString() : new Date().toISOString(),
         reading_value: parsedNewReading,
         is_reset: isReset,
         notes: notes.trim() || null,
@@ -219,6 +224,19 @@ export function ElectricityTab({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block font-medium text-stone-700 mb-1">
+                  {t('finance.utilities.readingTimestamp')}
+                </label>
+                <DateTimePicker
+                  value={readingTimestamp}
+                  onChange={(val) => setReadingTimestamp(val)}
+                  clearable={false}
+                  className="w-full"
+                  triggerClassName="w-full p-1 border-stone-300"
+                />
               </div>
 
               <div className="p-3 bg-stone-50 rounded-lg border border-stone-200/80 space-y-1">
