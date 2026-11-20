@@ -5,6 +5,7 @@
     "recordBill": "खरीद बिल दर्ज करें",
     "invoiceNo": "बिल नं.",
     "billDate": "बिल की तारीख",
+    "purchaseDate": "खरीद की तारीख",
     "vendor": "वेंडर चुनें",
     "totalAmount": "कुल बिल रकम (₹)",
     "paymentStatus": "पेमेंट स्टेटस",

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
-import { formatINR } from '@/lib/utils';
+import { formatINR, getTodayBusinessDate } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { VendorOutstandingSummary } from '@/lib/types/database';
 import { PurchaseInvoiceRecord } from '@/components/purchases/PurchaseInvoicesView';
@@ -87,10 +87,18 @@ export function PurchaseModal({
   const supabase = createClient();
 
   // Invoice Header State
+  const [purchaseDate, setPurchaseDate] = useState(businessDate || getTodayBusinessDate());
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [lines, setLines] = useState<PurchaseLineForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Sync purchase date whenever modal opens or businessDate changes
+  useEffect(() => {
+    if (isOpen) {
+      setPurchaseDate(businessDate || getTodayBusinessDate());
+    }
+  }, [isOpen, businessDate]);
 
   // Item Search Submodal State
   const [showItemSearch, setShowItemSearch] = useState(false);
@@ -545,17 +553,85 @@ export function PurchaseModal({
   // Handler: Selecting / updating unit & packaging for a line
   const handleSelectUnitOption = (
     lineIdx: number,
-    optionType: 'base' | 'existing_pkg' | 'prompt_size',
+    optionType: 'base' | 'kg' | 'existing_pkg' | 'prompt_size',
     pkgData?: any
   ) => {
     const nextLines = [...lines];
     const line = nextLines[lineIdx];
+    const canonical = (line.base_unit_canonical || 'kg').toLowerCase();
 
     if (optionType === 'base') {
       line.use_pack = false;
       line.is_custom_pack = false;
       line.packaging_unit_id = null;
       line.conversion_factor = 1;
+      if (line.pack_quantity && !line.quantity) {
+        line.quantity = line.pack_quantity;
+      }
+      if (line.pack_rate && !line.rate) {
+        line.rate = line.pack_rate;
+      }
+      setLines(nextLines);
+      setUnitSelectLineIndex(null);
+    } else if (optionType === 'kg') {
+      if (canonical === 'kg') {
+        line.use_pack = false;
+        line.is_custom_pack = false;
+        line.packaging_unit_id = null;
+        line.pack_unit = 'kg';
+        line.conversion_factor = 1;
+        if (line.pack_quantity && !line.quantity) {
+          line.quantity = line.pack_quantity;
+        }
+        if (line.pack_rate && !line.rate) {
+          line.rate = line.pack_rate;
+        }
+      } else {
+        line.use_pack = true;
+        line.is_custom_pack = false;
+        line.packaging_unit_id = null;
+        line.pack_unit = 'kg';
+
+        if (canonical === 'g') {
+          line.conversion_factor = 1000;
+        } else if (canonical === 'mg') {
+          line.conversion_factor = 1000000;
+        } else if (canonical === 'ml') {
+          line.conversion_factor = 1000;
+        } else if (canonical === 'l') {
+          line.conversion_factor = 1;
+        } else {
+          // Count / container or other units
+          const item = items.find((it) => it.id === line.item_id);
+          let factor = 1;
+          if (item?.secondary_unit_id && Number(item.conversion_factor) > 0) {
+            const secSym = (item.sec_unit?.symbol || '').toLowerCase();
+            if (secSym === 'g') {
+              factor = 1000 / Number(item.conversion_factor);
+            } else if (secSym === 'kg') {
+              factor = 1 / Number(item.conversion_factor);
+            }
+          } else {
+            const existingKgPkg = packagingUnits.find(
+              (p) =>
+                (p.inventory_item_id || p.item_id) === line.item_id &&
+                p.pack_unit_name?.toLowerCase().includes('kg')
+            );
+            if (existingKgPkg && Number(existingKgPkg.pack_size_in_base_units) > 0) {
+              factor = Number(existingKgPkg.pack_size_in_base_units);
+              line.packaging_unit_id = existingKgPkg.id;
+            }
+          }
+          line.conversion_factor = factor;
+        }
+
+        if (line.quantity && !line.pack_quantity) {
+          line.pack_quantity = line.quantity;
+        }
+        if (line.rate && !line.pack_rate) {
+          line.pack_rate = line.rate;
+        }
+      }
       setLines(nextLines);
       setUnitSelectLineIndex(null);
     } else if (optionType === 'existing_pkg' && pkgData) {
@@ -566,6 +642,12 @@ export function PurchaseModal({
       line.conversion_factor = Number(pkgData.pack_size_in_base_units) || 1;
       if (pkgData.default_purchase_rate) {
         line.previous_rate = Number(pkgData.default_purchase_rate);
+      }
+      if (line.quantity && !line.pack_quantity) {
+        line.pack_quantity = line.quantity;
+      }
+      if (line.rate && !line.pack_rate) {
+        line.pack_rate = line.rate;
       }
       setLines(nextLines);
       setUnitSelectLineIndex(null);
@@ -600,6 +682,11 @@ export function PurchaseModal({
     e.preventDefault();
     if (!selectedVendorId) {
       alert(t('purchases.bills.errSelectVendor'));
+      return;
+    }
+
+    if (!purchaseDate) {
+      alert(t('purchases.bills.purchaseDate'));
       return;
     }
 
@@ -640,8 +727,8 @@ export function PurchaseModal({
         .insert({
           purchase_number: purchaseNumber,
           vendor_id: selectedVendorId,
-          purchase_date: businessDate,
-          business_date: businessDate,
+          purchase_date: purchaseDate,
+          business_date: purchaseDate,
           invoice_number: invoiceNumber.trim() || undefined,
           total_amount: netTotal,
           net_amount: netTotal,
@@ -723,7 +810,7 @@ export function PurchaseModal({
         // Inward stock into Central Store Room using atomic RPC
         const { error: txErr } = await supabase.rpc('execute_inventory_transaction', {
           p_item_id: line.item_id,
-          p_business_date: businessDate,
+          p_business_date: purchaseDate,
           p_movement_type: 'purchase',
           p_quantity: baseQty,
           p_unit_cost: baseRate,
@@ -743,7 +830,7 @@ export function PurchaseModal({
               vendor_id: selectedVendorId,
               inventory_item_id: line.item_id,
               last_purchase_rate: baseRate,
-              last_purchase_date: businessDate,
+              last_purchase_date: purchaseDate,
               is_preferred: true,
             },
             { onConflict: 'vendor_id,inventory_item_id' }
@@ -758,6 +845,7 @@ export function PurchaseModal({
       setInvoiceNumber('');
       setLines([]);
       setSelectedVendorId('');
+      setPurchaseDate(businessDate || getTodayBusinessDate());
       onClose();
     } catch (err: any) {
       console.error('Error posting purchase:', err);
@@ -804,8 +892,8 @@ export function PurchaseModal({
             </div>
           )}
 
-          {/* Top Row: Vendor & Bill No. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Top Row: Vendor, Purchase Date & Bill No. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="font-semibold text-stone-700">
@@ -834,6 +922,19 @@ export function PurchaseModal({
                     </option>
                   ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-stone-700 mb-1">
+                {t('purchases.bills.purchaseDate')} <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)}
+                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500 bg-white"
+              />
             </div>
 
             <div>
@@ -1753,19 +1854,50 @@ export function PurchaseModal({
               </div>
             ) : (
               <div className="space-y-2">
-                {/* 1. Base Unit Option */}
+                {/* 1. Base Unit Option (when base unit is not kg) */}
+                {lines[unitSelectLineIndex]?.base_unit_canonical !== 'kg' && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'base')}
+                    className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
+                  >
+                    <span>{lines[unitSelectLineIndex]?.base_unit_symbol} ({t('purchases.bills.base')})</span>
+                    {!lines[unitSelectLineIndex]?.use_pack && <Check className="h-4 w-4 text-emerald-600" />}
+                  </button>
+                )}
+
+                {/* 2. Kilogram (kg) Option - available for every item */}
                 <button
                   type="button"
-                  onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'base')}
+                  onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'kg')}
                   className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
                 >
-                  <span>{lines[unitSelectLineIndex]?.base_unit_symbol} ({t('purchases.bills.base')})</span>
-                  {!lines[unitSelectLineIndex]?.use_pack && <Check className="h-4 w-4 text-emerald-600" />}
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-stone-900">kg (Kilogram)</span>
+                    {lines[unitSelectLineIndex]?.base_unit_canonical === 'g' && (
+                      <span className="text-[11px] text-stone-500 font-normal">
+                        (1 kg = 1,000 {lines[unitSelectLineIndex]?.base_unit_symbol})
+                      </span>
+                    )}
+                    {lines[unitSelectLineIndex]?.base_unit_canonical === 'kg' && (
+                      <span className="text-[11px] text-stone-500 font-normal">
+                        ({t('purchases.bills.base')})
+                      </span>
+                    )}
+                  </div>
+                  {((lines[unitSelectLineIndex]?.use_pack && lines[unitSelectLineIndex]?.pack_unit === 'kg') ||
+                    (!lines[unitSelectLineIndex]?.use_pack && lines[unitSelectLineIndex]?.base_unit_canonical === 'kg')) && (
+                    <Check className="h-4 w-4 text-emerald-600" />
+                  )}
                 </button>
 
-                {/* 2. Known Packaged Units for this Item */}
+                {/* 3. Known Packaged Units for this Item */}
                 {packagingUnits
-                  .filter((p) => (p.inventory_item_id || p.item_id) === lines[unitSelectLineIndex]?.item_id)
+                  .filter(
+                    (p) =>
+                      (p.inventory_item_id || p.item_id) === lines[unitSelectLineIndex]?.item_id &&
+                      p.pack_unit_name?.trim().toLowerCase() !== 'kg'
+                  )
                   .map((pkg) => (
                     <button
                       key={pkg.id}

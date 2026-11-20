@@ -5,6 +5,7 @@
     "recordBill": "Record Purchase Bill",
     "invoiceNo": "Bill No.",
     "billDate": "Bill Date",
+    "purchaseDate": "Purchase Date",
     "vendor": "Select Vendor",
     "totalAmount": "Total Bill Amount (₹)",
     "paymentStatus": "Payment Status",
