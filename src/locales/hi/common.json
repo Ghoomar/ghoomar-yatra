@@ -26,6 +26,7 @@
     "view": "देखें",
     "manage": "मैनेज करें",
     "undo": "वापस लें",
+    "reset": "रीसेट",
     "done": "हो गया",
     "apply": "लागू करें"
   },
@@ -33,6 +34,7 @@
     "date": "तारीख",
     "today": "आज",
     "yesterday": "कल",
+    "twoDaysAgo": "2 दिन पहले",
     "status": "स्टेटस",
     "actions": "एक्शन",
     "total": "कुल",
@@ -88,6 +90,7 @@
     "selectTime": "समय चुनें",
     "today": "आज",
     "yesterday": "कल",
+    "twoDaysAgo": "2 दिन पहले",
     "clear": "साफ़ करें",
     "now": "अभी",
     "done": "हो गया",

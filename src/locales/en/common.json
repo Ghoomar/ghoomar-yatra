@@ -26,6 +26,7 @@
     "view": "View",
     "manage": "Manage",
     "undo": "Undo",
+    "reset": "Reset",
     "done": "Done",
     "apply": "Apply"
   },
@@ -33,6 +34,7 @@
     "date": "Date",
     "today": "Today",
     "yesterday": "Yesterday",
+    "twoDaysAgo": "2 days ago",
     "status": "Status",
     "actions": "Actions",
     "total": "Total",
@@ -88,6 +90,7 @@
     "selectTime": "Select time",
     "today": "Today",
     "yesterday": "Yesterday",
+    "twoDaysAgo": "2 days ago",
     "clear": "Clear",
     "now": "Now",
     "done": "Done",
