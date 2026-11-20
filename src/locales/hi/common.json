@@ -94,6 +94,12 @@
     "invalidDate": "अमान्य तारीख (DD-MM-YYYY)",
     "previousMonth": "पिछला महीना",
     "nextMonth": "अगला महीना",
+    "enterManually": "तारीख मैन्युअल दर्ज करें",
+    "enterDateTimeManually": "तारीख और समय मैन्युअल दर्ज करें",
+    "backToCalendar": "कैलेंडर पर वापस जाएं",
+    "manualEntryHint": "प्रारूप: DD-MM-YYYY",
+    "manualTimeHint": "प्रारूप: HH:MM (24-घंटे)",
+    "apply": "लागू करें",
     "months": {
       "1": "जनवरी",
       "2": "फ़रवरी",

@@ -94,6 +94,12 @@
     "invalidDate": "Invalid date (DD-MM-YYYY)",
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
+    "enterManually": "Enter date manually",
+    "enterDateTimeManually": "Enter date & time manually",
+    "backToCalendar": "Back to calendar",
+    "manualEntryHint": "Format: DD-MM-YYYY",
+    "manualTimeHint": "Format: HH:MM (24-hour)",
+    "apply": "Apply",
     "months": {
       "1": "January",
       "2": "February",

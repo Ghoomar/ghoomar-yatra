@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, X, AlertCircle, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, X, AlertCircle, Check, Edit3 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import {
   formatToDisplay,
@@ -54,6 +54,11 @@ export function DateTimePicker({
   const [isMobile, setIsMobile] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // Manual mode state on mobile bottom sheet
+  const [manualMode, setManualMode] = useState(false);
+  const [mobileManualDate, setMobileManualDate] = useState('');
+  const [mobileManualError, setMobileManualError] = useState<string | null>(null);
+
   // Parse initial date part and time part
   const parseVal = useCallback((valStr?: string) => {
     if (!valStr) return { date: '', time: '12:00' };
@@ -91,9 +96,15 @@ export function DateTimePicker({
   // Desktop popover positioning
   const [popoverCoords, setPopoverCoords] = useState<{ top: number; left: number } | null>(null);
 
+  // Mobile virtual keyboard resilience via window.visualViewport
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [viewportOffsetTop, setViewportOffsetTop] = useState<number>(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
 
   // Calendar view year and month
   const [viewYear, setViewYear] = useState<number>(() => {
@@ -125,6 +136,7 @@ export function DateTimePicker({
 
     if (date) {
       setTypedText(formatDateTimeDisplay(date, validH, validM));
+      setMobileManualDate(formatToDisplay(date));
       const y = parseInt(date.slice(0, 4), 10);
       const mon = parseInt(date.slice(5, 7), 10);
       if (!isNaN(y) && !isNaN(mon)) {
@@ -133,8 +145,10 @@ export function DateTimePicker({
       }
     } else {
       setTypedText('');
+      setMobileManualDate('');
     }
     setInputError(null);
+    setMobileManualError(null);
   }, [value, parseVal]);
 
   // Mobile detection
@@ -146,6 +160,47 @@ export function DateTimePicker({
     media.addEventListener('change', updateMobile);
     return () => media.removeEventListener('change', updateMobile);
   }, []);
+
+  // Track window.visualViewport for mobile Android keyboard resilience
+  useEffect(() => {
+    if (!isOpen || !isMobile || typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const handleViewportChange = () => {
+      setViewportHeight(vv.height);
+      setViewportOffsetTop(vv.offsetTop);
+    };
+    handleViewportChange();
+    vv.addEventListener('resize', handleViewportChange);
+    vv.addEventListener('scroll', handleViewportChange);
+    return () => {
+      vv.removeEventListener('resize', handleViewportChange);
+      vv.removeEventListener('scroll', handleViewportChange);
+      setViewportHeight(null);
+      setViewportOffsetTop(0);
+    };
+  }, [isOpen, isMobile]);
+
+  // Reset manualMode on modal close
+  useEffect(() => {
+    if (!isOpen) {
+      setManualMode(false);
+      setMobileManualError(null);
+    }
+  }, [isOpen]);
+
+  // Autofocus mobile manual entry input when switching to manualMode
+  useEffect(() => {
+    if (manualMode && isMobile) {
+      setMobileManualDate(formatToDisplay(selectedDate));
+      setMobileManualError(null);
+      const timer = setTimeout(() => {
+        manualInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [manualMode, isMobile, selectedDate]);
 
   // Update desktop coordinates
   const updateCoords = useCallback(() => {
@@ -227,6 +282,7 @@ export function DateTimePicker({
     const isoDateTime = `${d}T${padZero(h)}:${padZero(m)}`;
     onChange(isoDateTime);
     setTypedText(formatDateTimeDisplay(d, h, m));
+    setMobileManualDate(formatToDisplay(d));
     setInputError(null);
   };
 
@@ -253,7 +309,9 @@ export function DateTimePicker({
     onChange('');
     setSelectedDate('');
     setTypedText('');
+    setMobileManualDate('');
     setInputError(null);
+    setMobileManualError(null);
   };
 
   const handleHourChange = (newH: number) => {
@@ -291,7 +349,7 @@ export function DateTimePicker({
     }
   };
 
-  // Manual typing handler
+  // Manual typing handler on desktop
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
     setTypedText(text);
@@ -344,6 +402,39 @@ export function DateTimePicker({
       setInputError(null);
     } else {
       setInputError(t('common.datePicker.invalidDate'));
+    }
+  };
+
+  // Mobile Manual submission
+  const handleApplyMobileManual = () => {
+    if (!mobileManualDate.trim()) {
+      if (!required) {
+        onChange('');
+        setSelectedDate('');
+        setTypedText('');
+        setMobileManualDate('');
+        setInputError(null);
+        setMobileManualError(null);
+        setIsOpen(false);
+      } else {
+        setMobileManualError(t('common.datePicker.invalidDate'));
+      }
+      return;
+    }
+
+    const iso = parseDisplayToISO(mobileManualDate);
+    if (iso) {
+      if (isDateDisabled(iso, min, max)) {
+        setMobileManualError('Date out of allowed range');
+      } else {
+        setMobileManualError(null);
+        setInputError(null);
+        setSelectedDate(iso);
+        commitDateTime(iso, selectedHour, selectedMinute);
+        setIsOpen(false);
+      }
+    } else {
+      setMobileManualError(t('common.datePicker.invalidDate'));
     }
   };
 
@@ -430,7 +521,7 @@ export function DateTimePicker({
       {/* Day Cells Grid */}
       <div className="grid grid-cols-7 gap-1">
         {calendarGrid.map((cell, idx) => {
-          let btnClass = 'h-8 sm:h-7.5 w-full rounded-md text-xs font-medium flex items-center justify-center transition-all cursor-pointer ';
+          let btnClass = 'h-9 sm:h-7.5 w-full rounded-md text-xs font-medium flex items-center justify-center transition-all cursor-pointer ';
           if (cell.isSelected) {
             btnClass += 'bg-amber-600 text-white font-bold shadow-xs hover:bg-amber-700';
           } else if (cell.isDisabled) {
@@ -534,6 +625,169 @@ export function DateTimePicker({
     </div>
   );
 
+  // Dedicated Mobile Manual Entry Mode Content
+  const renderMobileManualContent = () => (
+    <div className="flex flex-col">
+      {/* Header with Back to Calendar */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200">
+        <button
+          type="button"
+          onClick={() => setManualMode(false)}
+          className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-800 p-1 -ml-1 rounded-md hover:bg-amber-50 cursor-pointer transition-colors"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          <CalendarIcon className="h-3.5 w-3.5" />
+          <span>{t('common.datePicker.backToCalendar')}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsOpen(false)}
+          className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
+          aria-label={t('common.actions.close')}
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="p-4 flex flex-col gap-3.5">
+        <div>
+          <label className="block text-xs font-bold text-stone-800 mb-1">
+            {t('common.datePicker.enterDateTimeManually')}
+          </label>
+          <p className="text-[11px] text-stone-500 mb-2">
+            {t('common.datePicker.manualEntryHint')}
+          </p>
+          <div className="relative">
+            <input
+              ref={manualInputRef}
+              type="text"
+              inputMode="numeric"
+              value={mobileManualDate}
+              onChange={(e) => {
+                setMobileManualDate(e.target.value);
+                setMobileManualError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleApplyMobileManual();
+                }
+              }}
+              placeholder="DD-MM-YYYY"
+              className={`w-full text-base font-bold text-stone-900 px-3.5 py-2.5 rounded-xl border bg-stone-50/50 focus:bg-white focus:outline-none transition-all ${
+                mobileManualError
+                  ? 'border-rose-400 ring-2 ring-rose-300/40 bg-rose-50/20'
+                  : 'border-stone-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20'
+              }`}
+            />
+            {mobileManualDate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileManualDate('');
+                  setMobileManualError(null);
+                  manualInputRef.current?.focus();
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {mobileManualError && (
+            <p className="text-xs text-rose-600 font-medium mt-1.5 flex items-center gap-1 animate-in fade-in">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>{mobileManualError}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Time Selector in Manual Mode */}
+        <div className="pt-2 pb-1 border-t border-stone-200 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-stone-700 font-semibold">
+            <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>{t('common.datePicker.time')}:</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <div className="flex items-center bg-stone-50 border border-stone-200 rounded-lg p-0.5">
+              <select
+                value={selectedHour}
+                onChange={(e) => handleHourChange(parseInt(e.target.value, 10))}
+                aria-label={t('common.datePicker.hour')}
+                className="bg-transparent text-xs font-bold text-stone-900 py-1 px-1.5 focus:outline-none cursor-pointer"
+              >
+                {Array.from({ length: 24 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {padZero(i)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="font-bold text-stone-400">:</span>
+
+            <div className="flex items-center bg-stone-50 border border-stone-200 rounded-lg p-0.5">
+              <select
+                value={selectedMinute}
+                onChange={(e) => handleMinuteChange(parseInt(e.target.value, 10))}
+                aria-label={t('common.datePicker.minute')}
+                className="bg-transparent text-xs font-bold text-stone-900 py-1 px-1.5 focus:outline-none cursor-pointer"
+              >
+                {Array.from({ length: 60 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {padZero(i)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick helper shortcuts */}
+        <div className="flex items-center gap-2 pt-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              const today = getTodayISO();
+              setMobileManualDate(formatToDisplay(today));
+              setMobileManualError(null);
+            }}
+            className="px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200/80 cursor-pointer transition-colors"
+          >
+            {t('common.datePicker.today')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const now = new Date();
+              const today = getTodayISO();
+              setMobileManualDate(formatToDisplay(today));
+              setSelectedHour(now.getHours());
+              setSelectedMinute(now.getMinutes());
+              setMobileManualError(null);
+            }}
+            className="px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200/80 cursor-pointer transition-colors"
+          >
+            {t('common.datePicker.now')}
+          </button>
+        </div>
+
+        {/* Apply Button */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={handleApplyMobileManual}
+            className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Check className="h-4 w-4" />
+            <span>{t('common.datePicker.apply')}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div ref={containerRef} className={`relative inline-block ${className}`} data-testid={testId}>
       {/* Hidden input */}
@@ -542,25 +796,45 @@ export function DateTimePicker({
       {/* Visible Trigger Box */}
       <div
         ref={triggerRef}
+        onClick={() => {
+          if (!disabled) {
+            if (isMobile) {
+              inputRef.current?.blur();
+            }
+            setIsOpen(true);
+          }
+        }}
         className={`
           relative flex items-center rounded-lg border bg-white transition-all
           ${inputError ? 'border-rose-400 ring-1 ring-rose-300' : 'border-stone-300 hover:border-stone-400'}
           ${disabled ? 'bg-stone-100 cursor-not-allowed opacity-60' : 'focus-within:ring-2 focus-within:ring-amber-500/20 focus-within:border-amber-500 shadow-2xs'}
+          ${isMobile ? 'cursor-pointer' : ''}
           ${triggerClassName}
         `}
       >
         <input
+          ref={inputRef}
           type="text"
           value={typedText}
+          readOnly={isMobile}
+          inputMode={isMobile ? 'none' : 'text'}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
-          onFocus={() => {
-            if (!disabled && !isOpen) setIsOpen(true);
+          onFocus={(e) => {
+            if (disabled) return;
+            if (isMobile) {
+              e.target.blur();
+              if (!isOpen) setIsOpen(true);
+              return;
+            }
+            if (!isOpen) setIsOpen(true);
           }}
           disabled={disabled}
           placeholder={placeholder}
           aria-label={ariaLabel || placeholder}
-          className="w-full bg-transparent px-2.5 py-1.5 text-xs font-semibold text-stone-900 placeholder:text-stone-400 focus:outline-none"
+          className={`w-full bg-transparent px-2.5 py-1.5 text-xs font-semibold text-stone-900 placeholder:text-stone-400 focus:outline-none ${
+            isMobile ? 'cursor-pointer select-none' : ''
+          }`}
         />
 
         {/* Clear Button */}
@@ -580,8 +854,14 @@ export function DateTimePicker({
         <button
           type="button"
           disabled={disabled}
-          onClick={() => {
-            if (!disabled) setIsOpen(!isOpen);
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!disabled) {
+              if (isMobile) {
+                inputRef.current?.blur();
+              }
+              setIsOpen(!isOpen);
+            }
           }}
           className="p-1.5 text-stone-500 hover:text-amber-600 transition-colors cursor-pointer flex items-center gap-0.5"
           aria-label={t('common.datePicker.selectDateTime')}
@@ -591,7 +871,7 @@ export function DateTimePicker({
       </div>
 
       {/* Validation tooltip */}
-      {inputError && (
+      {inputError && !isMobile && (
         <div className="absolute left-0 top-full mt-1 z-20 flex items-center gap-1 text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 shadow-xs whitespace-nowrap">
           <AlertCircle className="h-3 w-3 shrink-0" />
           <span>{inputError}</span>
@@ -618,35 +898,62 @@ export function DateTimePicker({
           document.body
         )}
 
-      {/* Mobile Bottom Sheet Modal */}
+      {/* Mobile Bottom Sheet Modal (Portaled, visualViewport-aware) */}
       {isOpen && isMobile && mounted && typeof document !== 'undefined' &&
         createPortal(
           <div
             data-testid="datetime-picker-mobile-sheet"
             className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+            style={{
+              height: viewportHeight ? `${viewportHeight}px` : '100dvh',
+              top: `${viewportOffsetTop}px`,
+            }}
             onClick={(e) => {
               if (e.target === e.currentTarget) setIsOpen(false);
             }}
           >
-            <div className="w-full rounded-t-2xl bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200">
-                <span className="font-bold text-sm text-stone-900 flex items-center gap-1.5">
-                  <CalendarIcon className="h-4 w-4 text-amber-600" />
-                  {t('common.datePicker.selectDateTime')}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
-                  aria-label={t('common.actions.close')}
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+            <div
+              style={{
+                maxHeight: viewportHeight ? `${Math.min(viewportHeight, 620)}px` : '90dvh',
+              }}
+              className="w-full rounded-t-2xl bg-white shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-bottom duration-200 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            >
+              {!manualMode ? (
+                <>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200">
+                    <span className="font-bold text-sm text-stone-900 flex items-center gap-1.5">
+                      <CalendarIcon className="h-4 w-4 text-amber-600" />
+                      {t('common.datePicker.selectDateTime')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsOpen(false)}
+                      className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
+                      aria-label={t('common.actions.close')}
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
 
-              <div className="max-w-md mx-auto w-full pb-6">
-                {renderContent()}
-              </div>
+                  <div className="max-w-md mx-auto w-full">
+                    {renderContent()}
+                  </div>
+
+                  {/* Option: Enter date & time manually */}
+                  <div className="px-4 pb-4 max-w-md mx-auto w-full">
+                    <button
+                      type="button"
+                      onClick={() => setManualMode(true)}
+                      className="w-full py-2 px-3 text-xs font-semibold text-amber-800 bg-amber-50/80 hover:bg-amber-100 rounded-xl flex items-center justify-center gap-2 border border-amber-200/80 transition-colors cursor-pointer"
+                    >
+                      <Edit3 className="h-3.5 w-3.5 text-amber-700" />
+                      <span>{t('common.datePicker.enterDateTimeManually')}</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                renderMobileManualContent()
+              )}
             </div>
           </div>,
           document.body
