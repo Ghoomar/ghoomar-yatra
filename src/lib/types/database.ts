@@ -557,3 +557,19 @@ export interface LocationDeletionErrorResponse {
   };
 }
 
+export interface GeneratorDiagnosticLog {
+  id: string;
+  business_date: string;
+  recorded_at: string;
+  runtime_hours: number;
+  runtime_minutes: number;
+  total_runtime_minutes: number;
+  total_starts: number;
+  fuel_level_pct: number;
+  energy_acc_kwh: number;
+  notes?: string | null;
+  created_by?: string | null;
+  created_at: string;
+}
+
+

@@ -42,6 +42,14 @@ function formatIsoDate(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+function isSameCalendarDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
 export function formatDisplayDate(val?: string, locale: string = 'en'): string {
   if (!val) return '';
   const d = parseIsoDate(val);
@@ -77,10 +85,13 @@ export function DatePicker({
 
   const selectedDate = useMemo(() => parseIsoDate(value), [value]);
   const [draftDate, setDraftDate] = useState<Date>(selectedDate || new Date());
+  const [displayMonth, setDisplayMonth] = useState<Date>(selectedDate || new Date());
 
   useEffect(() => {
     if (isOpen) {
-      setDraftDate(parseIsoDate(value) || new Date());
+      const parsed = parseIsoDate(value) || new Date();
+      setDraftDate(parsed);
+      setDisplayMonth(parsed);
     }
   }, [isOpen, value]);
 
@@ -96,23 +107,26 @@ export function DatePicker({
   const handleSelectDay = (date?: Date) => {
     if (!date) return;
     setDraftDate(date);
+    setDisplayMonth(date);
     onChange(formatIsoDate(date));
     setIsOpen(false);
   };
 
-  const handleQuickToday = () => {
-    const today = new Date();
-    setDraftDate(today);
-    onChange(formatIsoDate(today));
+  const handleQuickPick = (daysAgo: number) => {
+    const target = new Date();
+    target.setDate(target.getDate() - daysAgo);
+    const normalized = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+    setDraftDate(normalized);
+    setDisplayMonth(normalized);
+    onChange(formatIsoDate(normalized));
     setIsOpen(false);
   };
 
-  const handleQuickYesterday = () => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    setDraftDate(yesterday);
-    onChange(formatIsoDate(yesterday));
-    setIsOpen(false);
+  const isQuickActive = (daysAgo: number) => {
+    const target = new Date();
+    target.setDate(target.getDate() - daysAgo);
+    const refDate = draftDate || parseIsoDate(value);
+    return refDate ? isSameCalendarDay(refDate, target) : false;
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -131,17 +145,36 @@ export function DatePicker({
       <div className="flex items-center gap-1.5 pb-2 border-b border-stone-100">
         <button
           type="button"
-          onClick={handleQuickToday}
-          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+          onClick={() => handleQuickPick(0)}
+          className={`px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-lg border ${
+            isQuickActive(0)
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+              : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-transparent font-semibold'
+          }`}
         >
           {t('common.datePicker.today') || 'Today'}
         </button>
         <button
           type="button"
-          onClick={handleQuickYesterday}
-          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+          onClick={() => handleQuickPick(1)}
+          className={`px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-lg border ${
+            isQuickActive(1)
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+              : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-transparent font-semibold'
+          }`}
         >
           {t('common.datePicker.yesterday') || 'Yesterday'}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQuickPick(2)}
+          className={`px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-lg border ${
+            isQuickActive(2)
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+              : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-transparent font-semibold'
+          }`}
+        >
+          {t('common.datePicker.twoDaysAgo') || '2 days ago'}
         </button>
       </div>
 
@@ -150,29 +183,31 @@ export function DatePicker({
         <DayPicker
           mode="single"
           selected={draftDate}
+          month={displayMonth}
+          onMonthChange={setDisplayMonth}
           onSelect={handleSelectDay}
           classNames={{
-            root: 'w-full max-w-[280px]',
-            months: 'w-full',
+            root: 'w-full max-w-[280px] mx-auto',
+            months: 'relative w-full',
             month: 'w-full space-y-2',
             month_caption: 'relative flex justify-center items-center h-8 font-bold text-xs text-stone-900',
             caption_label: 'text-xs font-bold text-stone-900',
-            nav: 'absolute inset-x-0 flex items-center justify-between z-10 px-1',
+            nav: 'absolute inset-x-0 top-0 flex items-center justify-between z-10 px-1 h-8 pointer-events-none',
             button_previous:
-              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer',
+              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer pointer-events-auto [&>svg]:h-4 [&>svg]:w-4',
             button_next:
-              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer',
+              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer pointer-events-auto [&>svg]:h-4 [&>svg]:w-4',
             month_grid: 'w-full border-collapse',
             weekdays: 'grid grid-cols-7 gap-1 text-center mb-1',
             weekday: 'text-[11px] font-bold text-stone-400 py-0.5',
             week: 'grid grid-cols-7 gap-1 mt-0.5',
             day: 'h-8 w-full p-0 flex items-center justify-center font-normal',
             day_button:
-              'h-8 w-8 rounded-lg text-xs font-medium flex items-center justify-center transition-all hover:bg-amber-50 hover:text-amber-900 cursor-pointer',
+              'h-8 w-8 rounded-xl text-xs font-medium flex items-center justify-center transition-all hover:bg-amber-50 hover:text-amber-900 cursor-pointer',
             selected:
-              '[&>.rdp-day_button]:bg-amber-600 [&>.rdp-day_button]:text-white [&>.rdp-day_button]:font-bold [&>.rdp-day_button]:hover:bg-amber-700 shadow-2xs',
+              'rdp-selected [&>button]:!bg-amber-600 [&>button]:!text-white [&>button]:font-bold [&>button]:rounded-xl [&>button]:shadow-xs [&>button]:!ring-0',
             today:
-              '[&>.rdp-day_button]:border [&>.rdp-day_button]:border-amber-500 [&>.rdp-day_button]:text-amber-900 [&>.rdp-day_button]:font-bold',
+              '[&:not(.rdp-selected):not([data-selected])>button]:ring-1 [&:not(.rdp-selected):not([data-selected])>button]:ring-amber-400 [&:not(.rdp-selected):not([data-selected])>button]:text-amber-800 [&:not(.rdp-selected):not([data-selected])>button]:font-semibold',
             outside: 'text-stone-300 opacity-40',
             disabled: 'text-stone-300 opacity-30 cursor-not-allowed pointer-events-none',
           }}

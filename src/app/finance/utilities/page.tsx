@@ -13,6 +13,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -42,7 +43,7 @@ export default function UtilitiesPage() {
   const [selectedMeterId, setSelectedMeterId] = useState('');
 
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning' | 'info'; text: string } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -220,11 +221,15 @@ export default function UtilitiesPage() {
           className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-2xs animate-in fade-in duration-200 ${
             message.type === 'success'
               ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+              : message.type === 'warning' || message.type === 'info'
+              ? 'bg-amber-50 text-amber-900 border border-amber-200'
               : 'bg-rose-50 text-rose-900 border border-rose-200'
           }`}
         >
           {message.type === 'success' ? (
             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          ) : message.type === 'warning' || message.type === 'info' ? (
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
           ) : (
             <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
           )}
@@ -250,14 +255,14 @@ export default function UtilitiesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('diesel')}
-          className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer select-none ${
+          className={`py-2 px-1.5 sm:px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all cursor-pointer select-none ${
             activeTab === 'diesel'
               ? 'bg-white text-amber-900 shadow-xs'
               : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/50'
           }`}
         >
-          <Fuel className={`h-4 w-4 shrink-0 ${activeTab === 'diesel' ? 'text-amber-600' : 'text-stone-400'}`} />
-          <span className="whitespace-nowrap">{t('finance.utilities.diesel') || 'Diesel'}</span>
+          <Fuel className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 ${activeTab === 'diesel' ? 'text-amber-600' : 'text-stone-400'}`} />
+          <span className="whitespace-nowrap">{t('finance.utilities.generator') || 'Generator'}</span>
         </button>
 
         <button

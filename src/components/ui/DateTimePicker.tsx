@@ -29,6 +29,14 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
+function isSameCalendarDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
 function parseIso(val?: string) {
   if (!val) {
     const now = new Date();
@@ -95,6 +103,7 @@ export function DateTimePicker({
   const initial = useMemo(() => parseIso(value), [value]);
   const [draftDate, setDraftDate] = useState<Date>(initial.date);
   const [draftTime, setDraftTime] = useState<string>(initial.time);
+  const [displayMonth, setDisplayMonth] = useState<Date>(initial.date);
 
   // Sync draft state on open
   useEffect(() => {
@@ -102,6 +111,7 @@ export function DateTimePicker({
       const p = parseIso(value);
       setDraftDate(p.date);
       setDraftTime(p.time);
+      setDisplayMonth(p.date);
     }
   }, [isOpen, value]);
 
@@ -133,7 +143,9 @@ export function DateTimePicker({
     const d = pad2(now.getDate());
     const t = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
     onChange(`${y}-${m}-${d}T${t}`);
-    setDraftDate(new Date(y, now.getMonth(), now.getDate()));
+    const today = new Date(y, now.getMonth(), now.getDate());
+    setDraftDate(today);
+    setDisplayMonth(today);
     setDraftTime(t);
   };
 
@@ -146,7 +158,15 @@ export function DateTimePicker({
   const handleQuickDate = (daysAgo: number) => {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
-    setDraftDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    setDraftDate(target);
+    setDisplayMonth(target);
+  };
+
+  const isQuickActive = (daysAgo: number) => {
+    const target = new Date();
+    target.setDate(target.getDate() - daysAgo);
+    return isSameCalendarDay(draftDate, target);
   };
 
   const displayString = useMemo(() => {
@@ -161,21 +181,33 @@ export function DateTimePicker({
         <button
           type="button"
           onClick={() => handleQuickDate(0)}
-          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+          className={`px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-lg border ${
+            isQuickActive(0)
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+              : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-transparent font-semibold'
+          }`}
         >
           {t('common.datePicker.today') || 'Today'}
         </button>
         <button
           type="button"
           onClick={() => handleQuickDate(1)}
-          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+          className={`px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-lg border ${
+            isQuickActive(1)
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+              : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-transparent font-semibold'
+          }`}
         >
           {t('common.datePicker.yesterday') || 'Yesterday'}
         </button>
         <button
           type="button"
           onClick={() => handleQuickDate(2)}
-          className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors cursor-pointer"
+          className={`px-2.5 py-1 text-xs transition-colors cursor-pointer rounded-lg border ${
+            isQuickActive(2)
+              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+              : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-transparent font-semibold'
+          }`}
         >
           {t('common.datePicker.twoDaysAgo') || '2 days ago'}
         </button>
@@ -186,29 +218,36 @@ export function DateTimePicker({
         <DayPicker
           mode="single"
           selected={draftDate}
-          onSelect={(d) => d && setDraftDate(d)}
+          month={displayMonth}
+          onMonthChange={setDisplayMonth}
+          onSelect={(d) => {
+            if (d) {
+              setDraftDate(d);
+              setDisplayMonth(d);
+            }
+          }}
           classNames={{
-            root: 'w-full max-w-[300px]',
-            months: 'w-full',
+            root: 'w-full max-w-[280px] mx-auto',
+            months: 'relative w-full',
             month: 'w-full space-y-2',
             month_caption: 'relative flex justify-center items-center h-8 font-bold text-xs text-stone-900',
             caption_label: 'text-xs font-bold text-stone-900',
-            nav: 'absolute inset-x-0 flex items-center justify-between z-10 px-1',
+            nav: 'absolute inset-x-0 top-0 flex items-center justify-between z-10 px-1 h-8 pointer-events-none',
             button_previous:
-              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer',
+              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer pointer-events-auto [&>svg]:h-4 [&>svg]:w-4',
             button_next:
-              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer',
+              'p-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer pointer-events-auto [&>svg]:h-4 [&>svg]:w-4',
             month_grid: 'w-full border-collapse',
             weekdays: 'grid grid-cols-7 gap-1 text-center mb-1',
             weekday: 'text-[11px] font-bold text-stone-400 py-0.5',
             week: 'grid grid-cols-7 gap-1 mt-0.5',
             day: 'h-8 w-full p-0 flex items-center justify-center font-normal',
             day_button:
-              'h-8 w-8 rounded-lg text-xs font-medium flex items-center justify-center transition-all hover:bg-amber-50 hover:text-amber-900 cursor-pointer',
+              'h-8 w-8 rounded-xl text-xs font-medium flex items-center justify-center transition-all hover:bg-amber-50 hover:text-amber-900 cursor-pointer',
             selected:
-              '[&>.rdp-day_button]:bg-amber-600 [&>.rdp-day_button]:text-white [&>.rdp-day_button]:font-bold [&>.rdp-day_button]:hover:bg-amber-700 shadow-2xs',
+              'rdp-selected [&>button]:!bg-amber-600 [&>button]:!text-white [&>button]:font-bold [&>button]:rounded-xl [&>button]:shadow-xs [&>button]:!ring-0',
             today:
-              '[&>.rdp-day_button]:border [&>.rdp-day_button]:border-amber-500 [&>.rdp-day_button]:text-amber-900 [&>.rdp-day_button]:font-bold',
+              '[&:not(.rdp-selected):not([data-selected])>button]:ring-1 [&:not(.rdp-selected):not([data-selected])>button]:ring-amber-400 [&:not(.rdp-selected):not([data-selected])>button]:text-amber-800 [&:not(.rdp-selected):not([data-selected])>button]:font-semibold',
             outside: 'text-stone-300 opacity-40',
             disabled: 'text-stone-300 opacity-30 cursor-not-allowed pointer-events-none',
           }}
@@ -221,12 +260,29 @@ export function DateTimePicker({
           <Clock className="h-4 w-4 text-amber-600 shrink-0" />
           <span>{t('common.datePicker.time') || 'Time'}</span>
         </div>
-        <div className="w-36">
-          <TimePicker
-            value={draftTime}
-            onChange={(val) => setDraftTime(val)}
-            triggerClassName="h-9 px-2 text-xs"
-          />
+        <div className="flex items-center gap-2">
+          <div className="w-28">
+            <TimePicker
+              value={draftTime}
+              onChange={(val) => setDraftTime(val)}
+              hideIcon={true}
+              hideNow={true}
+              triggerClassName="h-9 px-2 text-xs justify-center"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const now = new Date();
+              setDraftTime(`${pad2(now.getHours())}:${pad2(now.getMinutes())}`);
+            }}
+            className="px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-lg border border-amber-200/70 transition-colors cursor-pointer select-none"
+            title={t('common.datePicker.now') || 'Set current time'}
+          >
+            {t('common.datePicker.now') || 'Now'}
+          </button>
         </div>
       </div>
 

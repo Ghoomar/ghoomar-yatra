@@ -26,7 +26,7 @@ import { getLocalizedMasterName } from '@/lib/i18n/master-data';
 interface LpgTabProps {
   businessDate: string;
   onRefresh: () => void;
-  setMessage: (msg: { type: 'success' | 'error'; text: string }) => void;
+  setMessage: (msg: { type: 'success' | 'error' | 'warning' | 'info'; text: string }) => void;
 }
 
 const LPG_ITEM_ID = '195c1900-0002-4000-a000-000000000002';
@@ -71,6 +71,8 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [invoiceNo, setInvoiceNo] = useState('');
   const [purchaseNotes, setPurchaseNotes] = useState('');
+  const [showBillDetails, setShowBillDetails] = useState(false);
+  const [showPurchaseNotes, setShowPurchaseNotes] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -304,6 +306,8 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
       setSelectedVendorId('');
       setInvoiceNo('');
       setPurchaseNotes('');
+      setShowBillDetails(false);
+      setShowPurchaseNotes(false);
       loadLpgData();
       onRefresh();
     } catch (err: any) {
@@ -383,7 +387,7 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
         </div>
 
         {/* Bottom edge: 4px stock progress bar */}
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-stone-100">
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-stone-200">
           <div
             className={`h-full transition-all duration-300 ${isLowStock ? 'bg-rose-500' : 'bg-amber-500'}`}
             style={{ width: `${stockPercentage}%` }}
@@ -600,44 +604,83 @@ export function LpgTab({ businessDate, onRefresh, setMessage }: LpgTabProps) {
                   />
                 </div>
 
-                {/* Row 3: Vendor (Radix Select) + Challan No */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
-                      {t('finance.utilities.lpgTab.vendor') || 'Agency / Vendor'}
-                    </label>
-                    <SimpleSelect
-                      value={selectedVendorId}
-                      onChange={setSelectedVendorId}
-                      options={vendorOptions}
-                      placeholder={t('finance.utilities.lpgTab.selectVendor') || '— Select Gas Agency —'}
-                    />
-                  </div>
+                {/* Collapsible Toggles: + Bill Details & + Add notes */}
+                <div className="flex items-center gap-3 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowBillDetails(!showBillDetails)}
+                    className="text-[11px] font-bold text-stone-500 hover:text-stone-800 flex items-center gap-1 py-0.5 cursor-pointer select-none"
+                  >
+                    {showBillDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    <span>
+                      {showBillDetails
+                        ? (t('finance.utilities.hideBillDetails') || 'Hide bill details')
+                        : (t('finance.utilities.addBillDetails') || '+ Bill Details')}
+                    </span>
+                    {!showBillDetails && (selectedVendorId || invoiceNo.trim()) ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-600 ml-0.5" />
+                    ) : null}
+                  </button>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
-                      {t('finance.utilities.lpgTab.invoiceNo') || 'Invoice / Challan No.'}
-                    </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPurchaseNotes(!showPurchaseNotes)}
+                    className="text-[11px] font-bold text-stone-500 hover:text-stone-800 flex items-center gap-1 py-0.5 cursor-pointer select-none"
+                  >
+                    {showPurchaseNotes ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    <span>
+                      {showPurchaseNotes
+                        ? (t('finance.utilities.lpgTab.hideNotes') || 'Hide notes')
+                        : (t('finance.utilities.lpgTab.addNotes') || '+ Add notes')}
+                    </span>
+                    {!showPurchaseNotes && purchaseNotes.trim() ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-600 ml-0.5" />
+                    ) : null}
+                  </button>
+                </div>
+
+                {/* Collapsible Bill Details (Vendor + Challan No) */}
+                {showBillDetails && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                        {t('finance.utilities.lpgTab.vendor') || 'Agency / Vendor'}
+                      </label>
+                      <SimpleSelect
+                        value={selectedVendorId}
+                        onChange={setSelectedVendorId}
+                        options={vendorOptions}
+                        placeholder={t('finance.utilities.lpgTab.selectVendor') || '— Select Gas Agency —'}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                        {t('finance.utilities.lpgTab.invoiceNo') || 'Invoice / Challan No.'}
+                      </label>
+                      <input
+                        type="text"
+                        value={invoiceNo}
+                        onChange={(e) => setInvoiceNo(e.target.value)}
+                        placeholder="e.g. CH-2041"
+                        className="w-full h-11 rounded-xl border border-stone-300 px-2.5 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Collapsible Notes */}
+                {showPurchaseNotes && (
+                  <div className="pt-1 animate-in fade-in duration-150">
                     <input
                       type="text"
-                      value={invoiceNo}
-                      onChange={(e) => setInvoiceNo(e.target.value)}
-                      placeholder="e.g. CH-2041"
-                      className="w-full h-11 rounded-xl border border-stone-300 px-2.5 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white shadow-2xs"
+                      value={purchaseNotes}
+                      onChange={(e) => setPurchaseNotes(e.target.value)}
+                      placeholder={t('finance.utilities.lpgTab.purchaseNotesPlaceholder') || 'Notes (optional)'}
+                      className="w-full h-9 rounded-xl border border-stone-300 px-2.5 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white"
                     />
                   </div>
-                </div>
-
-                {/* Row 4: Compact Notes */}
-                <div>
-                  <input
-                    type="text"
-                    value={purchaseNotes}
-                    onChange={(e) => setPurchaseNotes(e.target.value)}
-                    placeholder={t('finance.utilities.lpgTab.purchaseNotesPlaceholder') || 'Notes (optional)'}
-                    className="w-full h-9 rounded-xl border border-stone-300 px-2.5 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 bg-white"
-                  />
-                </div>
+                )}
 
                 {/* Record Purchase CTA */}
                 <button

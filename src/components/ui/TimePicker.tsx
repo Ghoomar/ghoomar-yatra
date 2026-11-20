@@ -7,8 +7,12 @@ import { Clock, X } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 
 export interface TimePickerProps {
-  value: string; // "HH:mm" (24-hour format e.g. "14:30")
+  value: string; // "HH:mm" (24-hour e.g. "14:30") or "hh:mm AM/PM" (12-hour e.g. "11:57 PM")
   onChange: (value: string) => void;
+  hourCycle?: 12 | 24;
+  hideIcon?: boolean;
+  hideNow?: boolean;
+  onNow?: () => void;
   disabled?: boolean;
   required?: boolean;
   clearable?: boolean;
@@ -21,23 +25,55 @@ export interface TimePickerProps {
   'data-testid'?: string;
 }
 
-function parseTimeString(val?: string): Time | null {
-  if (!val) return null;
-  const parts = val.split(':');
-  if (parts.length < 2) return null;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
-  return new Time(h, m);
-}
-
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
+}
+
+export function parseTimeString(val?: string): { time: Time; h: number; m: number; isPM: boolean } | null {
+  if (!val) return null;
+  const match = val.trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const p = match[3]?.toUpperCase();
+  if (isNaN(h) || isNaN(m) || m < 0 || m > 59) return null;
+
+  let isPM = false;
+  if (p) {
+    if (h < 1 || h > 12) return null;
+    isPM = p === 'PM';
+    if (p === 'PM' && h < 12) h += 12;
+    if (p === 'AM' && h === 12) h = 0;
+  } else {
+    if (h < 0 || h > 23) return null;
+    isPM = h >= 12;
+  }
+  return { time: new Time(h, m), h, m, isPM };
+}
+
+export function formatTime(h: number, m: number, cycle: 12 | 24 = 24): string {
+  if (cycle === 12) {
+    const isPM = h >= 12;
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    return `${pad2(h12)}:${pad2(m)} ${isPM ? 'PM' : 'AM'}`;
+  }
+  return `${pad2(h)}:${pad2(m)}`;
+}
+
+export function time12To24(timeStr?: string): string {
+  const p = parseTimeString(timeStr);
+  if (!p) return '12:00';
+  return `${pad2(p.h)}:${pad2(p.m)}`;
 }
 
 export function TimePicker({
   value,
   onChange,
+  hourCycle = 24,
+  hideIcon = false,
+  hideNow = false,
+  onNow,
   disabled = false,
   required = false,
   clearable = false,
@@ -51,11 +87,13 @@ export function TimePicker({
 }: TimePickerProps) {
   const { t } = useI18n();
 
-  const timeVal = useMemo(() => parseTimeString(value), [value]);
+  const parsed = useMemo(() => parseTimeString(value), [value]);
+  const timeVal = useMemo(() => (parsed ? parsed.time : null), [parsed]);
+  const isPM = parsed ? parsed.isPM : false;
 
   const handleTimeChange = (v: TimeValue | null) => {
     if (v) {
-      onChange(`${pad2(v.hour)}:${pad2(v.minute)}`);
+      onChange(formatTime(v.hour, v.minute, hourCycle));
     } else {
       onChange('');
     }
@@ -64,8 +102,25 @@ export function TimePicker({
   const handleNow = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (onNow) {
+      onNow();
+      return;
+    }
     const now = new Date();
-    onChange(`${pad2(now.getHours())}:${pad2(now.getMinutes())}`);
+    onChange(formatTime(now.getHours(), now.getMinutes(), hourCycle));
+  };
+
+  const handleSetPeriod = (targetPeriod: 'AM' | 'PM') => {
+    const curH = parsed ? parsed.h : (targetPeriod === 'PM' ? 12 : 9);
+    const curM = parsed ? parsed.m : 0;
+    const isCurPM = curH >= 12;
+    let newH = curH;
+    if (targetPeriod === 'PM' && !isCurPM) {
+      newH = curH + 12;
+    } else if (targetPeriod === 'AM' && isCurPM) {
+      newH = curH - 12;
+    }
+    onChange(formatTime(newH, curM, hourCycle));
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -80,7 +135,7 @@ export function TimePicker({
       {name && <input type="hidden" name={name} id={id} value={value || ''} />}
 
       <TimeField
-        hourCycle={24}
+        hourCycle={hourCycle}
         value={timeVal}
         onChange={handleTimeChange}
         isDisabled={disabled}
@@ -98,42 +153,94 @@ export function TimePicker({
             ${triggerClassName}
           `}
         >
-          {/* Left: Clock Icon + Segmented Input */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Clock className="h-4 w-4 text-amber-600 shrink-0" />
-            <DateInput className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-stone-900 select-none">
-              {(segment) => (
-                <DateSegment
-                  segment={segment}
-                  className="px-1 py-0.5 rounded-md font-mono text-stone-900 transition-colors focus:bg-amber-100 focus:text-amber-900 focus:outline-none data-[placeholder]:text-stone-400 caret-transparent"
-                />
-              )}
+          {/* Left: Optional Clock Icon + Segmented Input + 12h AM/PM toggle */}
+          <div className={`flex items-center gap-1.5 min-w-0 ${triggerClassName.includes('justify-center') || (hideNow && hourCycle === 24) ? 'w-full justify-center' : 'flex-1'}`}>
+            {!hideIcon && <Clock className="h-4 w-4 text-amber-600 shrink-0" />}
+            <DateInput className="flex items-center gap-0.5 font-mono text-sm sm:text-base font-bold text-stone-900 select-none shrink-0 tabular-nums">
+              {(segment) => {
+                const isHidden =
+                  segment.type === 'dayPeriod' ||
+                  (segment.type === 'literal' && !segment.text.includes(':'));
+                return (
+                  <DateSegment
+                    segment={segment}
+                    className={
+                      isHidden
+                        ? 'hidden pointer-events-none'
+                        : 'px-1 py-0.5 rounded-md font-mono text-stone-900 transition-colors focus:bg-amber-100 focus:text-amber-900 focus:outline-none data-[placeholder]:text-stone-400 caret-transparent'
+                    }
+                  />
+                );
+              }}
             </DateInput>
-          </div>
 
-          {/* Right: Actions (Clear + 1-Tap Now pill) */}
-          <div className="flex items-center gap-1.5 shrink-0 ml-2">
-            {clearable && !required && !disabled && value && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="p-1 rounded-md text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
-                aria-label={t('common.datePicker.clear') || 'Clear'}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+            {hourCycle === 12 && (
+              <div className="flex items-center rounded-lg bg-stone-100 p-0.5 border border-stone-200/80 text-[10px] font-bold select-none shrink-0 ml-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSetPeriod('AM');
+                  }}
+                  disabled={disabled}
+                  className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                    !isPM
+                      ? 'bg-amber-600 text-white font-extrabold shadow-2xs'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                  aria-label="Set AM"
+                >
+                  AM
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSetPeriod('PM');
+                  }}
+                  disabled={disabled}
+                  className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                    isPM
+                      ? 'bg-amber-600 text-white font-extrabold shadow-2xs'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                  aria-label="Set PM"
+                >
+                  PM
+                </button>
+              </div>
             )}
-
-            <button
-              type="button"
-              onClick={handleNow}
-              disabled={disabled}
-              className="px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-lg border border-amber-200/70 transition-colors cursor-pointer select-none"
-              title={t('common.datePicker.now') || 'Set current time'}
-            >
-              {t('common.datePicker.now') || 'Now'}
-            </button>
           </div>
+
+          {/* Right: Actions (Clear + 1-Tap Now pill if not hidden) */}
+          {(!hideNow || (clearable && !required && !disabled && value)) && (
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              {clearable && !required && !disabled && value && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="p-1 rounded-md text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
+                  aria-label={t('common.datePicker.clear') || 'Clear'}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {!hideNow && (
+                <button
+                  type="button"
+                  onClick={handleNow}
+                  disabled={disabled}
+                  className="px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-lg border border-amber-200/70 transition-colors cursor-pointer select-none"
+                  title={t('common.datePicker.now') || 'Set current time'}
+                >
+                  {t('common.datePicker.now') || 'Now'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </TimeField>
     </div>
