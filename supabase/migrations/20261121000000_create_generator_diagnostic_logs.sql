@@ -2,9 +2,6 @@
 -- Description: Creates generator_diagnostic_logs table to store physical LCD diagnostic panel readings
 -- (Runtime hours/minutes, total engine starts, fuel level %, cumulative kWh energy generation)
 -- independently from inventory fuel stock movements.
---
--- Note: LOCAL AND PROD SHARE LIVE SUPABASE DB.
--- DO NOT EXECUTE THIS SCRIPT AUTOMATICALLY. STAGED FOR OPERATOR REVIEW ONLY.
 
 CREATE TABLE IF NOT EXISTS public.generator_diagnostic_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
