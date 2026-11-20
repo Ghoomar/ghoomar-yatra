@@ -25,7 +25,9 @@
     "update": "अपडेट करें",
     "view": "देखें",
     "manage": "मैनेज करें",
-    "undo": "वापस लें"
+    "undo": "वापस लें",
+    "done": "हो गया",
+    "apply": "लागू करें"
   },
   "labels": {
     "date": "तारीख",
@@ -83,6 +85,7 @@
   "datePicker": {
     "selectDate": "तारीख चुनें",
     "selectDateTime": "तारीख और समय चुनें",
+    "selectTime": "समय चुनें",
     "today": "आज",
     "yesterday": "कल",
     "clear": "साफ़ करें",
@@ -92,13 +95,16 @@
     "hour": "घंटा",
     "minute": "मिनट",
     "invalidDate": "अमान्य तारीख (DD-MM-YYYY)",
+    "invalidTimeFormat": "प्रारूप: HH:mm (00:00 - 23:59)",
     "previousMonth": "पिछला महीना",
     "nextMonth": "अगला महीना",
     "enterManually": "तारीख मैन्युअल दर्ज करें",
     "enterDateTimeManually": "तारीख और समय मैन्युअल दर्ज करें",
+    "enterTimeManually": "समय मैन्युअल दर्ज करें",
     "backToCalendar": "कैलेंडर पर वापस जाएं",
     "manualEntryHint": "प्रारूप: DD-MM-YYYY",
     "manualTimeHint": "प्रारूप: HH:MM (24-घंटे)",
+    "manualTimeInstructions": "24-घंटे के प्रारूप में समय लिखें (उदा. 14:30 या 09:15):",
     "apply": "लागू करें",
     "months": {
       "1": "जनवरी",

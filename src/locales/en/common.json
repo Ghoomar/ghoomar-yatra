@@ -25,7 +25,9 @@
     "update": "Update",
     "view": "View",
     "manage": "Manage",
-    "undo": "Undo"
+    "undo": "Undo",
+    "done": "Done",
+    "apply": "Apply"
   },
   "labels": {
     "date": "Date",
@@ -83,6 +85,7 @@
   "datePicker": {
     "selectDate": "Select date",
     "selectDateTime": "Select date & time",
+    "selectTime": "Select time",
     "today": "Today",
     "yesterday": "Yesterday",
     "clear": "Clear",
@@ -92,13 +95,16 @@
     "hour": "Hour",
     "minute": "Minute",
     "invalidDate": "Invalid date (DD-MM-YYYY)",
+    "invalidTimeFormat": "Format: HH:mm (00:00 - 23:59)",
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
     "enterManually": "Enter date manually",
     "enterDateTimeManually": "Enter date & time manually",
+    "enterTimeManually": "Enter time manually",
     "backToCalendar": "Back to calendar",
     "manualEntryHint": "Format: DD-MM-YYYY",
     "manualTimeHint": "Format: HH:MM (24-hour)",
+    "manualTimeInstructions": "Type time in 24-hour format (e.g. 14:30 or 09:15):",
     "apply": "Apply",
     "months": {
       "1": "January",

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Menu, Calendar, ShieldCheck, Car, LogOut, Globe } from 'lucide-react';
 import { RoleName } from '@/lib/types/database';
 import { getTodayBusinessDate } from '@/lib/utils';
@@ -57,6 +58,9 @@ export function Header({
     window.location.replace('/login');
   };
 
+  const pathname = usePathname();
+  const isUtilitiesPage = pathname?.startsWith('/finance/utilities');
+
   // Format business date with active locale (e.g. 20 Sep 2026 or 20 सित॰ 2026)
   const formattedDate = React.useMemo(() => {
     return formatDate(businessDate, 'short');
@@ -76,17 +80,19 @@ export function Header({
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center gap-1.5 rounded-lg bg-[#F8F5F0] px-2 sm:px-2.5 py-1.5 border border-[#E7E2D8] text-xs sm:text-sm font-medium text-stone-700 min-w-0">
-          <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
-          <span className="truncate whitespace-nowrap text-[11px] sm:text-xs md:text-sm">
-            {t('navigation.header.dateLabel')} <strong className="text-stone-900 font-semibold">{formattedDate}</strong>
-          </span>
-          {isDayClosed && (
-            <span className="inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-semibold bg-stone-200 text-stone-800 shrink-0">
-              {t('navigation.header.closedBadge')}
+        {!isUtilitiesPage && (
+          <div className="flex items-center gap-1.5 rounded-lg bg-[#F8F5F0] px-2 sm:px-2.5 py-1.5 border border-[#E7E2D8] text-xs sm:text-sm font-medium text-stone-700 min-w-0">
+            <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-600 shrink-0" />
+            <span className="truncate whitespace-nowrap text-[11px] sm:text-xs md:text-sm">
+              {t('navigation.header.dateLabel')} <strong className="text-stone-900 font-semibold">{formattedDate}</strong>
             </span>
-          )}
-        </div>
+            {isDayClosed && (
+              <span className="inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-semibold bg-stone-200 text-stone-800 shrink-0">
+                {t('navigation.header.closedBadge')}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right section: Language Switcher, Gate Counter, Role Display & Sign Out */}

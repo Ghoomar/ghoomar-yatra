@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, X, AlertCircle, Check, Edit3 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, X, AlertCircle, Check, Edit3 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import {
   formatToDisplay,
@@ -549,46 +549,64 @@ export function DateTimePicker({
       </div>
 
       {/* 24-HOUR TIME SELECTOR SECTION */}
-      <div className="pt-2 pb-1 border-t border-stone-200 flex items-center justify-between gap-2">
+      <div className="pt-2 pb-1.5 border-t border-stone-200 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-xs text-stone-700 font-semibold">
           <Clock className="h-4 w-4 text-amber-600 shrink-0" />
           <span>{t('common.datePicker.time')}:</span>
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* Hour Input / Stepper */}
-          <div className="flex items-center bg-stone-50 border border-stone-200 rounded-lg p-0.5">
-            <select
-              value={selectedHour}
-              onChange={(e) => handleHourChange(parseInt(e.target.value, 10))}
-              aria-label={t('common.datePicker.hour')}
-              className="bg-transparent text-xs font-bold text-stone-900 py-1 px-1.5 focus:outline-none cursor-pointer"
+        <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-lg p-1">
+          {/* Hour Stepper */}
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => handleHourChange((selectedHour - 1 + 24) % 24)}
+              className="p-1 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-800 transition-colors cursor-pointer"
+              aria-label="Decrease Hour"
             >
-              {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i}>
-                  {padZero(i)}
-                </option>
-              ))}
-            </select>
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            <span className="w-6 text-center font-mono text-xs font-bold text-stone-900 select-none">
+              {padZero(selectedHour)}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleHourChange((selectedHour + 1) % 24)}
+              className="p-1 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-800 transition-colors cursor-pointer"
+              aria-label="Increase Hour"
+            >
+              <ChevronUp className="h-3 w-3" />
+            </button>
           </div>
 
-          <span className="font-bold text-stone-400">:</span>
+          <span className="font-bold text-stone-400 select-none">:</span>
 
-          {/* Minute Input / Stepper */}
-          <div className="flex items-center bg-stone-50 border border-stone-200 rounded-lg p-0.5">
-            <select
-              value={selectedMinute}
-              onChange={(e) => handleMinuteChange(parseInt(e.target.value, 10))}
-              aria-label={t('common.datePicker.minute')}
-              className="bg-transparent text-xs font-bold text-stone-900 py-1 px-1.5 focus:outline-none cursor-pointer"
+          {/* Minute Stepper */}
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => handleMinuteChange((selectedMinute - 1 + 60) % 60)}
+              className="p-1 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-800 transition-colors cursor-pointer"
+              aria-label="Decrease Minute"
             >
-              {Array.from({ length: 60 }, (_, i) => (
-                <option key={i} value={i}>
-                  {padZero(i)}
-                </option>
-              ))}
-            </select>
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            <span className="w-6 text-center font-mono text-xs font-bold text-stone-900 select-none">
+              {padZero(selectedMinute)}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleMinuteChange((selectedMinute + 1) % 60)}
+              className="p-1 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-800 transition-colors cursor-pointer"
+              aria-label="Increase Minute"
+            >
+              <ChevronUp className="h-3 w-3" />
+            </button>
           </div>
+
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-100/60 px-1 py-0.2 rounded ml-0.5 select-none">
+            24H
+          </span>
         </div>
       </div>
 
