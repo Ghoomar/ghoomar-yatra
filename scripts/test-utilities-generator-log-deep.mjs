@@ -111,17 +111,28 @@ test('DayPicker: Selected date highlight and unselected today outline work witho
   assert.ok(day20Cell.includes('data-selected="true"'), 'Selected day must have data-selected="true"');
 });
 
-test('ElectricityTab: unit is strictly normalized to kWh everywhere', () => {
-  const normalize = (unit) => (!unit || unit.toUpperCase() === 'KVAH' ? 'kWh' : unit);
+test('ElectricityTab: meter units are normalized to kVAh and kWh correctly', () => {
+  const normalize = (unit) =>
+    !unit || unit.toUpperCase() === 'KVAH' ? 'kVAh' : unit.toUpperCase() === 'KWH' ? 'kWh' : unit;
 
-  assert.equal(normalize('KVAH'), 'kWh');
-  assert.equal(normalize('kvah'), 'kWh');
-  assert.equal(normalize('Kvah'), 'kWh');
-  assert.equal(normalize(''), 'kWh');
-  assert.equal(normalize(null), 'kWh');
-  assert.equal(normalize(undefined), 'kWh');
+  assert.equal(normalize('KVAH'), 'kVAh');
+  assert.equal(normalize('kvah'), 'kVAh');
+  assert.equal(normalize('Kvah'), 'kVAh');
+  assert.equal(normalize(''), 'kVAh');
+  assert.equal(normalize(null), 'kVAh');
+  assert.equal(normalize(undefined), 'kVAh');
+  assert.equal(normalize('KWH'), 'kWh');
   assert.equal(normalize('kWh'), 'kWh');
   assert.equal(normalize('units'), 'units');
+});
+
+test('ElectricityTab: meter multiplier converts register delta into billed kVAh', () => {
+  const billedConsumption = (current, previous, multiplier = 1) =>
+    Math.round((current - previous) * multiplier * 100) / 100;
+
+  assert.equal(billedConsumption(377.51, 174.55, 40), 8118.4);
+  assert.equal(billedConsumption(174.55, 0, 40), 6982);
+  assert.equal(billedConsumption(10, 8, 1), 2);
 });
 
 test('Generator Diagnostic Logs: fuel level clamping and color rules', () => {
