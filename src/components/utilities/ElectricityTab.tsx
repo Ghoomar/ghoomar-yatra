@@ -67,7 +67,8 @@ export function ElectricityTab({
   const [loadingBaseline, setLoadingBaseline] = useState(false);
 
   const selectedMeter = meters.find((m) => m.id === selectedMeterId) || meters[0];
-  const displayUnit = !selectedMeter?.unit || selectedMeter.unit.toUpperCase() === 'KVAH' ? 'kWh' : selectedMeter.unit;
+  const displayUnit = !selectedMeter?.unit ? 'kVAh' : selectedMeter.unit.toUpperCase() === 'KVAH' ? 'kVAh' : selectedMeter.unit.toUpperCase() === 'KWH' ? 'kWh' : selectedMeter.unit;
+  const meterMultiplier = Number(selectedMeter?.meter_multiplier ?? 1);
 
   // Auto-select first meter if not set
   useEffect(() => {
@@ -165,7 +166,7 @@ export function ElectricityTab({
       if (diff < 0) {
         isLowerThanPrevious = true;
       } else {
-        previewConsumption = diff;
+        previewConsumption = diff * meterMultiplier;
       }
     }
   }
@@ -240,7 +241,7 @@ export function ElectricityTab({
 
   const meterOptions = useMemo(() => {
     return meters.map((m) => {
-      const u = !m.unit || m.unit.toUpperCase() === 'KVAH' ? 'kWh' : m.unit;
+      const u = !m.unit || m.unit.toUpperCase() === 'KVAH' ? 'kVAh' : m.unit.toUpperCase() === 'KWH' ? 'kWh' : m.unit;
       return {
         value: m.id,
         label: `${m.meter_name} (${u})`,
@@ -362,6 +363,11 @@ export function ElectricityTab({
                     {displayUnit}
                   </div>
                 </div>
+                {meterMultiplier !== 1 && (
+                  <div className="mt-1 text-[10px] text-stone-400 font-medium">
+                    Meter factor ×{formatNumber(meterMultiplier)}
+                  </div>
+                )}
               </div>
 
               {/* Time (Segmented RAC TimeField with Now button on label row) */}
