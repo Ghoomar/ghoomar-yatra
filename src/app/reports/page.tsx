@@ -218,7 +218,7 @@ async function fetchPagedRows<T = any>(
           .order('created_at', { ascending: false }),
         fetch(gateUrl),
         supabase.from('expenses').select('amount').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
-        supabase.from('meter_readings_ledger').select('delta_consumption').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+        supabase.from('daily_electricity_allocations').select('daily_kvah, operational_cost').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
       ];
 
       if (isSingleDay) {
@@ -254,8 +254,8 @@ async function fetchPagedRows<T = any>(
       const expTotal = (expRes.data || []).reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
       setDirectExpenses(expTotal);
 
-      const totalKvah = (elecRes.data || []).reduce((s: number, r: any) => s + (Number(r.delta_consumption) || 0), 0);
-      setElectricityCost(totalKvah * 10.00); // authoritative standard ₹10/KVAH rate
+      const totalElecCost = (elecRes.data || []).reduce((s: number, r: any) => s + (Number(r.operational_cost) || 0), 0);
+      setElectricityCost(totalElecCost);
 
       if (gateRes.ok) {
         const gateJson = await gateRes.json();

@@ -35,6 +35,9 @@ export default function ProfitabilityPage() {
     electricityCost: 0,
     electricityKvah: 0,
     electricityRate: 10,
+    electricityCostType: 'estimated' as 'reconciled' | 'estimated',
+    electricityBillMonth: null as string | null,
+    electricityAllocationStatus: 'uncovered' as 'measured' | 'allocated' | 'partial' | 'uncovered',
     generatorDieselCost: 0,
     generatorDieselLiters: 0,
     commercialLpgCost: 0,
@@ -153,13 +156,13 @@ export default function ProfitabilityPage() {
       const payroll = (emps || []).reduce((s, e) => s + (Number(e.monthly_salary) || 0), 0);
       setTotalSalaries(payroll);
 
-      // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules, Electricity Ledger & Break-Even Targets
-      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecReadings }] = await Promise.all([
+      // 5. Fetch Authoritative MTD Summary, Fixed Cost Rules, Proportional Daily Electricity Allocation & Break-Even Targets
+      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecAlloc }] = await Promise.all([
         fetchMTDFinancialSummary(supabase, businessDate),
         supabase.from('financial_cost_rules').select('*').eq('is_active', true),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'break_even_health_buffer_percent').eq('is_active', true).maybeSingle(),
-        supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
+        supabase.from('daily_electricity_allocations').select('*').eq('business_date', businessDate).maybeSingle(),
       ]);
 
       setMtdSummary(mtdRes);
@@ -167,9 +170,8 @@ export default function ProfitabilityPage() {
         setHealthBufferPercent(Number(bufferTarget.target_value) || 10);
       }
 
-      // Calculate Electricity Cost from Continuous Ledger & Configured Rule
-      const totalKvah = (elecReadings || []).reduce((sum, r) => sum + (Number(r.delta_consumption) || 0), 0);
-      let elecRate = 10.00;
+      // Calculate Electricity Cost from Proportional Allocation & Bill Reconciliation or Configured Rule
+      let fallbackElecRate = 10.00;
 
       if (costRules && costRules.length > 0) {
         const fixedRules = costRules.filter((r) => r.cost_classification === 'Fixed');
@@ -183,21 +185,32 @@ export default function ProfitabilityPage() {
         if (investorRule && investorRule.amount_or_rate != null) setInvestorRate(Number(investorRule.amount_or_rate));
 
         const elecCostRule = costRules.find((r) => r.category === 'Utilities' && r.calculation_method === 'meter_based');
-        if (elecCostRule && elecCostRule.amount_or_rate != null) elecRate = Number(elecCostRule.amount_or_rate);
+        if (elecCostRule && elecCostRule.amount_or_rate != null) fallbackElecRate = Number(elecCostRule.amount_or_rate);
       } else {
         setMonthlyOtherFixed(0);
       }
 
-      const totalElecCost = totalKvah * elecRate;
+      const totalKvah = Number(elecAlloc?.daily_kvah) || 0;
+      const isReconciled = elecAlloc?.cost_type === 'reconciled';
+      const elecCost = elecAlloc?.operational_cost != null
+        ? Number(elecAlloc.operational_cost)
+        : totalKvah * fallbackElecRate;
+      const effectiveElecRate = isReconciled && elecAlloc?.effective_rate_per_kvah != null
+        ? Number(elecAlloc.effective_rate_per_kvah)
+        : fallbackElecRate;
+
       setOperationalUtilities({
-        electricityCost: totalElecCost,
+        electricityCost: elecCost,
         electricityKvah: totalKvah,
-        electricityRate: elecRate,
+        electricityRate: effectiveElecRate,
+        electricityCostType: isReconciled ? 'reconciled' : 'estimated',
+        electricityBillMonth: elecAlloc?.bill_month || null,
+        electricityAllocationStatus: elecAlloc?.allocation_status || 'uncovered',
         generatorDieselCost: dieselCost,
         generatorDieselLiters: dieselLiters,
         commercialLpgCost: lpgCost,
         commercialLpgCylinders: lpgCylinders,
-        totalOperationalUtilities: totalElecCost + dieselCost + lpgCost,
+        totalOperationalUtilities: elecCost + dieselCost + lpgCost,
       });
 
       if (bepTarget?.target_value) {
@@ -468,8 +481,30 @@ export default function ProfitabilityPage() {
             </div>
             <div className="pl-4 space-y-1 text-xs text-stone-500">
               <div className="flex items-center justify-between">
-                <span>• {t('finance.profitability.electricity')} ({operationalUtilities.electricityKvah.toFixed(1)} KVAH × {formatINR(operationalUtilities.electricityRate)}/KVAH)</span>
-                <span className="font-mono text-stone-700">{formatINR(pnl.operationalUtilities.electricityCost)}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span>
+                    • {t('finance.profitability.electricity')} ({operationalUtilities.electricityKvah.toFixed(1)} kVAh × {formatINR(operationalUtilities.electricityRate)}/kVAh)
+                  </span>
+                  {operationalUtilities.electricityCostType === 'reconciled' ? (
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {operationalUtilities.electricityBillMonth
+                        ? `${t('finance.profitability.actualBill') || 'Actual Bill'} (${operationalUtilities.electricityBillMonth})`
+                        : (t('finance.profitability.reconciled') || 'Reconciled')}
+                    </span>
+                  ) : (
+                    <>
+                      {operationalUtilities.electricityAllocationStatus === 'allocated' && (
+                        <span className="text-[10px] text-stone-400">
+                          ({t('finance.utilities.allocated') || 'Allocated'})
+                        </span>
+                      )}
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                        {t('finance.profitability.operationalEstimate') || 'Estimate'}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <span className="font-mono text-stone-700 font-semibold">{formatINR(pnl.operationalUtilities.electricityCost)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>• {t('finance.profitability.dieselGen')} ({operationalUtilities.generatorDieselLiters.toFixed(1)} L)</span>

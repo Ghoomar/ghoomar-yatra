@@ -90,13 +90,13 @@ export default function DashboardPage() {
       setMonthlySalaries(totalSal);
       setAbsentStaffCount((attRecords || []).filter((a) => a.status === 'Absent').length);
 
-      // 7. Authoritative MTD Financial RPC, Fixed Cost Rules, Electricity & Fuel
-      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecReadings }, { data: fuelMovs }] = await Promise.all([
+      // 7. Authoritative MTD Financial RPC, Fixed Cost Rules, Proportional Daily Electricity Allocation & Fuel
+      const [mtdRes, { data: costRules }, { data: bepTarget }, { data: bufferTarget }, { data: elecAlloc }, { data: fuelMovs }] = await Promise.all([
         fetchMTDFinancialSummary(supabase, businessDate),
         supabase.from('financial_cost_rules').select('*').eq('is_active', true),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'monthly_break_even').eq('is_active', true).maybeSingle(),
         supabase.from('financial_targets').select('target_value').eq('target_type', 'break_even_health_buffer_percent').eq('is_active', true).maybeSingle(),
-        supabase.from('meter_readings_ledger').select('delta_consumption').eq('business_date', businessDate),
+        supabase.from('daily_electricity_allocations').select('*').eq('business_date', businessDate).maybeSingle(),
         supabase.from('stock_movements').select('purpose, movement_type, total_value')
           .eq('business_date', businessDate)
           .in('purpose', ['Generator Fuel', 'Kitchen Gas']),
@@ -126,8 +126,10 @@ export default function DashboardPage() {
       }
 
       // Calculate Operational Utilities (Electricity, Diesel, LPG)
-      const totalKvah = (elecReadings || []).reduce((s: number, r: any) => s + (Number(r.delta_consumption) || 0), 0);
-      const totalElec = totalKvah * elecRate;
+      const totalKvah = Number(elecAlloc?.daily_kvah) || 0;
+      const totalElec = elecAlloc?.operational_cost != null
+        ? Number(elecAlloc.operational_cost)
+        : totalKvah * elecRate;
       const dieselVal = (fuelMovs || [])
         .filter((m: any) => m.purpose === 'Generator Fuel' && m.movement_type === 'consumption')
         .reduce((s: number, m: any) => s + (Number(m.total_value) || 0), 0);

@@ -572,4 +572,60 @@ export interface GeneratorDiagnosticLog {
   created_at: string;
 }
 
+export interface Meter {
+  id: string;
+  meter_name: string;
+  meter_number: string;
+  meter_type: string;
+  location: string;
+  is_active: boolean;
+  unit: string;
+  meter_multiplier: number;
+  sanctioned_load_kva?: number | null;
+  tariff_category?: string | null;
+  created_at?: string;
+}
+
+export interface ElectricityBillReconciliation {
+  id: string;
+  meter_id: string;
+  bill_month: string;
+  bill_number?: string | null;
+  billing_period_start: string;
+  billing_period_end: string;
+  billed_kvah: number;
+  energy_charges: number;
+  demand_charges: number;
+  electricity_duty: number;
+  fppa_charges: number;
+  other_operational_charges: number;
+  lpsc_charges: number;
+  arrears_charges: number;
+  operational_bill_cost: number;
+  current_bill_amount: number;
+  final_payable_amount: number;
+  effective_rate_per_kvah: number;
+  source_reference?: string | null;
+  notes?: string | null;
+  status: 'DRAFT' | 'RECONCILED' | 'DISPUTED';
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DailyElectricityAllocation {
+  business_date: string;
+  meter_id: string;
+  intervals_count: number;
+  covered_seconds: number;
+  daily_kvah: number;
+  allocation_status: 'measured' | 'allocated' | 'partial' | 'uncovered';
+  bill_reconciliation_id?: string | null;
+  bill_month?: string | null;
+  effective_rate_per_kvah?: number | null;
+  operational_cost: number;
+  cost_type: 'reconciled' | 'estimated';
+}
+
+
 
