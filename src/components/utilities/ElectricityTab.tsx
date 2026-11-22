@@ -30,6 +30,7 @@ import {
   Scale,
   Calendar,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 
 interface ElectricityTabProps {
@@ -80,6 +81,10 @@ export function ElectricityTab({
 
   // Proportional Daily Allocation State for the active business date
   const [dailyAllocation, setDailyAllocation] = useState<DailyElectricityAllocation | null>(null);
+
+  // Deletion Modal State
+  const [deleteModalReading, setDeleteModalReading] = useState<any | null>(null);
+  const [deletingReading, setDeletingReading] = useState(false);
 
   // Monthly Bill Reconciliations State
   const [bills, setBills] = useState<ElectricityBillReconciliation[]>([]);
@@ -231,6 +236,128 @@ export function ElectricityTab({
     : costPerUnit;
 
   const isReconciledDay = dailyAllocation?.cost_type === 'reconciled';
+
+  const todayIst = useMemo(() => {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  }, []);
+  const isToday = businessDate === todayIst;
+
+  const formattedPriorTime = useMemo(() => {
+    if (!latestPriorTimestamp) return '';
+    const d = new Date(latestPriorTimestamp);
+    const priorDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+
+    const timeStr = d.toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    if (priorDateStr === businessDate) {
+      return timeStr;
+    }
+
+    const dateStr = d.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+    });
+
+    return `${dateStr}, ${timeStr}`;
+  }, [latestPriorTimestamp, businessDate, locale]);
+
+  const getPriorInfo = (r: any) => {
+    const prevVal =
+      r.previous_reading_value !== null && r.previous_reading_value !== undefined
+        ? Number(r.previous_reading_value)
+        : null;
+
+    let priorTimeFormatted = '';
+    let spanDays = 0;
+
+    if (r.previous_reading_timestamp) {
+      const prevD = new Date(r.previous_reading_timestamp);
+      const currD = new Date(r.reading_timestamp);
+      const prevDateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(prevD);
+      const currDateStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(currD);
+
+      const pTime = prevD.toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      if (prevDateStr === currDateStr) {
+        priorTimeFormatted = pTime;
+      } else {
+        const pDate = prevD.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: 'numeric',
+          month: 'short',
+        });
+        priorTimeFormatted = `${pDate}, ${pTime}`;
+      }
+
+      const diffMs = currD.getTime() - prevD.getTime();
+      spanDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    }
+
+    const isBillAnchor = Boolean(
+      r.notes &&
+        (r.notes.toLowerCase().includes('uppcl') ||
+          r.notes.toLowerCase().includes('reconciliation') ||
+          r.notes.toLowerCase().includes('anchor'))
+    );
+
+    return { prevVal, priorTimeFormatted, spanDays, isBillAnchor };
+  };
+
+  const handleDeleteReading = async () => {
+    if (!deleteModalReading?.id) return;
+    setDeletingReading(true);
+    try {
+      const { error } = await supabase
+        .from('meter_readings')
+        .delete()
+        .eq('id', deleteModalReading.id);
+
+      if (error) throw error;
+
+      setMessage({
+        type: 'success',
+        text: t('finance.utilities.readingDeleted') || 'Meter reading deleted successfully.',
+      });
+      setDeleteModalReading(null);
+      onRefresh();
+      fetchDailyAllocation();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to delete meter reading.' });
+    } finally {
+      setDeletingReading(false);
+    }
+  };
 
   // Preview Calculations for New Reading Input: Raw difference × Meter Multiplier (40)
   const parsedNewReading = parseFloat(newReading);
@@ -409,32 +536,32 @@ export function ElectricityTab({
   return (
     <div className="space-y-3 sm:space-y-4">
       {/* Sub-Navigation Switcher: Meter Readings vs Monthly Bill Reconciliation */}
-      <div className="flex items-center justify-between gap-2 flex-wrap pb-0.5">
-        <div className="flex items-center gap-1.5 p-1 bg-stone-100/90 rounded-xl border border-stone-200/80 shadow-2xs">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-0.5">
+        <div className="w-full sm:w-auto grid grid-cols-2 gap-1.5 p-1 bg-stone-100/90 rounded-xl border border-stone-200/80 shadow-2xs">
           <button
             type="button"
             onClick={() => setSubTab('readings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               subTab === 'readings'
                 ? 'bg-white text-stone-900 shadow-2xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <Activity className="h-3.5 w-3.5 text-amber-600" />
-            <span>{t('finance.utilities.readingsLog') || 'Meter Readings Log'}</span>
+            <Activity className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            <span className="truncate">{t('finance.utilities.readingsTab') || 'Readings'}</span>
           </button>
           <button
             type="button"
             onClick={() => setSubTab('reconciliation')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               subTab === 'reconciliation'
                 ? 'bg-white text-stone-900 shadow-2xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <FileText className="h-3.5 w-3.5 text-amber-600" />
-            <span>{t('finance.utilities.billReconciliation') || 'Monthly Bill Reconciliation'}</span>
-            <Badge variant="success" className="text-[10px] py-0 px-1.5">
+            <FileText className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            <span className="truncate">{t('finance.utilities.billsTab') || 'Monthly Bills'}</span>
+            <Badge variant="success" className="text-[10px] py-0 px-1.5 shrink-0">
               {bills.length}
             </Badge>
           </button>
@@ -452,95 +579,67 @@ export function ElectricityTab({
 
       {subTab === 'readings' ? (
         <>
-          {/* 1. Compact 2-Column Hairline Status Strip (~60px tall) */}
-          <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs grid grid-cols-2 divide-x divide-stone-100 overflow-hidden">
-            {/* Left: Today's Consumption */}
-            <div className="p-3 sm:p-3.5 flex flex-col justify-between">
-              <div className="flex items-center justify-between gap-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                    {t('finance.utilities.todayConsumption') || "Today's Consumption"}
+          {/* Single Full-Width Daily Summary Card */}
+          <div className="bg-white rounded-2xl border border-stone-200/90 shadow-2xs p-3.5 sm:p-4">
+            {/* Top row: Dynamic title + Plain-English status badge + Icon */}
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-stone-100">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-stone-700 uppercase tracking-wide">
+                  {isToday
+                    ? (t('finance.utilities.todayUsage') || "Today's Usage")
+                    : (t('finance.utilities.dailyUsage', { date: formatDisplayDate(businessDate, locale) }) || `Daily Usage · ${formatDisplayDate(businessDate, locale)}`)}
+                </span>
+                {dailyAllocation?.allocation_status === 'allocated' && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-stone-100 text-stone-700 border border-stone-200">
+                    {t('finance.utilities.statusDailyAvg') || 'Daily Avg'}
                   </span>
-                  {dailyAllocation?.allocation_status === 'allocated' && (
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-stone-100 text-stone-600 border border-stone-200">
-                      {t('finance.utilities.allocatedProportional') || 'Allocated (Proportional)'}
-                    </span>
-                  )}
-                  {dailyAllocation?.allocation_status === 'measured' && (
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {t('finance.utilities.measured') || 'Measured'}
-                    </span>
-                  )}
-                  {dailyAllocation?.allocation_status === 'partial' && (
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                      {t('finance.utilities.partialDay') || 'Partial Day'}
-                    </span>
-                  )}
-                  {isReconciledDay && (
-                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {dailyAllocation?.bill_month} Reconciled
-                    </span>
-                  )}
-                </div>
-                <div className="p-1 rounded-md bg-amber-50 text-amber-700 shrink-0">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                </div>
+                )}
+                {dailyAllocation?.allocation_status === 'partial' && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    {isToday
+                      ? (t('finance.utilities.statusSoFarToday') || 'So far today')
+                      : (t('finance.utilities.statusPartialDay') || 'Partial day')}
+                  </span>
+                )}
+                {dailyAllocation?.allocation_status === 'measured' && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    {t('finance.utilities.statusExact') || 'Exact'}
+                  </span>
+                )}
+                {isReconciledDay && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    {dailyAllocation?.bill_month
+                      ? (t('finance.utilities.statusActualBill', { month: dailyAllocation.bill_month }) || `Actual Bill · ${dailyAllocation.bill_month}`)
+                      : 'Actual Bill'}
+                  </span>
+                )}
               </div>
-              <div className="mt-1 flex flex-col">
-                <span className="text-lg sm:text-2xl font-black font-mono text-amber-600">
+              <div className="p-1 rounded-md bg-amber-50 text-amber-700 shrink-0">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+            </div>
+
+            {/* Main row: Big bold usage (1 decimal) on left, Daily cost + rate on right */}
+            <div className="pt-2.5 flex items-baseline justify-between gap-3 flex-wrap">
+              <div>
+                <span className="text-2xl sm:text-3xl font-black font-mono text-amber-600 tracking-tight">
                   {displayDailyConsumption > 0
-                    ? `${formatNumber(displayDailyConsumption)} ${displayUnit}`
+                    ? `${displayDailyConsumption.toFixed(1)} ${displayUnit}`
                     : `0.0 ${displayUnit}`}
                 </span>
-                <span className="text-[11px] text-stone-500 font-medium">
-                  {formatINR(displayDailyCost)} · @{formatINR(displayDailyRate)}/{displayUnit}
+              </div>
+              <div className="flex flex-col sm:items-end">
+                <span className="text-lg sm:text-xl font-black font-mono text-stone-900">
+                  {formatINR(displayDailyCost)}
+                </span>
+                <span className="text-xs text-stone-500 font-medium">
+                  @{formatINR(displayDailyRate)}/{displayUnit}
                   {isReconciledDay && (
                     <span className="text-emerald-700 font-semibold ml-1">(Actual Bill)</span>
                   )}
                 </span>
               </div>
             </div>
-
-            {/* Right: Previous Reading */}
-            <button
-              type="button"
-              onClick={scrollToHistory}
-              className="p-3 sm:p-3.5 flex flex-col justify-between text-left hover:bg-stone-50/80 transition-colors cursor-pointer select-none"
-              title={t('finance.utilities.tapViewHistory') || 'Tap to view reading history'}
-            >
-              <div className="flex items-center justify-between gap-1 w-full">
-                <span className="text-[11px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide">
-                  {t('finance.utilities.previousReading') || 'Previous Reading'}
-                </span>
-                <div className="p-1 rounded-md bg-stone-100 text-stone-600 shrink-0">
-                  <Activity className="h-3.5 w-3.5" />
-                </div>
-              </div>
-              <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
-                {loadingBaseline ? (
-                  <span className="text-sm font-semibold text-stone-400">...</span>
-                ) : latestPriorReading !== null ? (
-                  <span className="text-base sm:text-xl font-black font-mono text-stone-900">
-                    {`${latestPriorReading.toFixed(2)}`}
-                    <span className="text-xs text-stone-500 font-normal ml-1">reg</span>
-                  </span>
-                ) : (
-                  <span className="text-sm font-semibold text-stone-400">
-                    {t('finance.utilities.noPriorReading') || 'No prior reading'}
-                  </span>
-                )}
-                {latestPriorTimestamp && (
-                  <span className="text-[10px] text-stone-400 font-mono">
-                    {new Date(latestPriorTimestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
-                      timeZone: 'Asia/Kolkata',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true,
-                    })}
-                  </span>
-                )}
-              </div>
-            </button>
           </div>
 
           {/* 2. Main Form & Ledger Grid (Desktop 12 cols: 5 form / 7 ledger) */}
@@ -569,11 +668,15 @@ export function ElectricityTab({
                 {/* Row 1: Current Reading + Time */}
                 <div className="grid grid-cols-12 gap-2">
                   <div className="col-span-7">
-                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
-                      {t('finance.utilities.currentReading') || 'Current Reading'}{' '}
-                      <span className="text-stone-400 font-normal">(reg)</span>{' '}
-                      <span className="text-rose-500">*</span>
-                    </label>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <label className="block text-[11px] font-bold text-stone-700">
+                        {t('finance.utilities.currentReading') || 'Meter Reading'}{' '}
+                        <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1 py-0.2 rounded border border-amber-200/80">
+                        ×{multiplier}
+                      </span>
+                    </div>
                     <div className="relative rounded-xl">
                       <input
                         type="number"
@@ -582,17 +685,14 @@ export function ElectricityTab({
                         inputMode="decimal"
                         value={newReading}
                         onChange={(e) => setNewReading(e.target.value)}
-                        placeholder={latestPriorReading !== null ? (latestPriorReading + 2).toFixed(2) : '0.00'}
+                        placeholder={t('finance.utilities.enterReadingPlaceholder') || 'Enter reading'}
                         required
-                        className={`w-full h-11 rounded-xl border p-2.5 font-bold font-mono text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 pr-14 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-2xs transition-all ${
+                        className={`w-full h-11 rounded-xl border p-2.5 font-bold font-mono text-base text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-2xs transition-all ${
                           isLowerThanPrevious && !isReset
                             ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500'
                             : 'border-stone-300 focus:border-amber-500 bg-white'
                         }`}
                       />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-stone-500 pointer-events-none select-none bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
-                        ×{multiplier}
-                      </span>
                     </div>
                   </div>
 
@@ -619,20 +719,21 @@ export function ElectricityTab({
                   </div>
                 </div>
 
-                {/* Prior Reading Summary */}
-                {latestPriorReading !== null && (
-                  <div className="px-3 py-1.5 bg-stone-50 rounded-xl border border-stone-200/70 text-[11px] text-stone-500 flex items-center justify-between">
+                {/* Single concise helper line below input */}
+                <div className="text-[11px] text-stone-500">
+                  {latestPriorReading !== null ? (
                     <span>
-                      {t('finance.utilities.colPrior') || 'Prior Reading'}:{' '}
-                      <strong className="font-mono text-stone-800">{latestPriorReading.toFixed(2)}</strong>
+                      {t('finance.utilities.lastReadingHelper', {
+                        value: latestPriorReading.toFixed(2),
+                        time: formattedPriorTime,
+                      }) || `Last reading: ${latestPriorReading.toFixed(2)} (${formattedPriorTime})`}
                     </span>
-                    <span className="text-[10px] text-stone-400">
-                      Formula: (New - Prior) × {multiplier} = {displayUnit}
-                    </span>
-                  </div>
-                )}
+                  ) : (
+                    <span>{t('finance.utilities.noPriorReadingHelper') || 'No prior reading recorded'}</span>
+                  )}
+                </div>
 
-                {/* Live Preview Box: Shows Raw Diff × Multiplier (40) */}
+                {/* Clean live result preview banner */}
                 {isInputValid && latestPriorReading !== null && (
                   <div
                     className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all animate-in fade-in duration-150 ${
@@ -645,26 +746,19 @@ export function ElectricityTab({
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-700">
                         <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
                         <span>
-                          {t('finance.utilities.readingLowerWarning', { reading: latestPriorReading, unit: 'reg' }) ||
-                            `Reading is lower than prior (${latestPriorReading})`}
+                          {t('finance.utilities.readingLowerWarning', { reading: latestPriorReading.toFixed(2), unit: '' }) ||
+                            `Reading is lower than prior (${latestPriorReading.toFixed(2)})`}
                         </span>
                       </div>
                     ) : (
                       <>
-                        <div className="flex flex-col">
-                          <span className="font-mono font-bold text-amber-900 text-sm">
-                            {isReset
-                              ? `0.0 ${displayUnit} (Reset)`
-                              : `+${previewConsumption.toFixed(1)} ${displayUnit}`}
-                          </span>
-                          {!isReset && (
-                            <span className="text-[10px] text-amber-700/80 font-mono">
-                              ({(parsedNewReading - latestPriorReading).toFixed(2)} raw × {multiplier})
-                            </span>
-                          )}
-                        </div>
+                        <span className="font-mono font-bold text-amber-900 text-sm">
+                          {isReset
+                            ? `0.0 ${displayUnit} (Reset)`
+                            : `+${previewConsumption.toFixed(1)} ${displayUnit}`}
+                        </span>
                         <span className="font-mono font-bold text-stone-900 text-xs">
-                          Est. {formatINR(previewCost)}
+                          {formatINR(previewCost)}
                         </span>
                       </>
                     )}
@@ -792,10 +886,7 @@ export function ElectricityTab({
                     {/* Mobile View: Scannable Rows */}
                     <div className="divide-y divide-stone-100 md:hidden">
                       {meterReadings.map((r) => {
-                        const prevVal =
-                          r.previous_reading_value !== null && r.previous_reading_value !== undefined
-                            ? Number(r.previous_reading_value)
-                            : null;
+                        const { prevVal, priorTimeFormatted, spanDays, isBillAnchor } = getPriorInfo(r);
                         const readingVal = Number(r.reading_value);
                         const deltaVal = Number(r.delta_consumption || 0);
                         const costVal = deltaVal * costPerUnit;
@@ -805,15 +896,32 @@ export function ElectricityTab({
                         );
 
                         return (
-                          <div key={r.id} className="p-3 space-y-1.5">
+                          <div key={r.id} className="p-3 space-y-2">
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
-                                <Clock className="h-3.5 w-3.5 text-amber-600" />
-                                {timeFormatted}
-                              </span>
-                              <span className="font-mono font-bold text-xs text-stone-900">
-                                {formatINR(costVal)}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
+                                  <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                  {timeFormatted}
+                                </span>
+                                {isBillAnchor && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                    {t('finance.utilities.billClosingAnchor') || 'Bill closing anchor'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-xs text-stone-900">
+                                  {formatINR(costVal)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteModalReading(r)}
+                                  className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title={t('finance.utilities.deleteReading') || 'Delete reading'}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
 
                             <div className="flex items-baseline justify-between text-xs">
@@ -836,14 +944,24 @@ export function ElectricityTab({
                               </div>
                             </div>
 
-                            {(prevVal !== null || r.notes) && (
-                              <div className="text-[10px] text-stone-400 flex items-center justify-between pt-0.5">
-                                {prevVal !== null && <span>{t('finance.utilities.colPrior') || 'Prior'}: {prevVal.toFixed(2)}</span>}
-                                {r.notes && (
-                                  <span className="italic text-stone-500 truncate max-w-[200px]">
-                                    {r.notes}
+                            {prevVal !== null && (
+                              <div className="text-[11px] text-stone-500 flex items-center gap-1.5 flex-wrap pt-0.5">
+                                <span>
+                                  {priorTimeFormatted
+                                    ? (t('finance.utilities.fromPrior', { value: prevVal.toFixed(2), time: priorTimeFormatted }) || `From ${prevVal.toFixed(2)} (${priorTimeFormatted})`)
+                                    : `${t('finance.utilities.colPrior') || 'Prior'}: ${prevVal.toFixed(2)}`}
+                                </span>
+                                {spanDays >= 2 && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-stone-100 text-stone-600 border border-stone-200">
+                                    {t('finance.utilities.daySpan', { count: spanDays }) || `${spanDays}-day span`}
                                   </span>
                                 )}
+                              </div>
+                            )}
+
+                            {r.notes && (
+                              <div className="text-[11px] text-stone-500 italic break-words line-clamp-2 pt-0.5">
+                                {r.notes}
                               </div>
                             )}
                           </div>
@@ -862,28 +980,46 @@ export function ElectricityTab({
                             <th className="py-2.5 px-3 text-right">{t('finance.utilities.colDelta') || 'Delta'}</th>
                             <th className="py-2.5 px-3 text-right">{t('finance.utilities.colCost') || 'Cost'}</th>
                             <th className="py-2.5 px-3">{t('finance.utilities.colNotes') || 'Notes'}</th>
+                            <th className="py-2.5 px-3 text-center w-10"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-100">
                           {meterReadings.map((r) => {
-                            const prevVal =
-                              r.previous_reading_value !== null && r.previous_reading_value !== undefined
-                                ? Number(r.previous_reading_value)
-                                : null;
+                            const { prevVal, priorTimeFormatted, spanDays, isBillAnchor } = getPriorInfo(r);
                             const readingVal = Number(r.reading_value);
                             const deltaVal = Number(r.delta_consumption || 0);
                             const costVal = deltaVal * costPerUnit;
+                            const timeFormatted = new Date(r.reading_timestamp).toLocaleTimeString(
+                              locale === 'hi' ? 'hi-IN' : 'en-IN',
+                              { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }
+                            );
 
                             return (
                               <tr key={r.id} className="hover:bg-stone-50/80 transition-colors">
                                 <td className="py-2 px-3 text-stone-700 whitespace-nowrap font-medium">
-                                  {new Date(r.reading_timestamp).toLocaleTimeString(
-                                    locale === 'hi' ? 'hi-IN' : 'en-IN',
-                                    { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }
-                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{timeFormatted}</span>
+                                    {isBillAnchor && (
+                                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                        {t('finance.utilities.billClosingAnchor') || 'Bill anchor'}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="py-2 px-3 text-right font-mono text-stone-500">
-                                  {prevVal !== null ? `${prevVal.toFixed(2)}` : '—'}
+                                  {prevVal !== null ? (
+                                    <div className="flex flex-col items-end">
+                                      <span>{prevVal.toFixed(2)}</span>
+                                      {priorTimeFormatted && (
+                                        <span className="text-[10px] text-stone-400">({priorTimeFormatted})</span>
+                                      )}
+                                      {spanDays >= 2 && (
+                                        <span className="text-[9px] text-amber-700 font-sans font-semibold">
+                                          {t('finance.utilities.daySpan', { count: spanDays }) || `${spanDays}-day span`}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : '—'}
                                 </td>
                                 <td className="py-2 px-3 text-right font-mono font-bold text-stone-900">
                                   {readingVal.toFixed(2)}
@@ -905,8 +1041,18 @@ export function ElectricityTab({
                                 <td className="py-2 px-3 text-right font-bold text-stone-900 font-mono">
                                   {formatINR(costVal)}
                                 </td>
-                                <td className="py-2 px-3 text-stone-500 max-w-xs truncate">
+                                <td className="py-2 px-3 text-stone-500 max-w-xs break-words line-clamp-2">
                                   {r.notes || '—'}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteModalReading(r)}
+                                    className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title={t('finance.utilities.deleteReading') || 'Delete reading'}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 </td>
                               </tr>
                             );
@@ -1392,6 +1538,77 @@ export function ElectricityTab({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Meter Reading Confirmation Modal */}
+      {deleteModalReading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-xl max-w-md w-full p-4 sm:p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
+              <div className="flex items-center gap-2 text-rose-600">
+                <AlertCircle className="h-5 w-5 shrink-0" />
+                <h3 className="font-bold text-sm text-stone-900">
+                  {t('finance.utilities.deleteReadingTitle') || 'Delete Meter Reading'}
+                </h3>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-stone-600">
+              <p>
+                {t('finance.utilities.deleteReadingConfirm', {
+                  value: Number(deleteModalReading.reading_value).toFixed(2),
+                  time: new Date(deleteModalReading.reading_timestamp).toLocaleTimeString(
+                    locale === 'hi' ? 'hi-IN' : 'en-IN',
+                    { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }
+                  ),
+                }) ||
+                  `Are you sure you want to delete the reading of ${Number(deleteModalReading.reading_value).toFixed(2)}?`}
+              </p>
+
+              {deleteModalReading.notes &&
+                (deleteModalReading.notes.toLowerCase().includes('uppcl') ||
+                  deleteModalReading.notes.toLowerCase().includes('reconciliation') ||
+                  deleteModalReading.notes.toLowerCase().includes('anchor')) && (
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>
+                      {t('finance.utilities.deleteAnchorWarning') ||
+                        'Warning: This reading is an official monthly bill reconciliation anchor. Deleting it will affect reconciled consumption figures.'}
+                    </span>
+                  </div>
+                )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                disabled={deletingReading}
+                onClick={() => setDeleteModalReading(null)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {t('common.actions.cancel') || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={deletingReading}
+                onClick={handleDeleteReading}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                {deletingReading ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>{t('finance.utilities.deleting') || 'Deleting...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>{t('finance.utilities.deleteAction') || 'Delete Reading'}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
