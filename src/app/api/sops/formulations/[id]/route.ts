@@ -34,11 +34,11 @@ export async function GET(
           id, name, name_hi, slug, category, is_preparation, default_formulation_id,
           configurations:yatra_serving_configurations(*)
         ),
-        ingredients:yatra_recipe_formulation_ingredients(
+        ingredients:yatra_recipe_formulation_ingredients!yatra_recipe_formulation_ingredients_formulation_id_fkey(
           *,
           ingredient_group:logical_ingredient_groups(id, name, name_hi, group_code, inventory_class, base_unit:units!logical_ingredient_groups_base_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
           inventory_item:inventory_items(id, name, name_hi, item_code, unit:units!inventory_items_unit_id_fkey(symbol, symbol_hi, name, name_hi)),
-          sub_preparation_dish:yatra_canonical_dishes!yatra_recipe_formulation_ingredients_sub_preparation_dish_id_fkey(id, name, name_hi, category, is_preparation)
+          sub_preparation_dish:yatra_canonical_dishes!sub_preparation_dish_id(id, name, name_hi, category, is_preparation)
         ),
         config_links:yatra_configuration_formulations(
           *,

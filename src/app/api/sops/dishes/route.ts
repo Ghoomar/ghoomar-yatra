@@ -35,9 +35,9 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         configurations:yatra_serving_configurations(*),
-        formulations:yatra_recipe_formulations(
+        formulations:yatra_recipe_formulations!yatra_recipe_formulations_canonical_dish_id_fkey(
           *,
-          ingredients:yatra_recipe_formulation_ingredients(*)
+          ingredients:yatra_recipe_formulation_ingredients!yatra_recipe_formulation_ingredients_formulation_id_fkey(*)
         ),
         menu_items:pos_menu_items(id, name, name_hi, price, category, parent_category, product_type, is_active)
       `)
