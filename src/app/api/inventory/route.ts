@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
       admin.from('inventory_current_position').select('*').order('name'),
       admin.from('inventory_locations').select('*').eq('is_active', true).order('code'),
       admin.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, name_hi, code)'),
-      admin.from('inventory_item_aliases').select('item_id, alias, alias_type'),
+      admin.from('inventory_item_aliases').select('item_id, group_id, alias, alias_type'),
       includeMovements
         ? admin
             .from('stock_movements')

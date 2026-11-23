@@ -11,6 +11,7 @@ import { formatINR } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 import { ItemModal } from '@/components/inventory/ItemModal';
+import { MergeItemModal } from '@/components/inventory/MergeItemModal';
 import { UnitModal } from '@/components/admin/UnitModal';
 import { ItemMovementDrawer } from '@/components/inventory/ItemMovementDrawer';
 import { PhysicalAssetsView } from '@/components/inventory/PhysicalAssetsView';
@@ -27,6 +28,7 @@ import {
   Plus,
   Scale,
   Edit2,
+  GitMerge,
   Power,
   ShoppingBag,
   Search,
@@ -177,6 +179,8 @@ function InventoryContent() {
   // Modals
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [itemToMerge, setItemToMerge] = useState<any | null>(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
   const [selectedMovementItem, setSelectedMovementItem] = useState<any | null>(null);
 
@@ -195,7 +199,7 @@ function InventoryContent() {
           supabase.from('inventory_current_position').select('*').order('name'),
           supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
           supabase.from('item_location_stocks').select('item_id, location_id, quantity, location:inventory_locations(id, name, name_hi, code)'),
-          supabase.from('inventory_item_aliases').select('item_id, alias, alias_type'),
+          supabase.from('inventory_item_aliases').select('item_id, group_id, alias, alias_type'),
         ]);
 
         if (posRes.error) throw posRes.error;
@@ -319,12 +323,18 @@ function InventoryContent() {
       .reduce((acc, i) => acc + (Number(i.current_stock_value) || 0), 0);
   }, [uniformItems]);
 
-  // Lookup map: item_id -> string[] of aliases
+  // Lookup map: item_id / group_id -> string[] of aliases
   const itemAliasesMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     aliases.forEach((a) => {
-      if (!map[a.item_id]) map[a.item_id] = [];
-      if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+      if (a.item_id) {
+        if (!map[a.item_id]) map[a.item_id] = [];
+        if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+      }
+      if (a.group_id) {
+        if (!map[a.group_id]) map[a.group_id] = [];
+        if (a.alias && !map[a.group_id].includes(a.alias)) map[a.group_id].push(a.alias);
+      }
     });
     return map;
   }, [aliases]);
@@ -910,6 +920,18 @@ function InventoryContent() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  onClick={() => {
+                                    setItemToMerge(i);
+                                    setMergeModalOpen(true);
+                                  }}
+                                  className="h-7 px-2 text-stone-600 hover:text-amber-700"
+                                  title={t('inventory.stock.actions.mergeDuplicate')}
+                                >
+                                  <GitMerge className="h-3.5 w-3.5 mr-1 text-amber-600" /> {t('inventory.stock.table.merge')}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleToggleStatus(i)}
                                   className={`h-7 px-2 ${
                                     isActive
@@ -1168,6 +1190,23 @@ function InventoryContent() {
           loadMovements()
         }}
       />
+
+      {mergeModalOpen && itemToMerge && (
+        <MergeItemModal
+          isOpen={mergeModalOpen}
+          onClose={() => {
+            setMergeModalOpen(false);
+            setItemToMerge(null);
+          }}
+          sourceItem={itemToMerge}
+          items={items}
+          aliases={aliases}
+          onMerged={() => {
+            loadData();
+            loadMovements();
+          }}
+        />
+      )}
 
       <UnitModal
         isOpen={unitModalOpen}

@@ -30,9 +30,12 @@ export interface LogicalIngredientGroup {
 export const CHILLI_FAMILY_TOKENS = new Set(['chilli', 'chili', 'chilly', 'chily', 'mirch', 'mirchi', 'मिर्च', 'मिर्ची']);
 export const CANONICAL_CHILLI_TOKEN = '__chilli_family__';
 
+export const TOMATO_FAMILY_TOKENS = new Set(['tomato', 'tomatoes', 'tamatar', 'टमाटर']);
+export const CANONICAL_TOMATO_TOKEN = '__tomato_family__';
+
 /**
- * Normalizes query tokens, mapping Chilli family variations (Mirch, Chili, Chilli, Chilly)
- * into a single controlled search-family token while preserving existing substring behavior.
+ * Normalizes query tokens, mapping Chilli and Tomato family variations
+ * into single controlled search-family tokens while preserving existing substring behavior.
  */
 export function normalizeSearchTokens(query: string): string[] {
   const q = query?.trim().toLowerCase();
@@ -42,6 +45,9 @@ export function normalizeSearchTokens(query: string): string[] {
   return rawTokens.map((token) => {
     if (CHILLI_FAMILY_TOKENS.has(token)) {
       return CANONICAL_CHILLI_TOKEN;
+    }
+    if (TOMATO_FAMILY_TOKENS.has(token)) {
+      return CANONICAL_TOMATO_TOKEN;
     }
     return token;
   });
@@ -58,16 +64,27 @@ export function buildSearchableText(
   const aliasesJoined = aliases.join(' ');
   const rawSearchable = `${item.name || ''} ${item.name_hi || ''} ${item.item_code || ''} ${aliasesJoined}`.toLowerCase();
 
+  let enriched = rawSearchable;
+
   const isChilliFamily =
     item.search_family === 'chilli' ||
     CHILLI_FAMILY_TOKENS.has(rawSearchable.trim()) ||
     Array.from(CHILLI_FAMILY_TOKENS).some((t) => rawSearchable.includes(t));
 
   if (isChilliFamily) {
-    return `${rawSearchable} ${CANONICAL_CHILLI_TOKEN}`;
+    enriched = `${enriched} ${CANONICAL_CHILLI_TOKEN}`;
   }
 
-  return rawSearchable;
+  const isTomatoFamily =
+    item.search_family === 'tomato' ||
+    TOMATO_FAMILY_TOKENS.has(rawSearchable.trim()) ||
+    Array.from(TOMATO_FAMILY_TOKENS).some((t) => rawSearchable.includes(t));
+
+  if (isTomatoFamily) {
+    enriched = `${enriched} ${CANONICAL_TOMATO_TOKEN}`;
+  }
+
+  return enriched;
 }
 
 /**

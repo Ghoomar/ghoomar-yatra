@@ -141,10 +141,13 @@ export function PurchaseModal({
   const aliasesMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     aliases.forEach((a) => {
-      const key = a.item_id || a.group_id;
-      if (key) {
-        if (!map[key]) map[key] = [];
-        if (a.alias && !map[key].includes(a.alias)) map[key].push(a.alias);
+      if (a.item_id) {
+        if (!map[a.item_id]) map[a.item_id] = [];
+        if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+      }
+      if (a.group_id) {
+        if (!map[a.group_id]) map[a.group_id] = [];
+        if (a.alias && !map[a.group_id].includes(a.alias)) map[a.group_id].push(a.alias);
       }
     });
     return map;
@@ -575,63 +578,45 @@ export function PurchaseModal({
       setLines(nextLines);
       setUnitSelectLineIndex(null);
     } else if (optionType === 'kg') {
-      if (canonical === 'kg') {
-        line.use_pack = false;
-        line.is_custom_pack = false;
-        line.packaging_unit_id = null;
-        line.pack_unit = 'kg';
-        line.conversion_factor = 1;
-        if (line.pack_quantity && !line.quantity) {
-          line.quantity = line.pack_quantity;
-        }
-        if (line.pack_rate && !line.rate) {
-          line.rate = line.pack_rate;
-        }
-      } else {
-        line.use_pack = true;
-        line.is_custom_pack = false;
-        line.packaging_unit_id = null;
-        line.pack_unit = 'kg';
-
-        if (canonical === 'g') {
-          line.conversion_factor = 1000;
-        } else if (canonical === 'mg') {
-          line.conversion_factor = 1000000;
-        } else if (canonical === 'ml') {
-          line.conversion_factor = 1000;
-        } else if (canonical === 'l') {
+      const dim = getUnitDimension(canonical);
+      if (dim === 'volume') {
+        if (canonical === 'l') {
+          line.use_pack = false;
+          line.is_custom_pack = false;
+          line.packaging_unit_id = null;
+          line.pack_unit = 'L';
           line.conversion_factor = 1;
         } else {
-          // Count / container or other units
-          const item = items.find((it) => it.id === line.item_id);
-          let factor = 1;
-          if (item?.secondary_unit_id && Number(item.conversion_factor) > 0) {
-            const secSym = (item.sec_unit?.symbol || '').toLowerCase();
-            if (secSym === 'g') {
-              factor = 1000 / Number(item.conversion_factor);
-            } else if (secSym === 'kg') {
-              factor = 1 / Number(item.conversion_factor);
-            }
-          } else {
-            const existingKgPkg = packagingUnits.find(
-              (p) =>
-                (p.inventory_item_id || p.item_id) === line.item_id &&
-                p.pack_unit_name?.toLowerCase().includes('kg')
-            );
-            if (existingKgPkg && Number(existingKgPkg.pack_size_in_base_units) > 0) {
-              factor = Number(existingKgPkg.pack_size_in_base_units);
-              line.packaging_unit_id = existingKgPkg.id;
-            }
-          }
-          line.conversion_factor = factor;
+          line.use_pack = true;
+          line.is_custom_pack = false;
+          line.packaging_unit_id = null;
+          line.pack_unit = 'L';
+          line.conversion_factor = 1000;
         }
+      } else if (dim === 'mass') {
+        if (canonical === 'kg') {
+          line.use_pack = false;
+          line.is_custom_pack = false;
+          line.packaging_unit_id = null;
+          line.pack_unit = 'kg';
+          line.conversion_factor = 1;
+        } else {
+          line.use_pack = true;
+          line.is_custom_pack = false;
+          line.packaging_unit_id = null;
+          line.pack_unit = 'kg';
+          line.conversion_factor = canonical === 'g' ? 1000 : 1000000;
+        }
+      } else {
+        // Count or other dimension: do not assign kg
+        return;
+      }
 
-        if (line.quantity && !line.pack_quantity) {
-          line.pack_quantity = line.quantity;
-        }
-        if (line.rate && !line.pack_rate) {
-          line.pack_rate = line.rate;
-        }
+      if (line.quantity && !line.pack_quantity) {
+        line.pack_quantity = line.quantity;
+      }
+      if (line.rate && !line.pack_rate) {
+        line.pack_rate = line.rate;
       }
       setLines(nextLines);
       setUnitSelectLineIndex(null);
@@ -1836,15 +1821,26 @@ export function PurchaseModal({
                         const num = parseFloat(customSizeValue);
                         if (!num || num <= 0) return;
                         const canonical = (lines[unitSelectLineIndex]?.base_unit_canonical || 'kg').toLowerCase();
+                        const dim = getUnitDimension(canonical);
                         let conv = num;
-                        if (customSizeUnit === 'g') {
-                          conv = canonical === 'kg' ? num / 1000 : num;
-                        } else if (customSizeUnit === 'kg') {
-                          conv = canonical === 'kg' ? num : num * 1000;
-                        } else if (customSizeUnit === 'ml') {
-                          conv = canonical === 'l' ? num / 1000 : num;
-                        } else if (customSizeUnit === 'L') {
-                          conv = canonical === 'l' ? num : num * 1000;
+                        if (dim === 'mass') {
+                          if (customSizeUnit === 'g') {
+                            conv = canonical === 'kg' ? num / 1000 : num;
+                          } else if (customSizeUnit === 'kg') {
+                            conv = canonical === 'kg' ? num : num * 1000;
+                          } else {
+                            alert('Cannot apply volume/count unit to mass item!');
+                            return;
+                          }
+                        } else if (dim === 'volume') {
+                          if (customSizeUnit === 'ml') {
+                            conv = canonical === 'l' ? num / 1000 : num;
+                          } else if (customSizeUnit === 'L' || customSizeUnit === 'l') {
+                            conv = canonical === 'l' ? num : num * 1000;
+                          } else {
+                            alert('Cannot apply mass/count unit to volume item!');
+                            return;
+                          }
                         }
                         handleApplySize(`${num} ${customSizeUnit}`, conv);
                       }}
@@ -1856,42 +1852,85 @@ export function PurchaseModal({
               </div>
             ) : (
               <div className="space-y-2">
-                {/* 1. Base Unit Option (when base unit is not kg) */}
-                {lines[unitSelectLineIndex]?.base_unit_canonical !== 'kg' && (
-                  <button
-                    type="button"
-                    onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'base')}
-                    className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
-                  >
-                    <span>{lines[unitSelectLineIndex]?.base_unit_symbol} ({t('purchases.bills.base')})</span>
-                    {!lines[unitSelectLineIndex]?.use_pack && <Check className="h-4 w-4 text-emerald-600" />}
-                  </button>
-                )}
+                {/* 1. Base Unit Option (when base unit is not the primary large unit) */}
+                {(() => {
+                  const line = lines[unitSelectLineIndex];
+                  const dim = getUnitDimension(line?.base_unit_canonical);
+                  const isPrimaryLarge = (dim === 'mass' && line?.base_unit_canonical === 'kg') ||
+                                         (dim === 'volume' && line?.base_unit_canonical === 'l');
+                  if (isPrimaryLarge) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'base')}
+                      className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
+                    >
+                      <span>{line?.base_unit_symbol} ({t('purchases.bills.base')})</span>
+                      {!line?.use_pack && <Check className="h-4 w-4 text-emerald-600" />}
+                    </button>
+                  );
+                })()}
 
-                {/* 2. Kilogram (kg) Option - available for every item */}
-                <button
-                  type="button"
-                  onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'kg')}
-                  className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-stone-900">kg (Kilogram)</span>
-                    {lines[unitSelectLineIndex]?.base_unit_canonical === 'g' && (
-                      <span className="text-[11px] text-stone-500 font-normal">
-                        (1 kg = 1,000 {lines[unitSelectLineIndex]?.base_unit_symbol})
-                      </span>
-                    )}
-                    {lines[unitSelectLineIndex]?.base_unit_canonical === 'kg' && (
-                      <span className="text-[11px] text-stone-500 font-normal">
-                        ({t('purchases.bills.base')})
-                      </span>
-                    )}
-                  </div>
-                  {((lines[unitSelectLineIndex]?.use_pack && lines[unitSelectLineIndex]?.pack_unit === 'kg') ||
-                    (!lines[unitSelectLineIndex]?.use_pack && lines[unitSelectLineIndex]?.base_unit_canonical === 'kg')) && (
-                    <Check className="h-4 w-4 text-emerald-600" />
-                  )}
-                </button>
+                {/* 2. Primary Large Unit Option: kg for mass, L for volume */}
+                {(() => {
+                  const line = lines[unitSelectLineIndex];
+                  const dim = getUnitDimension(line?.base_unit_canonical);
+                  if (dim === 'mass') {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'kg')}
+                        className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-stone-900">kg (Kilogram)</span>
+                          {line?.base_unit_canonical === 'g' && (
+                            <span className="text-[11px] text-stone-500 font-normal">
+                              (1 kg = 1,000 {line?.base_unit_symbol})
+                            </span>
+                          )}
+                          {line?.base_unit_canonical === 'kg' && (
+                            <span className="text-[11px] text-stone-500 font-normal">
+                              ({t('purchases.bills.base')})
+                            </span>
+                          )}
+                        </div>
+                        {((line?.use_pack && line?.pack_unit === 'kg') ||
+                          (!line?.use_pack && line?.base_unit_canonical === 'kg')) && (
+                          <Check className="h-4 w-4 text-emerald-600" />
+                        )}
+                      </button>
+                    );
+                  }
+                  if (dim === 'volume') {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectUnitOption(unitSelectLineIndex, 'kg')}
+                        className="w-full p-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-left font-semibold text-stone-800 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-stone-900">L (Liter)</span>
+                          {line?.base_unit_canonical === 'ml' && (
+                            <span className="text-[11px] text-stone-500 font-normal">
+                              (1 L = 1,000 {line?.base_unit_symbol})
+                            </span>
+                          )}
+                          {line?.base_unit_canonical === 'l' && (
+                            <span className="text-[11px] text-stone-500 font-normal">
+                              ({t('purchases.bills.base')})
+                            </span>
+                          )}
+                        </div>
+                        {((line?.use_pack && (line?.pack_unit === 'L' || line?.pack_unit === 'l')) ||
+                          (!line?.use_pack && line?.base_unit_canonical === 'l')) && (
+                          <Check className="h-4 w-4 text-emerald-600" />
+                        )}
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* 3. Known Packaged Units for this Item */}
                 {packagingUnits

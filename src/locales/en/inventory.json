@@ -82,7 +82,8 @@
       "actions": "Actions",
       "ledger": "Ledger",
       "movements": "Movements",
-      "edit": "Edit"
+      "edit": "Edit",
+      "merge": "Merge"
     },
     "statuses": {
       "healthy": "Optimal",
@@ -95,7 +96,8 @@
     "actions": {
       "activate": "Activate Item",
       "deactivate": "Deactivate Item",
-      "viewLedger": "Click to view movement ledger"
+      "viewLedger": "Click to view movement ledger",
+      "mergeDuplicate": "Merge duplicate item"
     },
     "movementBadges": {
       "count_adjustment": "Count Audit",
@@ -187,7 +189,36 @@
       "Periodic": "Periodic",
       "Monthly": "Monthly",
       "As Required": "As Required"
-    }
+    },
+    "aliasesTitle": "Search Aliases & Hindi Names",
+    "aliasesSubtitle": "Alternate names and Hindi spellings that match this item in purchase and stock search",
+    "loadingAliases": "Loading aliases...",
+    "noAliases": "No search aliases defined yet.",
+    "deleteAlias": "Delete alias",
+    "aliasPlaceholder": "e.g. tamatar, moti mirch, jumbo bread",
+    "addAlias": "Add Alias",
+    "saveItemFirstForExtra": "Save item first to configure aliases and recipe unit conversions.",
+    "confirmDeleteAlias": "Are you sure you want to delete this search alias?",
+    "aliasTypes": {
+      "colloquial": "Colloquial",
+      "hindi": "Hindi",
+      "brand": "Brand",
+      "transliteration": "Transliteration",
+      "common": "Common"
+    },
+    "conversionsTitle": "Explicit Recipe & Packaging Unit Conversions",
+    "conversionsSubtitle": "Allows recipes and packaging to use different units (e.g. 1 pkt = 15 pcs or 1000 g)",
+    "loadingConversions": "Loading conversions...",
+    "noConversions": "No explicit conversions configured for this item.",
+    "itemLevel": "Item Specific",
+    "groupLevel": "Group Default",
+    "deleteConversion": "Delete conversion",
+    "multiplierPlaceholder": "Multiplier (e.g. 15 or 1000)",
+    "toUnitPlaceholder": "To unit (e.g. pcs, g)",
+    "conversionNotesPlaceholder": "Optional conversion notes (e.g. 15 slices per bread loaf)",
+    "addConversion": "Add Conversion",
+    "confirmDeleteConversion": "Are you sure you want to delete this unit conversion?",
+    "conversionInputsRequired": "Please provide a valid multiplier and target unit."
   },
   "categories": {
     "title": "Inventory Categories",
@@ -672,5 +703,30 @@
       "inactiveLocations": "{count} Inactive",
       "manageBtn": "Manage Locations"
     }
+  },
+  "merge": {
+    "selectTargetWarning": "Please select a target canonical item to merge into.",
+    "confirmPrompt": "Are you sure you want to merge {source} into {target}? This action consolidates stock, reassigns purchase & movement history, updates recipes, creates a search alias, and deactivates the source item. It cannot be easily undone.",
+    "failed": "Failed to merge items.",
+    "successNotice": "Successfully merged {source} into {target}.",
+    "modalTitle": "Merge Duplicate Inventory Item",
+    "modalSubtitle": "Consolidate stock, WAC, PO lines, and recipe usages into one canonical item",
+    "permanentNoticeTitle": "Irreversible Data Consolidation",
+    "permanentNoticeDesc": "This will transfer all historical purchase lines, stock movements, and recipe formulation links to the target item. A search alias will be automatically created, and the source item will be deactivated.",
+    "sourceItemHeader": "Source Duplicate Item",
+    "willBeDeactivated": "Will be deactivated",
+    "currentStock": "Current Stock",
+    "currentWac": "Moving WAC",
+    "selectTargetLabel": "Select Target Canonical Item",
+    "searchTargetPlaceholder": "Search target item by name, SKU, or alias...",
+    "noCandidatesFound": "No matching target items found.",
+    "stock": "Stock",
+    "previewHeader": "Consolidated Position Preview",
+    "consolidatedStock": "Consolidated Stock",
+    "newMovingWac": "New Moving WAC",
+    "autoAliasExplanation": "'{name}' will be automatically added as a search alias for the target item.",
+    "cancel": "Cancel",
+    "merging": "Merging...",
+    "executeMergeBtn": "Confirm & Execute Merge"
   }
 }

@@ -162,7 +162,7 @@ function PurchasesContent() {
           `)
           .order('name'),
         supabase.from('item_packaging_units').select('*, pack_unit:units!item_packaging_units_pack_unit_id_fkey(symbol, symbol_hi, name, name_hi)').eq('is_active', true),
-        supabase.from('inventory_item_aliases').select('item_id, alias, alias_type'),
+        supabase.from('inventory_item_aliases').select('item_id, group_id, alias, alias_type'),
         supabase.from('inventory_locations').select('*').eq('is_active', true).order('code'),
         supabase.from('payment_methods').select('*').order('name'),
         supabase.from('vendor_items').select('id, vendor_id, inventory_item_id, last_purchase_rate, last_purchase_date'),
@@ -302,12 +302,18 @@ function PurchasesContent() {
     loadData();
   }, []);
 
-  // Map of item_id -> string[] aliases for multi-lingual and alias search
+  // Map of item_id / group_id -> string[] aliases for multi-lingual and alias search
   const itemAliasesMap = useMemo(() => {
     const map: Record<string, string[]> = {};
     aliases.forEach((a) => {
-      if (!map[a.item_id]) map[a.item_id] = [];
-      if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+      if (a.item_id) {
+        if (!map[a.item_id]) map[a.item_id] = [];
+        if (a.alias && !map[a.item_id].includes(a.alias)) map[a.item_id].push(a.alias);
+      }
+      if (a.group_id) {
+        if (!map[a.group_id]) map[a.group_id] = [];
+        if (a.alias && !map[a.group_id].includes(a.alias)) map[a.group_id].push(a.alias);
+      }
     });
     return map;
   }, [aliases]);

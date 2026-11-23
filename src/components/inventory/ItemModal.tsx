@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { InventoryCategory, Unit } from '@/lib/types/database';
 import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
-import { X, Package, Check, AlertCircle } from 'lucide-react';
+import { X, Package, Check, AlertCircle, Tag, ArrowLeftRight, Trash2, Plus, Loader2 } from 'lucide-react';
 
 import { logAuditAction } from '@/lib/audit-logger';
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
@@ -66,6 +66,151 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const [units, setUnits] = useState<Unit[]>([]);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Aliases state
+  const [aliasesList, setAliasesList] = useState<any[]>([]);
+  const [loadingAliases, setLoadingAliases] = useState(false);
+  const [newAliasText, setNewAliasText] = useState('');
+  const [newAliasType, setNewAliasType] = useState('colloquial');
+  const [addingAlias, setAddingAlias] = useState(false);
+
+  // Conversions state
+  const [conversionsList, setConversionsList] = useState<any[]>([]);
+  const [loadingConversions, setLoadingConversions] = useState(false);
+  const [convMultiplier, setConvMultiplier] = useState<string>('');
+  const [convToUnit, setConvToUnit] = useState<string>('');
+  const [convNotes, setConvNotes] = useState<string>('');
+  const [addingConversion, setAddingConversion] = useState(false);
+
+  const fetchAliases = async () => {
+    if (!itemId) return;
+    setLoadingAliases(true);
+    try {
+      const res = await fetch(`/api/inventory/aliases?item_id=${itemId}${item?.group_id ? `&group_id=${item.group_id}` : ''}`);
+      const data = await res.json();
+      if (data.aliases) {
+        setAliasesList(data.aliases);
+      }
+    } catch (e) {
+      console.error('Error fetching aliases:', e);
+    } finally {
+      setLoadingAliases(false);
+    }
+  };
+
+  const fetchConversions = async () => {
+    if (!itemId) return;
+    setLoadingConversions(true);
+    try {
+      const res = await fetch(`/api/sops/conversions?item_id=${itemId}${item?.group_id ? `&group_id=${item.group_id}` : ''}`);
+      const data = await res.json();
+      if (data.conversions) {
+        setConversionsList(data.conversions);
+      }
+    } catch (e) {
+      console.error('Error fetching conversions:', e);
+    } finally {
+      setLoadingConversions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && itemId) {
+      fetchAliases();
+      fetchConversions();
+    } else {
+      setAliasesList([]);
+      setConversionsList([]);
+      setNewAliasText('');
+      setConvMultiplier('');
+      setConvToUnit('');
+      setConvNotes('');
+    }
+  }, [isOpen, itemId, item?.group_id]);
+
+  const handleAddAlias = async () => {
+    if (!newAliasText.trim() || !itemId) return;
+    setAddingAlias(true);
+    try {
+      const res = await fetch('/api/inventory/aliases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: itemId,
+          alias: newAliasText.trim(),
+          alias_type: newAliasType || 'colloquial',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add alias');
+      setNewAliasText('');
+      fetchAliases();
+    } catch (err: any) {
+      alert(err.message || 'Failed to add alias');
+    } finally {
+      setAddingAlias(false);
+    }
+  };
+
+  const handleDeleteAlias = async (aliasId: string) => {
+    if (!window.confirm(t('inventory.modal.confirmDeleteAlias'))) return;
+    try {
+      const res = await fetch(`/api/inventory/aliases?id=${aliasId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete alias');
+      fetchAliases();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete alias');
+    }
+  };
+
+  const handleAddConversion = async () => {
+    if (!convMultiplier || isNaN(Number(convMultiplier)) || Number(convMultiplier) <= 0 || !convToUnit.trim() || !itemId) {
+      alert(t('inventory.modal.conversionInputsRequired'));
+      return;
+    }
+    const currentBaseUnit = units.find((u) => u.id === unitId);
+    const baseSymbol = currentBaseUnit ? (currentBaseUnit.symbol || currentBaseUnit.name) : 'pkt';
+
+    setAddingConversion(true);
+    try {
+      const res = await fetch('/api/sops/conversions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inventory_item_id: itemId,
+          from_unit: baseSymbol.toLowerCase(),
+          to_unit: convToUnit.trim().toLowerCase(),
+          conversion_factor: Number(convMultiplier),
+          notes: convNotes.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add conversion');
+      setConvMultiplier('');
+      setConvToUnit('');
+      setConvNotes('');
+      fetchConversions();
+    } catch (err: any) {
+      alert(err.message || 'Failed to add conversion');
+    } finally {
+      setAddingConversion(false);
+    }
+  };
+
+  const handleDeleteConversion = async (convId: string) => {
+    if (!window.confirm(t('inventory.modal.confirmDeleteConversion'))) return;
+    try {
+      const res = await fetch(`/api/sops/conversions?id=${convId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete conversion');
+      fetchConversions();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete conversion');
+    }
+  };
 
   const generateNextItemCode = async (
     targetClass?: string,
@@ -527,6 +672,237 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   factor: conversionFactor || 1,
                   baseUnit: getLocalizedMasterSymbol(units.find((u) => u.id === unitId), locale) || 'Base Units',
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Aliases & Search Synonyms Section */}
+          <div className="space-y-3 pt-3 border-t border-stone-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-stone-800">
+                <Tag className="h-4 w-4 text-amber-600" />
+                <span>{t('inventory.modal.aliasesTitle')}</span>
+                {aliasesList.length > 0 && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-full">
+                    {aliasesList.length}
+                  </span>
+                )}
+              </div>
+            </div>
+            <p className="text-[11px] text-stone-500 leading-snug">
+              {t('inventory.modal.aliasesSubtitle')}
+            </p>
+
+            {isEdit ? (
+              <div className="space-y-2 bg-stone-50/70 p-3 rounded-lg border border-stone-200">
+                {/* Existing Aliases Chips */}
+                {loadingAliases ? (
+                  <div className="flex items-center gap-1.5 text-stone-400 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>{t('inventory.modal.loadingAliases')}</span>
+                  </div>
+                ) : aliasesList.length === 0 ? (
+                  <div className="text-stone-400 italic text-[11px] py-1">
+                    {t('inventory.modal.noAliases')}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                    {aliasesList.map((al) => (
+                      <span
+                        key={al.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-stone-200 text-stone-800 text-[11px] shadow-2xs"
+                      >
+                        <span className="font-medium">{al.alias}</span>
+                        <span className="text-[9px] text-stone-400 bg-stone-100 px-1 rounded">
+                          {t(`inventory.modal.aliasTypes.${al.alias_type}`, { defaultValue: al.alias_type })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAlias(al.id)}
+                          className="text-stone-400 hover:text-rose-600 p-0.5 rounded transition-colors cursor-pointer"
+                          title={t('inventory.modal.deleteAlias')}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add Alias Form */}
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-200/60">
+                  <input
+                    type="text"
+                    value={newAliasText}
+                    onChange={(e) => setNewAliasText(e.target.value)}
+                    placeholder={t('inventory.modal.aliasPlaceholder')}
+                    className="flex-1 rounded-md border border-stone-300 bg-white p-1.5 text-stone-900 focus:outline-none focus:border-amber-500 text-xs"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddAlias();
+                      }
+                    }}
+                  />
+                  <select
+                    value={newAliasType}
+                    onChange={(e) => setNewAliasType(e.target.value)}
+                    className="rounded-md border border-stone-300 bg-white p-1.5 text-stone-800 focus:outline-none focus:border-amber-500 text-xs shrink-0"
+                  >
+                    <option value="colloquial">{t('inventory.modal.aliasTypes.colloquial')}</option>
+                    <option value="hindi">{t('inventory.modal.aliasTypes.hindi')}</option>
+                    <option value="brand">{t('inventory.modal.aliasTypes.brand')}</option>
+                    <option value="transliteration">{t('inventory.modal.aliasTypes.transliteration')}</option>
+                    <option value="common">{t('inventory.modal.aliasTypes.common')}</option>
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddAlias}
+                    disabled={!newAliasText.trim() || addingAlias}
+                    className="h-8 text-xs shrink-0 cursor-pointer"
+                  >
+                    {addingAlias ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Plus className="h-3 w-3 mr-1" />
+                    )}
+                    {t('inventory.modal.addAlias')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 bg-stone-50 rounded-lg border border-dashed border-stone-300 text-stone-500 text-[11px]">
+                {t('inventory.modal.saveItemFirstForExtra')}
+              </div>
+            )}
+          </div>
+
+          {/* Unit Conversions Section (for Recipes & Packaging) */}
+          <div className="space-y-3 pt-3 border-t border-stone-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-stone-800">
+                <ArrowLeftRight className="h-4 w-4 text-amber-600" />
+                <span>{t('inventory.modal.conversionsTitle')}</span>
+                {conversionsList.length > 0 && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-full">
+                    {conversionsList.length}
+                  </span>
+                )}
+              </div>
+            </div>
+            <p className="text-[11px] text-stone-500 leading-snug">
+              {t('inventory.modal.conversionsSubtitle')}
+            </p>
+
+            {isEdit ? (
+              <div className="space-y-2 bg-stone-50/70 p-3 rounded-lg border border-stone-200">
+                {/* Existing Conversions List */}
+                {loadingConversions ? (
+                  <div className="flex items-center gap-1.5 text-stone-400 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>{t('inventory.modal.loadingConversions')}</span>
+                  </div>
+                ) : conversionsList.length === 0 ? (
+                  <div className="text-stone-400 italic text-[11px] py-1">
+                    {t('inventory.modal.noConversions')}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {conversionsList.map((conv) => {
+                      const isItemTarget = Boolean(conv.inventory_item_id);
+                      return (
+                        <div
+                          key={conv.id}
+                          className="flex items-center justify-between p-2 rounded-md bg-white border border-stone-200 text-xs shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              1 {conv.from_unit} = {conv.multiplier ?? conv.conversion_factor} {conv.to_unit}
+                            </span>
+                            <span className="text-[9px] uppercase tracking-wider font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">
+                              {isItemTarget ? t('inventory.modal.itemLevel') : t('inventory.modal.groupLevel')}
+                            </span>
+                            {conv.notes && (
+                              <span className="text-[10px] text-stone-500 italic max-w-xs truncate">
+                                ({conv.notes})
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteConversion(conv.id)}
+                            className="text-stone-400 hover:text-rose-600 p-1 rounded transition-colors cursor-pointer"
+                            title={t('inventory.modal.deleteConversion')}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Add Conversion Form */}
+                <div className="pt-2 border-t border-stone-200/60 space-y-2">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-3 flex items-center bg-stone-100 rounded-md border border-stone-300 px-2 py-1.5 font-mono text-stone-700 text-xs">
+                      <span className="font-semibold mr-1">1</span>
+                      <span className="truncate">{units.find((u) => u.id === unitId)?.symbol || 'pkt'} =</span>
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        min="0.000001"
+                        step="any"
+                        value={convMultiplier}
+                        onChange={(e) => setConvMultiplier(e.target.value)}
+                        placeholder={t('inventory.modal.multiplierPlaceholder')}
+                        className="w-full rounded-md border border-stone-300 bg-white p-1.5 text-stone-900 focus:outline-none focus:border-amber-500 text-xs"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="text"
+                        value={convToUnit}
+                        onChange={(e) => setConvToUnit(e.target.value)}
+                        placeholder={t('inventory.modal.toUnitPlaceholder')}
+                        className="w-full rounded-md border border-stone-300 bg-white p-1.5 text-stone-900 focus:outline-none focus:border-amber-500 text-xs"
+                      />
+                    </div>
+                    <div className="col-span-3 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddConversion}
+                        disabled={!convMultiplier || !convToUnit.trim() || addingConversion}
+                        className="w-full h-8 text-xs cursor-pointer"
+                      >
+                        {addingConversion ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Plus className="h-3 w-3 mr-1" />
+                        )}
+                        {t('inventory.modal.addConversion')}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={convNotes}
+                      onChange={(e) => setConvNotes(e.target.value)}
+                      placeholder={t('inventory.modal.conversionNotesPlaceholder')}
+                      className="w-full rounded-md border border-stone-300 bg-white p-1.5 text-stone-700 focus:outline-none focus:border-amber-500 text-[11px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 bg-stone-50 rounded-lg border border-dashed border-stone-300 text-stone-500 text-[11px]">
+                {t('inventory.modal.saveItemFirstForExtra')}
               </div>
             )}
           </div>
