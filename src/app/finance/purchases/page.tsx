@@ -86,6 +86,7 @@ function PurchasesContent() {
   const [vendorItems, setVendorItems] = useState<any[]>([]);
   const [vendorCategories, setVendorCategories] = useState<{ name: string; name_hi?: string | null }[]>([]);
   const [invoices, setInvoices] = useState<PurchaseInvoiceRecord[]>([]);
+  const [usage30dMap, setUsage30dMap] = useState<Record<string, number>>({});
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
@@ -191,15 +192,17 @@ function PurchasesContent() {
         { data: grpData },
         { data: catData },
         { data: unitData },
+        { data: posData },
       ] = await Promise.all([
         supabase.from('vendor_outstanding_summary').select('*').order('vendor_name'),
         supabase.from('vendors').select('*').order('name'),
         supabase
           .from('inventory_items')
           .select(`
-            id, item_code, name, name_hi, group_id, brand_name, variant_name, category_id, inventory_class, unit_id, secondary_unit_id, conversion_factor, is_active, current_stock, current_weighted_average_cost,
+            id, item_code, name, name_hi, group_id, brand_name, variant_name, category_id, inventory_class, unit_id, secondary_unit_id, conversion_factor, is_active, current_stock, current_weighted_average_cost, abc_class, abc_risk, minimum_stock, max_stock_level, shelf_life_days, last_counted_at,
             unit:units!inventory_items_unit_id_fkey(id, symbol, symbol_hi, name, name_hi),
-            sec_unit:units!inventory_items_secondary_unit_id_fkey(id, symbol, symbol_hi, name, name_hi)
+            sec_unit:units!inventory_items_secondary_unit_id_fkey(id, symbol, symbol_hi, name, name_hi),
+            category:inventory_categories(id, name, name_hi)
           `)
           .order('name'),
         supabase.from('item_packaging_units').select('*, pack_unit:units!item_packaging_units_pack_unit_id_fkey(symbol, symbol_hi, name, name_hi)').eq('is_active', true),
@@ -268,6 +271,7 @@ function PurchasesContent() {
           .order('name'),
         supabase.from('inventory_categories').select('id, name, name_hi, inventory_class').order('name'),
         supabase.from('units').select('id, symbol, symbol_hi, name, name_hi').order('symbol'),
+        supabase.from('inventory_current_position').select('item_id, current_quantity'),
       ]);
 
       if (vErr) throw vErr;
@@ -275,9 +279,20 @@ function PurchasesContent() {
       if (iErr) throw iErr;
       if (pErr) throw pErr;
 
+      const stockMap: Record<string, number> = {};
+      (posData || []).forEach((p: any) => {
+        stockMap[p.item_id] = Number(p.current_quantity) || 0;
+      });
+
+      const enrichedItems = (iData || []).map((it: any) => ({
+        ...it,
+        current_quantity: stockMap[it.id] ?? (Number(it.current_stock) || 0),
+        unit_symbol: (locale === 'hi' && it.unit?.symbol_hi) ? it.unit.symbol_hi : (it.unit?.symbol || ''),
+      }));
+
       setVendors(vData || []);
       setRawVendors(vRaw || []);
-      setItems(iData || []);
+      setItems(enrichedItems);
       setPackagingUnits(pkgData || []);
       setAliases(aliasData || []);
       setLocations(locData || []);
@@ -297,6 +312,9 @@ function PurchasesContent() {
         if (reqRes.ok) {
           const reqJson = await reqRes.json();
           setPurchaseRequests(reqJson.requests || []);
+          if (reqJson.usage30dMap) {
+            setUsage30dMap(reqJson.usage30dMap);
+          }
         }
         if (setRes.ok) {
           const setJson = await setRes.json();
@@ -1401,6 +1419,7 @@ function PurchasesContent() {
         vendors={vendors}
         aliases={aliases}
         policySettings={policySettings}
+        usage30dMap={usage30dMap}
         onSubmitted={() => {
           setMessage({
             type: 'success',

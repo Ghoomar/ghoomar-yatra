@@ -1085,17 +1085,15 @@ export function PurchaseModal({
         .filter(Boolean) as string[];
 
       if (savedRequestLineIds.length > 0) {
-        for (const reqLineId of savedRequestLineIds) {
-          await supabase
-            .from('purchase_request_lines')
-            .update({
-              approval_status: 'purchased',
-              converted_purchase_id: header.id,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', reqLineId)
-            .in('approval_status', ['auto_approved', 'approved']);
-        }
+        await supabase
+          .from('purchase_request_lines')
+          .update({
+            approval_status: 'purchased',
+            converted_purchase_id: header.id,
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', savedRequestLineIds)
+          .in('approval_status', ['auto_approved', 'approved']);
 
         const { data: affectedLines } = await supabase
           .from('purchase_request_lines')

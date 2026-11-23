@@ -509,6 +509,28 @@ FROM public.inventory_items i
 WHERE i.group_id = g.id
   AND i.abc_class = 'frequent_monitoring';
 
+-- Complete sync of legacy abc_risk across all inventory items & groups
+UPDATE public.inventory_items
+SET abc_risk = CASE
+    WHEN abc_class = 'high_control' THEN 'High Control'
+    WHEN abc_class = 'frequent_monitoring' THEN 'Frequent Monitoring'
+    ELSE 'Routine Monitoring'
+END;
+
+UPDATE public.logical_ingredient_groups g
+SET abc_risk = i.abc_risk
+FROM (
+    SELECT DISTINCT ON (group_id) group_id, abc_risk
+    FROM public.inventory_items
+    WHERE group_id IS NOT NULL
+    ORDER BY group_id, CASE WHEN abc_risk = 'High Control' THEN 1 WHEN abc_risk = 'Frequent Monitoring' THEN 2 ELSE 3 END
+) i
+WHERE g.id = i.group_id;
+
+UPDATE public.logical_ingredient_groups
+SET abc_risk = 'Routine Monitoring'
+WHERE abc_risk IS NULL;
+
 -- 10. Seed Starter Perishable Min/Max-Par and Shelf Life
 -- Garlic Bread
 UPDATE public.inventory_items

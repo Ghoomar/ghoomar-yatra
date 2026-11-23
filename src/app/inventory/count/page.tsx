@@ -268,15 +268,14 @@ export default function StockCountPage() {
       let adjustmentsCreated = 0;
       let totalVarianceVal = 0;
 
-      // 2. Loop filtered rows and record variances
-      for (const row of filteredRows) {
+      // 2. Prepare and batch insert inventory count items
+      const countItemsToInsert = filteredRows.map((row) => {
         const { varianceQuantity, varianceValue } = calculatePhysicalCountVariance(
           row.expected_qty,
           row.physical_qty,
           row.wac_cost
         );
-
-        await supabase.from('inventory_count_items').insert({
+        return {
           count_id: header.id,
           item_id: row.item_id,
           expected_quantity: row.expected_qty,
@@ -284,9 +283,22 @@ export default function StockCountPage() {
           variance_quantity: varianceQuantity,
           variance_value: varianceValue,
           reason: row.reason || (varianceQuantity !== 0 ? `Variance in ${locName}` : 'No variance'),
-        });
+        };
+      });
 
-        // If variance exists, log atomic count adjustment
+      if (countItemsToInsert.length > 0) {
+        const { error: insCountErr } = await supabase.from('inventory_count_items').insert(countItemsToInsert);
+        if (insCountErr) throw insCountErr;
+      }
+
+      // Log atomic count adjustments for items with actual non-zero variance
+      for (const row of filteredRows) {
+        const { varianceQuantity, varianceValue } = calculatePhysicalCountVariance(
+          row.expected_qty,
+          row.physical_qty,
+          row.wac_cost
+        );
+
         if (varianceQuantity !== 0) {
           adjustmentsCreated++;
           totalVarianceVal += varianceValue;

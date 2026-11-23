@@ -113,32 +113,35 @@ export async function GET(request: NextRequest) {
     // 3. Compute 30-day usage lookup
     // (from last 30 days of stock_movements consumption/issues, falling back to 30-day purchases when consumption is 0 for Dairy/Mandi)
     const usage30dMap: Record<string, number> = {};
-    if (itemIdsArray.length > 0) {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: movements } = await admin
-        .from('stock_movements')
-        .select('item_id, movement_type, quantity')
-        .in('item_id', itemIdsArray)
-        .gte('created_at', thirtyDaysAgo);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: movements } = await admin
+      .from('stock_movements')
+      .select('item_id, movement_type, quantity')
+      .gte('created_at', thirtyDaysAgo);
 
-      const consumptionByItem: Record<string, number> = {};
-      const purchaseByItem: Record<string, number> = {};
+    const consumptionByItem: Record<string, number> = {};
+    const purchaseByItem: Record<string, number> = {};
 
-      (movements || []).forEach((m: any) => {
-        const qty = Number(m.quantity) || 0;
-        if (['issue', 'consumption', 'consumption_issue', 'spoilage', 'wastage', 'staff_food'].includes(m.movement_type)) {
-          consumptionByItem[m.item_id] = (consumptionByItem[m.item_id] || 0) + qty;
-        } else if (m.movement_type === 'purchase') {
-          purchaseByItem[m.item_id] = (purchaseByItem[m.item_id] || 0) + qty;
-        }
-      });
+    (movements || []).forEach((m: any) => {
+      const qty = Number(m.quantity) || 0;
+      if (['issue', 'consumption', 'consumption_issue', 'spoilage', 'wastage', 'staff_food'].includes(m.movement_type)) {
+        consumptionByItem[m.item_id] = (consumptionByItem[m.item_id] || 0) + qty;
+      } else if (m.movement_type === 'purchase') {
+        purchaseByItem[m.item_id] = (purchaseByItem[m.item_id] || 0) + qty;
+      }
+    });
 
-      itemIdsArray.forEach((itemId) => {
-        const cons = consumptionByItem[itemId] || 0;
-        const purch = purchaseByItem[itemId] || 0;
-        usage30dMap[itemId] = cons > 0 ? cons : purch;
-      });
-    }
+    const allMovementItemIds = new Set([
+      ...Object.keys(consumptionByItem),
+      ...Object.keys(purchaseByItem),
+      ...itemIdsArray,
+    ]);
+
+    allMovementItemIds.forEach((itemId) => {
+      const cons = consumptionByItem[itemId] || 0;
+      const purch = purchaseByItem[itemId] || 0;
+      usage30dMap[itemId] = cons > 0 ? cons : purch;
+    });
 
     // Attach live current_stock and usage_30d to lines
     const enrichedRequests = (requests || []).map((r: any) => ({
@@ -150,7 +153,7 @@ export async function GET(request: NextRequest) {
       })),
     }));
 
-    return NextResponse.json({ requests: enrichedRequests });
+    return NextResponse.json({ requests: enrichedRequests, usage30dMap });
   } catch (err: any) {
     console.error('Error in GET /api/finance/purchase-requests:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
@@ -234,37 +237,45 @@ export async function POST(request: NextRequest) {
       .order('last_purchase_date', { ascending: false });
 
     // 4. Fetch open approved unpurchased quantities in DB:
-    // Any line with approval_status IN ('auto_approved', 'approved') AND converted_purchase_id IS NULL
+    // Any line with approval_status IN ('auto_approved', 'approved'), not converted to PO, and not belonging to a cancelled request
     const { data: openApprovedLines } = await admin
       .from('purchase_request_lines')
-      .select('item_id, requested_quantity, approved_quantity, pack_quantity, conversion_factor_snapshot')
+      .select(`
+        item_id, requested_quantity, approved_quantity,
+        request:purchase_requests!inner(status)
+      `)
       .in('item_id', itemIds)
       .in('approval_status', ['auto_approved', 'approved'])
-      .is('converted_purchase_id', null);
+      .is('converted_purchase_id', null)
+      .neq('request.status', 'cancelled');
 
     const openApprovedQtyMap = new Map<string, number>();
     (openApprovedLines || []).forEach((row: any) => {
-      const conv = Number(row.conversion_factor_snapshot) || 1;
-      const packQty = row.pack_quantity != null ? Number(row.pack_quantity) : null;
-      const baseQty = packQty != null ? packQty * conv : (Number(row.approved_quantity) || Number(row.requested_quantity) || 0);
+      const baseQty = Number(row.approved_quantity ?? row.requested_quantity) || 0;
       openApprovedQtyMap.set(row.item_id, (openApprovedQtyMap.get(row.item_id) || 0) + baseQty);
     });
 
     // 5. Fetch today's IST auto-approved non-staple spend in DB:
     // WHERE was_auto_approved = true AND approval_status IN ('auto_approved', 'purchased')
-    // AND (created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+    // AND created_at >= midnight of current date in IST (Asia/Kolkata)
+    // AND request status != 'cancelled'
     // AND item's category NOT IN ('Dairy Products', 'Vegetables', 'Fruits')
+    const istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    const istMidnightIso = new Date(`${istDateStr}T00:00:00+05:30`).toISOString();
+
     const { data: todayAutoApprovedLines } = await admin
       .from('purchase_request_lines')
       .select(`
         estimated_total,
+        request:purchase_requests!inner(status),
         item:inventory_items(
           category:inventory_categories(name)
         )
       `)
       .eq('was_auto_approved', true)
       .in('approval_status', ['auto_approved', 'purchased'])
-      .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString());
+      .neq('request.status', 'cancelled')
+      .gte('created_at', istMidnightIso);
 
     let todayNonStapleAutoApprovedSpend = 0;
     (todayAutoApprovedLines || []).forEach((row: any) => {

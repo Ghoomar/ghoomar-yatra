@@ -52,6 +52,7 @@ interface CreatePurchaseRequestModalProps {
   vendors: any[];
   aliases: any[];
   policySettings: any;
+  usage30dMap?: Record<string, number>;
   onSubmitted: () => void;
 }
 
@@ -66,6 +67,7 @@ export function CreatePurchaseRequestModal({
   vendors,
   aliases,
   policySettings,
+  usage30dMap = {},
   onSubmitted,
 }: CreatePurchaseRequestModalProps) {
   const { t, locale } = useI18n();
@@ -147,13 +149,18 @@ export function CreatePurchaseRequestModal({
     const maxPar = selectedItem.max_stock_level != null ? Number(selectedItem.max_stock_level) : null;
     const currentStock = Number(selectedItem.current_quantity) || 0;
 
+    const itemId = selectedItem.id || selectedItem.item_id;
+    const stagedQtyForThisItem = stagedLines
+      .filter((l) => l.item_id === itemId)
+      .reduce((sum, l) => sum + (Number(l.requested_quantity) || 0), 0);
+
     if (!autoEnabled) reasons.push(t('purchases.reasonPills.autoApproveDisabled'));
     if (rate <= 0) reasons.push(t('purchases.reasonPills.priceUnknown'));
 
     // Par check
     if (maxPar == null) {
       reasons.push(t('purchases.reasonPills.maxParNotSet'));
-    } else if (currentStock + baseQty > maxPar) {
+    } else if (currentStock + stagedQtyForThisItem + baseQty > maxPar) {
       reasons.push(t('purchases.reasonPills.exceedsMaxPar'));
     }
 
@@ -181,7 +188,7 @@ export function CreatePurchaseRequestModal({
       isAuto: reasons.length === 0,
       reasons,
     };
-  }, [selectedItem, inputQuantity, usePack, selectedPackUnit, policySettings, t]);
+  }, [selectedItem, inputQuantity, usePack, selectedPackUnit, stagedLines, policySettings, t]);
 
   const handleSelectItem = (item: any) => {
     setSelectedItem(item);
@@ -228,7 +235,7 @@ export function CreatePurchaseRequestModal({
       max_par: selectedItem.max_stock_level != null ? Number(selectedItem.max_stock_level) : null,
       min_par: selectedItem.minimum_stock != null ? Number(selectedItem.minimum_stock) : null,
       abc_class: selectedItem.abc_class || 'routine_monitoring',
-      usage_30d: 0,
+      usage_30d: (usage30dMap && (usage30dMap[selectedItem.id] || usage30dMap[selectedItem.item_id])) || 0,
       is_eligible_auto: currentEvaluation.isAuto,
       routing_reasons: currentEvaluation.reasons,
     };
@@ -479,7 +486,7 @@ export function CreatePurchaseRequestModal({
                   <div>
                     <span className="text-stone-400 block text-[10px]">{t('purchases.createRequest.thirtyDayUsage')}</span>
                     <span className="font-bold font-mono text-stone-800">
-                      {formatINR(Number(selectedItem.current_weighted_average_cost) || 0)} / {selectedItem.unit_symbol}
+                      {formatNumber((usage30dMap && (usage30dMap[selectedItem.id] || usage30dMap[selectedItem.item_id])) || 0)} {selectedItem.unit_symbol || selectedItem.unit?.symbol || ''}
                     </span>
                   </div>
                 </div>

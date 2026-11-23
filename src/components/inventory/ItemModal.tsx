@@ -63,6 +63,22 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const [maxStockLevel, setMaxStockLevel] = useState<string>('');
   const [shelfLifeDays, setShelfLifeDays] = useState<string>('');
   const [minMaxUnitMode, setMinMaxUnitMode] = useState<'base' | 'kilo_liter'>('base');
+
+  const switchMinMaxMode = (newMode: 'base' | 'kilo_liter') => {
+    if (newMode === minMaxUnitMode) return;
+    if (newMode === 'kilo_liter') {
+      if (minimumStock) setMinimumStock(Math.round((minimumStock / 1000) * 10000) / 10000);
+      if (maxStockLevel && !isNaN(Number(maxStockLevel))) {
+        setMaxStockLevel(String(Math.round((Number(maxStockLevel) / 1000) * 10000) / 10000));
+      }
+    } else {
+      if (minimumStock) setMinimumStock(Math.round(minimumStock * 1000));
+      if (maxStockLevel && !isNaN(Number(maxStockLevel))) {
+        setMaxStockLevel(String(Math.round(Number(maxStockLevel) * 1000)));
+      }
+    }
+    setMinMaxUnitMode(newMode);
+  };
   const [replenishmentFrequency, setReplenishmentFrequency] = useState('As Required');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -999,7 +1015,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                         <span className="text-stone-700 font-semibold">Par Unit:</span>
                         <button
                           type="button"
-                          onClick={() => setMinMaxUnitMode('base')}
+                          onClick={() => switchMinMaxMode('base')}
                           className={`px-2 py-0.5 rounded font-bold transition-all ${
                             minMaxUnitMode === 'base'
                               ? 'bg-amber-700 text-white shadow-2xs'
@@ -1010,7 +1026,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setMinMaxUnitMode('kilo_liter')}
+                          onClick={() => switchMinMaxMode('kilo_liter')}
                           className={`px-2 py-0.5 rounded font-bold transition-all ${
                             minMaxUnitMode === 'kilo_liter'
                               ? 'bg-amber-700 text-white shadow-2xs'

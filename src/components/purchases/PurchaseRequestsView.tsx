@@ -63,6 +63,20 @@ export function PurchaseRequestsView({
   const [actionNote, setActionNote] = useState('');
   const [processingLineId, setProcessingLineId] = useState<string | null>(null);
 
+  const switchActionMaxParMode = (newMode: 'base' | 'kilo_liter') => {
+    if (newMode === actionMaxParUnitMode) return;
+    if (newMode === 'kilo_liter') {
+      if (actionMaxPar && !isNaN(Number(actionMaxPar))) {
+        setActionMaxPar(String(Math.round((Number(actionMaxPar) / 1000) * 10000) / 10000));
+      }
+    } else {
+      if (actionMaxPar && !isNaN(Number(actionMaxPar))) {
+        setActionMaxPar(String(Math.round(Number(actionMaxPar) * 1000)));
+      }
+    }
+    setActionMaxParUnitMode(newMode);
+  };
+
   // Flatten all lines across all requests
   const allLines = React.useMemo(() => {
     const list: any[] = [];
@@ -215,7 +229,7 @@ export function PurchaseRequestsView({
         </div>
 
         <div className="flex items-center gap-2">
-          {canApprove && (
+          {isAdmin && (
             <Button
               variant="outline"
               size="sm"
@@ -429,8 +443,13 @@ export function PurchaseRequestsView({
                             onClick={() => {
                               setActiveActionLineId(line.id);
                               setActionType('set_max_par');
-                              setActionMaxPar(line.max_par_snapshot ? String(line.max_par_snapshot) : '');
-                              setActionMaxParUnitMode(isGramOrMl ? 'kilo_liter' : 'base');
+                              if (isGramOrMl) {
+                                setActionMaxParUnitMode('kilo_liter');
+                                setActionMaxPar(line.max_par_snapshot ? String(Math.round((Number(line.max_par_snapshot) / 1000) * 10000) / 10000) : '');
+                              } else {
+                                setActionMaxParUnitMode('base');
+                                setActionMaxPar(line.max_par_snapshot ? String(line.max_par_snapshot) : '');
+                              }
                             }}
                             className="text-xs h-7 px-2 text-stone-700 border"
                           >
@@ -493,7 +512,7 @@ export function PurchaseRequestsView({
                                 <div className="flex items-center rounded border border-stone-300 overflow-hidden text-[11px]">
                                   <button
                                     type="button"
-                                    onClick={() => setActionMaxParUnitMode('base')}
+                                    onClick={() => switchActionMaxParMode('base')}
                                     className={`px-2 py-1 ${
                                       actionMaxParUnitMode === 'base' ? 'bg-amber-600 text-white font-bold' : 'bg-white text-stone-700'
                                     }`}
@@ -502,7 +521,7 @@ export function PurchaseRequestsView({
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setActionMaxParUnitMode('kilo_liter')}
+                                    onClick={() => switchActionMaxParMode('kilo_liter')}
                                     className={`px-2 py-1 ${
                                       actionMaxParUnitMode === 'kilo_liter' ? 'bg-amber-600 text-white font-bold' : 'bg-white text-stone-700'
                                     }`}
