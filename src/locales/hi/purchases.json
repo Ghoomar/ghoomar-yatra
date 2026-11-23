@@ -127,7 +127,17 @@
       "code": "कोड",
       "contact": "संपर्क",
       "purchased": "कुल खरीद"
-    }
+    },
+    "paymentNo": "भुगतान #",
+    "singleItem": "सामग्री",
+    "multipleItems": "सामग्रियां",
+    "deleteInvoice": "बिल हटाएं",
+    "deleteInvoiceTitle": "खरीद इनवॉइस हटाएं",
+    "deleteInvoiceConfirm": "क्या आप वाकई खरीद इनवॉइस {number} को हमेशा के लिए हटाना चाहते हैं?",
+    "deleteInvoiceWarning": "यह इन्वेंट्री से स्टॉक घटाएगा, WAC की दोबारा गणना करेगा और सभी लेजर मूवमेंट हटाएगा।",
+    "errCannotDeleteAllocated": "खरीद इनवॉइस {number} को हटाया नहीं जा सकता: इस पर {amount} का भुगतान आवंटित हो चुका है। कृपया पहले भुगतान हटाएं।",
+    "invoiceDeleted": "खरीद इनवॉइस {number} हमेशा के लिए हटा दी गई।",
+    "confirmDeleteInvoice": "इनवॉइस हमेशा के लिए हटाएं"
   },
   "tabs": {
     "vendors": "वेंडर",
@@ -318,7 +328,23 @@
         "debit": "डेबिट (₹)",
         "credit": "क्रेडिट (₹)",
         "balance": "बाकी बैलेंस (₹)"
-      }
+      },
+      "deleteVendor": "वेंडर हटाएं",
+      "deleteVendorTitle": "वेंडर हटाएं",
+      "deleteVendorConfirm": "क्या आप वाकई वेंडर \"{name}\" को हमेशा के लिए हटाना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता है।",
+      "errCannotDeleteVendorTx": "वेंडर \"{name}\" को हटाया नहीं जा सकता। इस वेंडर के {purchases} खरीद इनवॉइस और {payments} भुगतान वाउचर दर्ज हैं। लेन-देन इतिहास वाले वेंडर को केवल निष्क्रिय किया जा सकता है।"
     }
+  },
+  "payments": {
+    "editPayment": "भुगतान बदलें",
+    "editPaymentTitle": "भुगतान वाउचर बदलें",
+    "savePayment": "बदलाव सहेजें",
+    "deletePayment": "भुगतान हटाएं",
+    "deletePaymentTitle": "भुगतान वाउचर हटाएं",
+    "deletePaymentConfirm": "क्या आप वाकई भुगतान वाउचर {number} को हटाना चाहते हैं?",
+    "deletePaymentWarning": "इस भुगतान को हटाने से यह वेंडर लेजर से हट जाएगा और संबंधित इनवॉइस पर बकाया राशि बहाल हो जाएगी।",
+    "confirmDeletePayment": "भुगतान हटाएं",
+    "paymentUpdated": "भुगतान {number} सफलतापूर्वक अपडेट किया गया।",
+    "paymentDeleted": "भुगतान {number} सफलतापूर्वक हटा दिया गया।"
   }
 }

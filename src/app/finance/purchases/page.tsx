@@ -23,16 +23,26 @@ import {
   CheckCircle,
   AlertCircle,
   Trash2,
-  Tag
+  Tag,
+  ChevronDown,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
+import { useAppRole } from '@/components/layout/AppShell';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 function PurchasesContent() {
   const { t, locale } = useI18n();
+  const { role, hasPermission } = useAppRole();
+  const isAdmin = role === 'Admin';
+  const canEditInvoices = isAdmin || hasPermission('finance.purchases.edit');
+  const canEditVendors = isAdmin || hasPermission('finance.vendors.edit');
+  const canEditPayments = isAdmin || hasPermission('finance.payments.edit');
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Mobile KPI expansion toggle
+  const [isMobileKpiExpanded, setIsMobileKpiExpanded] = useState(false);
 
   // Active view tab state (synchronized with URL query param `?view=invoices` / `?view=vendors`)
   const urlView = searchParams.get('view');
@@ -103,6 +113,11 @@ function PurchasesContent() {
   const [cancellingInvoice, setCancellingInvoice] = useState<PurchaseInvoiceRecord | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancellingLoading, setCancellingLoading] = useState(false);
+
+  // Invoice Deletion Safeguard Modal State
+  const [deleteInvoiceModalOpen, setDeleteInvoiceModalOpen] = useState(false);
+  const [deletingInvoice, setDeletingInvoice] = useState<PurchaseInvoiceRecord | null>(null);
+  const [deleteInvoiceLoading, setDeleteInvoiceLoading] = useState(false);
 
   // Fetch vendor price memory whenever selectedVendorId changes
   useEffect(() => {
@@ -348,6 +363,39 @@ function PurchasesContent() {
     }
   };
 
+  const handleInitiateDeleteInvoice = (inv: PurchaseInvoiceRecord) => {
+    setDeletingInvoice(inv);
+    setDeleteInvoiceModalOpen(true);
+  };
+
+  const handleConfirmDeleteInvoice = async () => {
+    if (!deletingInvoice) return;
+    setDeleteInvoiceLoading(true);
+    try {
+      const res = await fetch('/api/finance/purchases/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchase_id: deletingInvoice.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete purchase invoice');
+      }
+      setMessage({
+        type: 'success',
+        text: t('purchases.bills.invoiceDeleted', { number: deletingInvoice.purchase_number }),
+      });
+      setDeleteInvoiceModalOpen(false);
+      setDeletingInvoice(null);
+      loadData();
+    } catch (err: any) {
+      console.error('Error deleting purchase invoice:', err);
+      alert(err.message || 'Failed to delete purchase invoice');
+    } finally {
+      setDeleteInvoiceLoading(false);
+    }
+  };
+
   // Aggregate high-level summary KPIs
   const totalOutstanding = useMemo(() => {
     return vendors.reduce((acc, v) => acc + (Number(v.outstanding_balance) || 0), 0);
@@ -556,7 +604,7 @@ function PurchasesContent() {
             <ShoppingBag className="h-6 w-6 text-amber-600 shrink-0" />
             <span>{t('purchases.bills.title')}</span>
           </h1>
-          <p className="text-xs text-stone-500 mt-0.5">
+          <p className="hidden sm:block text-xs text-stone-500 mt-0.5">
             {t('purchases.bills.subtitle')}
           </p>
         </div>
@@ -625,36 +673,101 @@ function PurchasesContent() {
         </div>
       </div>
 
-      {/* Top 4 KPI Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
-          <CardDescription className="truncate">{t('purchases.bills.outstanding')}</CardDescription>
-          <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-1 truncate">
-            {formatINR(totalOutstanding)}
-          </div>
-        </Card>
+      {/* KPI Summary Cards: Mobile Collapsible Slim Bar (< md) & Desktop 4-Card Grid (md+) */}
+      {(() => {
+        const paidPercentage = totalPurchasesAllTime > 0
+          ? Math.min(100, Math.round((totalPaidAllTime / totalPurchasesAllTime) * 100))
+          : 0;
+        return (
+          <>
+            {/* Mobile Collapsible Slim Balance Card (< md) */}
+            <Card
+              onClick={() => setIsMobileKpiExpanded(!isMobileKpiExpanded)}
+              className="md:hidden p-3.5 cursor-pointer bg-white border border-stone-200/80 shadow-xs hover:border-amber-300 transition-all select-none"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-medium text-stone-500 uppercase tracking-wider block">
+                    {t('purchases.bills.outstanding')}
+                  </span>
+                  <span className="text-xl font-bold text-rose-600">
+                    {formatINR(totalOutstanding)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-stone-500 font-medium">
+                    {paidPercentage}% {t('purchases.bills.settled')}
+                  </span>
+                  <div className={`text-stone-400 transform transition-transform duration-200 ${isMobileKpiExpanded ? 'rotate-180' : ''}`}>
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
 
-        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
-          <CardDescription className="truncate">{t('purchases.kpi.totalPurchased')}</CardDescription>
-          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
-            {formatINR(totalPurchasesAllTime)}
-          </div>
-        </Card>
+              {/* Thin Paid Progress Bar */}
+              <div className="w-full bg-stone-100 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${paidPercentage}%` }}
+                />
+              </div>
 
-        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
-          <CardDescription className="truncate">{t('purchases.kpi.totalPaid')}</CardDescription>
-          <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1 truncate">
-            {formatINR(totalPaidAllTime)}
-          </div>
-        </Card>
+              {/* Expanded Details */}
+              {isMobileKpiExpanded && (
+                <div className="grid grid-cols-2 gap-3 pt-3 mt-3 border-t border-stone-100">
+                  <div>
+                    <span className="text-[11px] text-stone-500 block truncate">
+                      {t('purchases.kpi.totalPurchased')}
+                    </span>
+                    <span className="text-sm font-bold text-stone-900 truncate block mt-0.5">
+                      {formatINR(totalPurchasesAllTime)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-stone-500 block truncate">
+                      {t('purchases.kpi.totalPaid')}
+                    </span>
+                    <span className="text-sm font-bold text-emerald-700 truncate block mt-0.5">
+                      {formatINR(totalPaidAllTime)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </Card>
 
-        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
-          <CardDescription className="truncate">{t('purchases.bills.activeVendors')}</CardDescription>
-          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
-            {activeVendorsCount}
-          </div>
-        </Card>
-      </div>
+            {/* Desktop 4 KPI Summary Cards (md+) */}
+            <div className="hidden md:grid md:grid-cols-4 gap-4">
+              <Card className="p-4 sm:p-5 min-w-0 overflow-hidden">
+                <CardDescription className="truncate">{t('purchases.bills.outstanding')}</CardDescription>
+                <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-1 truncate">
+                  {formatINR(totalOutstanding)}
+                </div>
+              </Card>
+
+              <Card className="p-4 sm:p-5 min-w-0 overflow-hidden">
+                <CardDescription className="truncate">{t('purchases.kpi.totalPurchased')}</CardDescription>
+                <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
+                  {formatINR(totalPurchasesAllTime)}
+                </div>
+              </Card>
+
+              <Card className="p-4 sm:p-5 min-w-0 overflow-hidden">
+                <CardDescription className="truncate">{t('purchases.kpi.totalPaid')}</CardDescription>
+                <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1 truncate">
+                  {formatINR(totalPaidAllTime)}
+                </div>
+              </Card>
+
+              <Card className="p-4 sm:p-5 min-w-0 overflow-hidden">
+                <CardDescription className="truncate">{t('purchases.bills.activeVendors')}</CardDescription>
+                <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
+                  {activeVendorsCount}
+                </div>
+              </Card>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Alert Messages */}
       {message && (
@@ -735,6 +848,7 @@ function PurchasesContent() {
             setSelectedVendorId(inv.vendor_id);
             setShowPurchaseModal(true);
           }}
+          onDeleteInvoice={handleInitiateDeleteInvoice}
         />
       ) : (
         <VendorsView
@@ -1108,6 +1222,83 @@ function PurchasesContent() {
         onClose={() => setCategoryModalOpen(false)}
         onUpdated={loadData}
       />
+
+      {/* Delete Purchase Invoice Safeguard Modal */}
+      {deleteInvoiceModalOpen && deletingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl border border-stone-200">
+            <div className="flex items-center gap-3 text-rose-600 mb-4">
+              <div className="rounded-full bg-rose-100 p-2">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-bold text-stone-900">
+                {t('purchases.bills.deleteInvoiceTitle')}
+              </h3>
+            </div>
+
+            {deletingInvoice.allocated_amount > 0.01 ? (
+              <div className="space-y-4">
+                <p className="text-sm text-stone-600">
+                  {t('purchases.bills.errCannotDeleteAllocated', {
+                    number: deletingInvoice.purchase_number,
+                    amount: formatINR(deletingInvoice.allocated_amount),
+                  })}
+                </p>
+                <div className="flex justify-end pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteInvoiceModalOpen(false);
+                      setDeletingInvoice(null);
+                    }}
+                  >
+                    {t('purchases.bills.cancel')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-stone-700">
+                  {t('purchases.bills.deleteInvoiceConfirm', {
+                    number: deletingInvoice.purchase_number,
+                  })}
+                </p>
+                <p className="text-xs text-rose-600 font-medium bg-rose-50 p-2.5 rounded-lg border border-rose-100">
+                  {t('purchases.bills.deleteInvoiceWarning')}
+                </p>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteInvoiceModalOpen(false);
+                      setDeletingInvoice(null);
+                    }}
+                    disabled={deleteInvoiceLoading}
+                  >
+                    {t('purchases.bills.cancel')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleConfirmDeleteInvoice}
+                    disabled={deleteInvoiceLoading}
+                    className="gap-1.5"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>
+                      {deleteInvoiceLoading
+                        ? t('purchases.bills.saving')
+                        : t('purchases.bills.confirmDeleteInvoice')}
+                    </span>
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

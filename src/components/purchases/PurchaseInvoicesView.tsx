@@ -20,8 +20,10 @@ import {
   Building2,
   Trash2,
   Edit3,
+  Ban,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
+import { useAppRole } from '@/components/layout/AppShell';
 
 export interface PurchaseInvoiceRecord {
   id: string;
@@ -64,6 +66,7 @@ interface PurchaseInvoicesViewProps {
   onRecordPayment: (vendorId?: string) => void;
   onCancelInvoice?: (invoice: PurchaseInvoiceRecord) => void;
   onEditInvoice?: (invoice: PurchaseInvoiceRecord) => void;
+  onDeleteInvoice?: (invoice: PurchaseInvoiceRecord) => void;
 }
 
 const formatDisplayDate = (dateStr: string, locale: string) => {
@@ -89,8 +92,13 @@ export function PurchaseInvoicesView({
   onRecordPayment,
   onCancelInvoice,
   onEditInvoice,
+  onDeleteInvoice,
 }: PurchaseInvoicesViewProps) {
   const { t, locale } = useI18n();
+  const { role, hasPermission } = useAppRole();
+  const isAdmin = role === 'Admin';
+  const canEditInvoices = isAdmin || hasPermission('finance.purchases.edit');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'partial' | 'settled'>('all');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
@@ -143,10 +151,10 @@ export function PurchaseInvoicesView({
     <div className="space-y-4">
       {/* Search & Filter Bar */}
       <Card>
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
+        <CardContent className="p-2.5 sm:p-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 sm:gap-3">
             {/* Search Input */}
-            <div className="relative flex-1">
+            <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
               <input
                 type="text"
@@ -157,14 +165,14 @@ export function PurchaseInvoicesView({
               />
             </div>
 
-            {/* Filter Dropdowns */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Filter Dropdowns - full width 2-column grid on mobile */}
+            <div className="grid grid-cols-2 md:flex md:items-center gap-2 w-full md:w-auto">
               {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
                 aria-label={t('purchases.invoices.allStatuses')}
-                className="text-xs rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="w-full md:w-auto text-xs rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
               >
                 <option value="all">{t('purchases.invoices.allStatuses')}</option>
                 <option value="unpaid">{t('purchases.invoices.status.unpaid')}</option>
@@ -177,7 +185,7 @@ export function PurchaseInvoicesView({
                 value={vendorFilter}
                 onChange={(e) => setVendorFilter(e.target.value)}
                 aria-label={t('purchases.invoices.allVendors')}
-                className="text-xs rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 max-w-[170px] truncate"
+                className="w-full md:w-auto text-xs rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 truncate"
               >
                 <option value="all">{t('purchases.invoices.allVendors')}</option>
                 {distinctVendors.map(([vId, vName]) => (
@@ -197,7 +205,7 @@ export function PurchaseInvoicesView({
                     setStatusFilter('all');
                     setVendorFilter('all');
                   }}
-                  className="text-stone-500 hover:text-stone-800 text-xs px-2 h-8"
+                  className="col-span-2 md:col-span-1 text-stone-500 hover:text-stone-800 text-xs px-2 h-7 md:h-8 justify-center"
                 >
                   {t('purchases.vendors.filter.reset')}
                 </Button>
@@ -209,7 +217,7 @@ export function PurchaseInvoicesView({
 
       {/* Invoices Table */}
       <Card>
-        <CardHeader className="py-3 px-4 border-b border-stone-100 flex flex-row items-center justify-between">
+        <CardHeader className="hidden md:flex py-3 px-4 border-b border-stone-100 flex-row items-center justify-between">
           <CardTitle className="text-sm font-semibold text-stone-900 flex items-center gap-2">
             <FileText className="h-4 w-4 text-amber-600" />
             <span>{t('purchases.tabs.invoices')}</span>
@@ -268,7 +276,10 @@ export function PurchaseInvoicesView({
                             <span>{formatDisplayDate(inv.purchase_date, locale)}</span>
                             <span>•</span>
                             <span>
-                              {inv.lines.length} {inv.lines.length === 1 ? 'item' : 'items'}
+                              {inv.lines.length}{' '}
+                              {inv.lines.length === 1
+                                ? t('purchases.bills.singleItem')
+                                : t('purchases.bills.multipleItems')}
                             </span>
                             {inv.invoice_number && (
                               <>
@@ -301,12 +312,14 @@ export function PurchaseInvoicesView({
                           </div>
                         </div>
 
-                        {/* Balance Due row if unpaid or partial */}
-                        {!isCancelled && !isSettled && (
+                        {/* Balance Due row only on partially paid cards */}
+                        {!isCancelled && isPartial && (
                           <div className="flex items-center justify-between text-xs pt-0.5">
-                            <span className="text-stone-500">{t('purchases.bills.balanceDue')}:</span>
-                            <span className="font-bold text-rose-600">
-                              {formatINR(Math.max(0, balanceDue))}
+                            <span className="text-stone-500">
+                              {t('purchases.bills.table.paid')}: <span className="font-semibold text-emerald-700">{formatINR(inv.allocated_amount)}</span>
+                            </span>
+                            <span className="text-stone-500">
+                              {t('purchases.bills.balanceDue')}: <span className="font-bold text-rose-600">{formatINR(Math.max(0, balanceDue))}</span>
                             </span>
                           </div>
                         )}
@@ -317,7 +330,7 @@ export function PurchaseInvoicesView({
                         <div className="pt-2 border-t border-stone-100 space-y-2.5">
                           {/* Actions */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {!isCancelled && onEditInvoice && (
+                            {!isCancelled && canEditInvoices && onEditInvoice && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -339,15 +352,26 @@ export function PurchaseInvoicesView({
                                 <span>{t('purchases.bills.recordPayment')}</span>
                               </Button>
                             )}
-                            {!isCancelled && onCancelInvoice && inv.allocated_amount <= 0.01 && (
+                            {!isCancelled && canEditInvoices && onCancelInvoice && inv.allocated_amount <= 0.01 && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => onCancelInvoice(inv)}
                                 className="text-xs h-7 px-2.5 gap-1 text-rose-600 border-rose-200 hover:bg-rose-50"
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Ban className="h-3 w-3" />
                                 <span>{t('purchases.bills.cancelInvoice')}</span>
+                              </Button>
+                            )}
+                            {isAdmin && onDeleteInvoice && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onDeleteInvoice(inv)}
+                                className="text-xs h-7 px-2.5 gap-1 text-rose-700 border-rose-300 hover:bg-rose-100"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                <span>{t('purchases.bills.deleteInvoice')}</span>
                               </Button>
                             )}
                             <Link
@@ -482,7 +506,10 @@ export function PurchaseInvoicesView({
                             <td className="py-3 px-3 text-stone-600 whitespace-nowrap">
                               <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-700 px-2 py-0.5 rounded text-[11px] font-medium">
                                 <Package className="h-3 w-3 text-stone-400" />
-                                {inv.lines.length} {inv.lines.length === 1 ? 'item' : 'items'}
+                                {inv.lines.length}{' '}
+                                {inv.lines.length === 1
+                                  ? t('purchases.bills.singleItem')
+                                  : t('purchases.bills.multipleItems')}
                               </span>
                             </td>
 
@@ -521,7 +548,7 @@ export function PurchaseInvoicesView({
                             {/* Actions */}
                             <td className="py-3 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1.5">
-                                {!isCancelled && onEditInvoice && (
+                                {!isCancelled && canEditInvoices && onEditInvoice && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -545,7 +572,7 @@ export function PurchaseInvoicesView({
                                     <span>{t('purchases.bills.recordPayment')}</span>
                                   </Button>
                                 )}
-                                {!isCancelled && onCancelInvoice && inv.allocated_amount <= 0.01 && (
+                                {!isCancelled && canEditInvoices && onCancelInvoice && inv.allocated_amount <= 0.01 && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -553,8 +580,20 @@ export function PurchaseInvoicesView({
                                     className="text-[11px] h-7 px-2 gap-1 text-rose-600 border-rose-200 hover:bg-rose-50"
                                     title={t('purchases.bills.cancelInvoice')}
                                   >
-                                    <Trash2 className="h-3 w-3" />
+                                    <Ban className="h-3 w-3" />
                                     <span>{t('purchases.bills.cancelInvoice')}</span>
+                                  </Button>
+                                )}
+                                {isAdmin && onDeleteInvoice && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => onDeleteInvoice(inv)}
+                                    className="text-[11px] h-7 px-2 gap-1 text-rose-700 border-rose-300 hover:bg-rose-100"
+                                    title={t('purchases.bills.deleteInvoice')}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                    <span>{t('purchases.bills.deleteInvoice')}</span>
                                   </Button>
                                 )}
                               </div>

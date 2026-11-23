@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth || !auth.user) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
+    }
+
+    if (!auth.canEditPurchases) {
+      return NextResponse.json(
+        { error: 'Forbidden. You do not have permission to edit purchase invoices.' },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();
@@ -58,7 +64,7 @@ export async function POST(request: NextRequest) {
       p_invoice_number: invoice_number || null,
       p_notes: notes || null,
       p_lines: formattedLines,
-      p_edited_by: user.id,
+      p_edited_by: auth.user.id,
     });
 
     if (error) {

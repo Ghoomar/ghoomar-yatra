@@ -127,7 +127,17 @@
       "code": "Code",
       "contact": "Contact",
       "purchased": "Purchased"
-    }
+    },
+    "paymentNo": "Payment #",
+    "singleItem": "item",
+    "multipleItems": "items",
+    "deleteInvoice": "Delete Invoice",
+    "deleteInvoiceTitle": "Delete Purchase Invoice",
+    "deleteInvoiceConfirm": "Are you sure you want to permanently delete purchase invoice {number}?",
+    "deleteInvoiceWarning": "This will reverse inward stock from inventory, recalculate item WAC, and remove all associated ledger movements.",
+    "errCannotDeleteAllocated": "Cannot delete purchase invoice {number}: payments of {amount} have been allocated to this invoice. Please delete or unlink the payment first.",
+    "invoiceDeleted": "Purchase invoice {number} permanently deleted.",
+    "confirmDeleteInvoice": "Permanently Delete Invoice"
   },
   "tabs": {
     "vendors": "Vendors",
@@ -318,7 +328,23 @@
         "debit": "Debit (₹)",
         "credit": "Credit (₹)",
         "balance": "Balance (₹)"
-      }
+      },
+      "deleteVendor": "Delete Vendor",
+      "deleteVendorTitle": "Delete Vendor",
+      "deleteVendorConfirm": "Are you sure you want to permanently delete vendor \"{name}\"? This action cannot be undone.",
+      "errCannotDeleteVendorTx": "Cannot delete vendor \"{name}\". This vendor has {purchases} purchase invoices and {payments} payment vouchers on record. Vendors with transaction history can only be deactivated."
     }
+  },
+  "payments": {
+    "editPayment": "Edit Payment",
+    "editPaymentTitle": "Edit Payment Voucher",
+    "savePayment": "Save Changes",
+    "deletePayment": "Delete Payment",
+    "deletePaymentTitle": "Delete Payment Voucher",
+    "deletePaymentConfirm": "Are you sure you want to delete payment voucher {number}?",
+    "deletePaymentWarning": "Deleting this payment will remove it from the vendor ledger and restore outstanding balances across linked invoices.",
+    "confirmDeletePayment": "Delete Payment",
+    "paymentUpdated": "Payment {number} updated successfully.",
+    "paymentDeleted": "Payment {number} deleted successfully."
   }
 }

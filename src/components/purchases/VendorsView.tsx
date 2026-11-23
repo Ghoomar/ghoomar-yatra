@@ -20,6 +20,7 @@ import {
   Tag
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
+import { useAppRole } from '@/components/layout/AppShell';
 
 interface VendorsViewProps {
   vendors: VendorOutstandingSummary[];
@@ -49,6 +50,10 @@ export function VendorsView({
   onInitiateDelete,
 }: VendorsViewProps) {
   const { t, locale } = useI18n();
+  const { role, hasPermission } = useAppRole();
+  const isAdmin = role === 'Admin';
+  const canEditVendors = isAdmin || hasPermission('finance.vendors.edit');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -353,43 +358,49 @@ export function VendorsView({
                         {/* Actions */}
                         <td className="py-3 px-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onEditVendor(v)}
-                              className="p-1 h-7 w-7 text-stone-500 hover:text-amber-600"
-                              title={t('purchases.vendors.actions.editVendor')}
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {canEditVendors && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => onEditVendor(v)}
+                                  className="p-1 h-7 w-7 text-stone-500 hover:text-amber-600"
+                                  title={t('purchases.vendors.actions.editVendor')}
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onToggleStatus(v)}
-                              className={`p-1 h-7 w-7 ${
-                                v.is_active !== false
-                                  ? 'text-stone-500 hover:text-rose-600'
-                                  : 'text-stone-500 hover:text-emerald-600'
-                              }`}
-                              title={
-                                v.is_active !== false
-                                  ? t('purchases.vendors.actions.deactivateVendor')
-                                  : t('purchases.vendors.actions.activateVendor')
-                              }
-                            >
-                              <Power className="h-3.5 w-3.5" />
-                            </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => onToggleStatus(v)}
+                                  className={`p-1 h-7 w-7 ${
+                                    v.is_active !== false
+                                      ? 'text-stone-500 hover:text-rose-600'
+                                      : 'text-stone-500 hover:text-emerald-600'
+                                  }`}
+                                  title={
+                                    v.is_active !== false
+                                      ? t('purchases.vendors.actions.deactivateVendor')
+                                      : t('purchases.vendors.actions.activateVendor')
+                                  }
+                                >
+                                  <Power className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onInitiateDelete(v)}
-                              className="p-1 h-7 w-7 text-stone-400 hover:text-rose-600"
-                              title={t('purchases.vendors.actions.deleteVendor')}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onInitiateDelete(v)}
+                                className="p-1 h-7 w-7 text-stone-400 hover:text-rose-600"
+                                title={t('purchases.vendors.actions.deleteVendor')}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>

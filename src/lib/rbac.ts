@@ -83,6 +83,44 @@ export function canViewCosting(
 }
 
 /**
+ * Checks whether user has permission to edit purchase invoices.
+ */
+export function canEditPurchases(
+  userRole: string | null | undefined,
+  userPermissions: string[] | null | undefined
+): boolean {
+  return hasPermission(userRole, userPermissions, 'finance.purchases.edit');
+}
+
+/**
+ * Checks whether user has permission to edit vendors.
+ */
+export function canEditVendors(
+  userRole: string | null | undefined,
+  userPermissions: string[] | null | undefined
+): boolean {
+  return hasPermission(userRole, userPermissions, 'finance.vendors.edit');
+}
+
+/**
+ * Checks whether user has permission to edit vendor payments.
+ */
+export function canEditPayments(
+  userRole: string | null | undefined,
+  userPermissions: string[] | null | undefined
+): boolean {
+  return hasPermission(userRole, userPermissions, 'finance.payments.edit');
+}
+
+/**
+ * Checks whether user has administrative rights to delete financial records.
+ * Strictly locked to Admin role.
+ */
+export function canDeleteFinancials(userRole: string | null | undefined): boolean {
+  return userRole === 'Admin';
+}
+
+/**
  * Returns the required permission for a pathname, or null if unrestricted.
  */
 export function getRequiredPermissionForPath(pathname: string): string | string[] | null {
