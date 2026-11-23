@@ -85,6 +85,7 @@ function PurchasesContent() {
 
   // Purchase Bill Modal State
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<PurchaseInvoiceRecord | null>(null);
   const [showQuickVendorModal, setShowQuickVendorModal] = useState(false);
   const [selectedVendorId, setSelectedVendorId] = useState('');
   const [vendorPriceMemory, setVendorPriceMemory] = useState<Record<string, { rate: number; date: string }>>({});
@@ -626,28 +627,28 @@ function PurchasesContent() {
 
       {/* Top 4 KPI Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
           <CardDescription className="truncate">{t('purchases.bills.outstanding')}</CardDescription>
           <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-1 truncate">
             {formatINR(totalOutstanding)}
           </div>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
           <CardDescription className="truncate">{t('purchases.kpi.totalPurchased')}</CardDescription>
           <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
             {formatINR(totalPurchasesAllTime)}
           </div>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
           <CardDescription className="truncate">{t('purchases.kpi.totalPaid')}</CardDescription>
           <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1 truncate">
             {formatINR(totalPaidAllTime)}
           </div>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="p-3 sm:p-5 min-w-0 overflow-hidden">
           <CardDescription className="truncate">{t('purchases.bills.activeVendors')}</CardDescription>
           <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 truncate">
             {activeVendorsCount}
@@ -716,7 +717,10 @@ function PurchasesContent() {
           invoices={invoices}
           loading={loading}
           onRefresh={loadData}
-          onNewInvoice={() => setShowPurchaseModal(true)}
+          onNewInvoice={() => {
+            setEditingInvoice(null);
+            setShowPurchaseModal(true);
+          }}
           onRecordPayment={(vendorId) => {
             if (vendorId) setPaymentVendorId(vendorId);
             setShowPaymentModal(true);
@@ -725,6 +729,11 @@ function PurchasesContent() {
             setCancellingInvoice(inv);
             setCancelReason('');
             setCancelInvoiceModalOpen(true);
+          }}
+          onEditInvoice={(inv) => {
+            setEditingInvoice(inv);
+            setSelectedVendorId(inv.vendor_id);
+            setShowPurchaseModal(true);
           }}
         />
       ) : (
@@ -915,7 +924,11 @@ function PurchasesContent() {
       {/* Redesigned Simplified Purchase Invoice Modal */}
       <PurchaseModal
         isOpen={showPurchaseModal}
-        onClose={() => setShowPurchaseModal(false)}
+        invoiceToEdit={editingInvoice}
+        onClose={() => {
+          setShowPurchaseModal(false);
+          setEditingInvoice(null);
+        }}
         vendors={vendors}
         items={items}
         groups={groups}
@@ -933,8 +946,11 @@ function PurchasesContent() {
         onPurchaseSaved={(num) => {
           setMessage({
             type: 'success',
-            text: t('purchases.bills.invoiceRecorded', { number: num }),
+            text: editingInvoice
+              ? t('purchases.bills.invoiceUpdated', { number: num })
+              : t('purchases.bills.invoiceRecorded', { number: num }),
           });
+          setEditingInvoice(null);
           loadData();
         }}
         onNewItemCreated={(newItem, newGroup) => {

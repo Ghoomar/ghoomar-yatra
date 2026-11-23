@@ -24,6 +24,7 @@ import { useI18n } from '@/lib/i18n/context';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 export interface PurchaseLineForm {
+  line_id?: string | null;
   item_id: string;
   item_name?: string;
   brand_name?: string;
@@ -39,6 +40,7 @@ export interface PurchaseLineForm {
   is_custom_pack?: boolean;
   quantity?: string | number | null;
   rate?: string | number | null;
+  line_total?: string | number | null;
   previous_rate?: number;
   previous_date?: string;
 }
@@ -62,6 +64,7 @@ interface PurchaseModalProps {
   selectedVendorId: string;
   setSelectedVendorId: (id: string) => void;
   onNewItemCreated?: (newItem: any, newGroup?: any) => void;
+  invoiceToEdit?: PurchaseInvoiceRecord | null;
 }
 
 export function PurchaseModal({
@@ -83,23 +86,72 @@ export function PurchaseModal({
   selectedVendorId,
   setSelectedVendorId,
   onNewItemCreated,
+  invoiceToEdit,
 }: PurchaseModalProps) {
   const { t, locale } = useI18n();
   const supabase = createClient();
+  const isEdit = Boolean(invoiceToEdit?.id);
 
   // Invoice Header State
   const [purchaseDate, setPurchaseDate] = useState(businessDate || getTodayBusinessDate());
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<PurchaseLineForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Sync purchase date whenever modal opens or businessDate changes
+  // Sync state whenever modal opens or invoiceToEdit changes
   useEffect(() => {
     if (isOpen) {
-      setPurchaseDate(businessDate || getTodayBusinessDate());
+      setErrorMessage(null);
+      if (invoiceToEdit) {
+        setSelectedVendorId(invoiceToEdit.vendor_id);
+        setPurchaseDate(invoiceToEdit.purchase_date);
+        setInvoiceNumber(invoiceToEdit.invoice_number || '');
+        setNotes((invoiceToEdit as any).notes || '');
+
+        const mappedLines: PurchaseLineForm[] = (invoiceToEdit.lines || []).map((l: any) => {
+          const matchedItem = items.find((it) => it.id === l.item_id);
+          const matchedGroup = groups.find((g) => g.id === matchedItem?.group_id);
+          const canonicalUnit = (matchedItem?.unit?.symbol || 'kg').toLowerCase();
+          const baseUnitDisplay =
+            getLocalizedMasterSymbol(matchedItem?.unit, locale) ||
+            matchedItem?.unit?.symbol ||
+            l.unit_symbol ||
+            (locale === 'hi' ? 'किग्रा' : 'kg');
+
+          const usePack = Boolean(l.pack_unit_snapshot);
+          const qVal = usePack ? (l.pack_quantity ?? l.quantity) : l.quantity;
+          const rVal = usePack ? (l.pack_rate ?? l.rate) : l.rate;
+
+          return {
+            line_id: l.id,
+            item_id: l.item_id,
+            item_name: (locale === 'hi' && matchedItem?.name_hi) ? matchedItem.name_hi : (l.item_name || matchedItem?.name || 'Item'),
+            brand_name: l.brand_name_snapshot || matchedItem?.brand_name || 'Generic',
+            group_name: matchedGroup?.name || matchedItem?.name?.split('—')[0]?.trim() || l.item_name,
+            base_unit_canonical: canonicalUnit,
+            base_unit_symbol: baseUnitDisplay,
+            use_pack: usePack,
+            packaging_unit_id: l.packaging_unit_id || null,
+            pack_unit: l.pack_unit_snapshot || baseUnitDisplay,
+            pack_quantity: usePack ? String(qVal) : '',
+            pack_rate: usePack ? String(rVal) : '',
+            conversion_factor: l.conversion_factor_snapshot ? Number(l.conversion_factor_snapshot) : 1,
+            quantity: String(l.quantity),
+            rate: String(l.rate),
+            line_total: l.total_amount ? String(l.total_amount) : '',
+          };
+        });
+        setLines(mappedLines);
+      } else {
+        setPurchaseDate(businessDate || getTodayBusinessDate());
+        setInvoiceNumber('');
+        setNotes('');
+        setLines([]);
+      }
     }
-  }, [isOpen, businessDate]);
+  }, [isOpen, invoiceToEdit, businessDate]);
 
   // Item Search Submodal State
   const [showItemSearch, setShowItemSearch] = useState(false);
@@ -232,6 +284,9 @@ export function PurchaseModal({
   // Calculate invoice total
   const invoiceTotal = useMemo(() => {
     return lines.reduce((acc, l) => {
+      if (l.line_total !== undefined && l.line_total !== null && l.line_total !== '') {
+        return acc + (Number(l.line_total) || 0);
+      }
       const q = Number(l.use_pack ? l.pack_quantity : l.quantity) || 0;
       const r = Number(l.use_pack ? l.pack_rate : l.rate) || 0;
       return acc + q * r;
@@ -345,6 +400,12 @@ export function PurchaseModal({
     }
 
     if (targetIndex !== null && targetIndex >= 0 && targetIndex < nextLines.length) {
+      const existingLine = nextLines[targetIndex];
+      if (existingLine.quantity) newLine.quantity = existingLine.quantity;
+      if (existingLine.pack_quantity) newLine.pack_quantity = existingLine.pack_quantity;
+      if (existingLine.rate) newLine.rate = existingLine.rate;
+      if (existingLine.pack_rate) newLine.pack_rate = existingLine.pack_rate;
+      if (existingLine.line_total) newLine.line_total = existingLine.line_total;
       nextLines[targetIndex] = newLine;
     } else {
       nextLines.push(newLine);
@@ -663,6 +724,83 @@ export function PurchaseModal({
     setUnitSelectLineIndex(null);
   };
 
+  // Handlers for Dual Rate / Total-Amount Entry
+  const handleQuantityChange = (idx: number, val: string) => {
+    const next = [...lines];
+    const line = next[idx];
+    if (line.use_pack) {
+      line.pack_quantity = val;
+    } else {
+      line.quantity = val;
+    }
+
+    const q = parseFloat(val);
+    const tot = parseFloat(String(line.line_total));
+    const r = parseFloat(String(line.use_pack ? line.pack_rate : line.rate));
+
+    if (!isNaN(q) && q > 0) {
+      if (!isNaN(tot) && tot > 0) {
+        const derivedRate = String(parseFloat((tot / q).toFixed(4)));
+        if (line.use_pack) line.pack_rate = derivedRate;
+        else line.rate = derivedRate;
+      } else if (!isNaN(r) && r >= 0) {
+        line.line_total = parseFloat((q * r).toFixed(2));
+      }
+    } else {
+      if (!line.line_total) line.line_total = '';
+    }
+    setLines(next);
+  };
+
+  const handleRateChange = (idx: number, val: string) => {
+    const next = [...lines];
+    const line = next[idx];
+    if (line.use_pack) {
+      line.pack_rate = val;
+    } else {
+      line.rate = val;
+    }
+
+    const r = parseFloat(val);
+    const q = parseFloat(String(line.use_pack ? line.pack_quantity : line.quantity));
+    if (!isNaN(q) && q > 0 && !isNaN(r) && r >= 0) {
+      line.line_total = parseFloat((q * r).toFixed(2));
+    }
+    setLines(next);
+  };
+
+  const handleTotalChange = (idx: number, val: string) => {
+    const next = [...lines];
+    const line = next[idx];
+    line.line_total = val;
+
+    const tot = parseFloat(val);
+    const q = parseFloat(String(line.use_pack ? line.pack_quantity : line.quantity));
+    if (!isNaN(tot) && tot >= 0 && !isNaN(q) && q > 0) {
+      const derivedRate = String(parseFloat((tot / q).toFixed(4)));
+      if (line.use_pack) {
+        line.pack_rate = derivedRate;
+      } else {
+        line.rate = derivedRate;
+      }
+    }
+    setLines(next);
+  };
+
+  const handleOpenBrandSelector = (lineIdx: number) => {
+    const line = lines[lineIdx];
+    if (!line) return;
+    setActiveLineIndex(lineIdx);
+    const itm = items.find((i) => i.id === line.item_id);
+    const gId = itm?.group_id || line.item_id;
+    const grp = enrichedGroups.find((g) => g.id === gId) || {
+      id: gId,
+      name: line.group_name || line.item_name,
+      variants: items.filter((i) => (i.group_id && i.group_id === gId) || i.id === line.item_id),
+    };
+    setBrandSelectGroup(grp);
+  };
+
   // Handler: Post / Save Purchase
   const handleSubmitPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -704,6 +842,105 @@ export function PurchaseModal({
     setErrorMessage(null);
 
     try {
+      if (isEdit && invoiceToEdit) {
+        // 1. Check if any new custom packaging units need to be persisted
+        for (const line of lines) {
+          if (line.use_pack && line.is_custom_pack && !line.packaging_unit_id) {
+            const conv = Number(line.conversion_factor) || 1;
+            const brandSnapshot = line.brand_name?.trim() || null;
+            const packUnitSnapshot = line.pack_unit?.trim() || 'Pack';
+            if (brandSnapshot && packUnitSnapshot && conv > 0) {
+              try {
+                const pkgRes = await fetch('/api/inventory/packaging', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    inventory_item_id: line.item_id,
+                    brand_name: brandSnapshot,
+                    pack_unit_name: packUnitSnapshot,
+                    pack_size_in_base_units: conv,
+                    vendor_id: selectedVendorId || null,
+                    is_default: false,
+                  }),
+                });
+                if (pkgRes.ok) {
+                  const pkgJson = await pkgRes.json();
+                  if (pkgJson.packaging?.id) line.packaging_unit_id = pkgJson.packaging.id;
+                }
+              } catch (pErr) {
+                console.warn('Could not persist packaging definition:', pErr);
+              }
+            }
+          }
+        }
+
+        // 2. Format payload lines
+        const payloadLines = lines.map((line) => {
+          let baseQty: number;
+          let baseRate: number;
+          let packQty: number | null = null;
+          let packRate: number | null = null;
+          let convFactorSnapshot: number | null = null;
+          let packUnitSnapshot: string | null = null;
+
+          const q = Number(line.use_pack ? line.pack_quantity : line.quantity) || 0;
+          const r = Number(line.use_pack ? line.pack_rate : line.rate) || 0;
+          const lineTotal = line.line_total !== undefined && line.line_total !== null && line.line_total !== ''
+            ? Number(line.line_total)
+            : q * r;
+
+          if (line.use_pack) {
+            const conv = Number(line.conversion_factor) || 1;
+            packQty = q;
+            packRate = r;
+            baseQty = q * conv;
+            baseRate = baseQty > 0 ? lineTotal / baseQty : (conv > 0 ? r / conv : r);
+            convFactorSnapshot = conv;
+            packUnitSnapshot = line.pack_unit?.trim() || 'Pack';
+          } else {
+            baseQty = q;
+            baseRate = baseQty > 0 ? lineTotal / baseQty : r;
+          }
+
+          return {
+            line_id: line.line_id || undefined,
+            item_id: line.item_id,
+            quantity: baseQty,
+            rate: baseRate,
+            total_amount: lineTotal,
+            packaging_unit_id: line.packaging_unit_id || null,
+            brand_name_snapshot: line.brand_name?.trim() || null,
+            pack_unit_snapshot: packUnitSnapshot,
+            pack_quantity: packQty,
+            pack_rate: packRate,
+            conversion_factor_snapshot: convFactorSnapshot,
+          };
+        });
+
+        const res = await fetch('/api/finance/purchases/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            purchase_id: invoiceToEdit.id,
+            vendor_id: selectedVendorId,
+            purchase_date: purchaseDate,
+            invoice_number: invoiceNumber.trim() || undefined,
+            lines: payloadLines,
+            notes: notes.trim() || undefined,
+          }),
+        });
+
+        const resData = await res.json();
+        if (!res.ok) {
+          throw new Error(resData.error || 'Failed to update invoice');
+        }
+
+        onPurchaseSaved(invoiceToEdit.purchase_number);
+        onClose();
+        return;
+      }
+
+      // Add Mode
       const netTotal = invoiceTotal;
       const purchaseNumber = `PO-${Date.now().toString().slice(-6)}`;
 
@@ -735,12 +972,18 @@ export function PurchaseModal({
         let packRate: number | null = null;
         let convFactorSnapshot: number | null = null;
 
+        const q = Number(line.use_pack ? line.pack_quantity : line.quantity) || 0;
+        const r = Number(line.use_pack ? line.pack_rate : line.rate) || 0;
+        const lineTotal = line.line_total !== undefined && line.line_total !== null && line.line_total !== ''
+          ? Number(line.line_total)
+          : q * r;
+
         if (line.use_pack) {
           const conv = Number(line.conversion_factor) || 1;
-          packQty = Number(line.pack_quantity) || 0;
-          packRate = Number(line.pack_rate) || 0;
+          packQty = q;
+          packRate = r;
           baseQty = packQty * conv;
-          baseRate = conv > 0 ? packRate / conv : packRate;
+          baseRate = baseQty > 0 ? lineTotal / baseQty : (conv > 0 ? packRate / conv : packRate);
           pkgUnitId = line.packaging_unit_id || null;
           brandSnapshot = line.brand_name?.trim() || null;
           packUnitSnapshot = line.pack_unit?.trim() || 'Pack';
@@ -770,11 +1013,9 @@ export function PurchaseModal({
             }
           }
         } else {
-          baseQty = Number(line.quantity) || 0;
-          baseRate = Number(line.rate) || 0;
+          baseQty = q;
+          baseRate = baseQty > 0 ? lineTotal / baseQty : r;
         }
-
-        const lineTotal = line.use_pack ? (packQty || 0) * (packRate || 0) : baseQty * baseRate;
 
         // Insert Purchase Line
         const { error: lineErr } = await supabase.from('purchase_lines').insert({
@@ -856,7 +1097,9 @@ export function PurchaseModal({
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-bold text-stone-900">
-                {t('purchases.bills.newPurchaseInvoice')}
+                {isEdit
+                  ? t('purchases.bills.editTitle', { number: invoiceToEdit?.purchase_number })
+                  : t('purchases.bills.newPurchaseInvoice')}
               </h2>
             </div>
           </div>
@@ -910,31 +1153,33 @@ export function PurchaseModal({
               </select>
             </div>
 
-            <div>
-              <label className="block font-semibold text-stone-700 mb-1">
-                {t('purchases.bills.purchaseDate')} <span className="text-rose-500">*</span>
-              </label>
-              <DatePicker
-                required
-                value={purchaseDate}
-                onChange={(val) => setPurchaseDate(val)}
-                clearable={false}
-                className="w-full"
-                triggerClassName="w-full rounded-md border border-stone-300 p-0.5 text-stone-900 text-xs bg-white"
-              />
-            </div>
+            <div className="grid grid-cols-2 sm:col-span-2 gap-2.5">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  {t('purchases.bills.purchaseDate')} <span className="text-rose-500">*</span>
+                </label>
+                <DatePicker
+                  required
+                  value={purchaseDate}
+                  onChange={(val) => setPurchaseDate(val)}
+                  clearable={false}
+                  className="w-full"
+                  triggerClassName="w-full rounded-md border border-stone-300 p-0.5 text-stone-900 text-xs bg-white"
+                />
+              </div>
 
-            <div>
-              <label className="block font-semibold text-stone-700 mb-1">
-                {t('purchases.bills.invoiceNo')}
-              </label>
-              <input
-                type="text"
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                placeholder="e.g. 1042"
-                className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500 bg-white"
-              />
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  {t('purchases.bills.invoiceNo')}
+                </label>
+                <input
+                  type="text"
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="e.g. 1042"
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 text-xs focus:outline-none focus:border-amber-500 bg-white"
+                />
+              </div>
             </div>
           </div>
 
@@ -974,7 +1219,7 @@ export function PurchaseModal({
               </div>
             ) : (
               <>
-                {/* 1. Desktop 4-Column Table View (Screen >= 640px) */}
+                {/* 1. Desktop 5-Column Table View (Screen >= 640px) */}
                 <div className="hidden sm:block border border-stone-200 rounded-lg overflow-hidden bg-white">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold">
@@ -983,7 +1228,7 @@ export function PurchaseModal({
                         <th className="py-2.5 px-3 w-28">{t('purchases.bills.qty')}</th>
                         <th className="py-2.5 px-3 w-32">{t('purchases.bills.unit')}</th>
                         <th className="py-2.5 px-3 w-28">{t('purchases.bills.rate')}</th>
-                        <th className="py-2.5 px-3 w-28 text-right">{t('purchases.bills.amount')}</th>
+                        <th className="py-2.5 px-3 w-32">{t('purchases.bills.lineTotal')}</th>
                         <th className="py-2.5 px-2 w-10 text-center"></th>
                       </tr>
                     </thead>
@@ -991,37 +1236,42 @@ export function PurchaseModal({
                       {lines.map((line, idx) => {
                         const q = Number(line.use_pack ? line.pack_quantity : line.quantity) || 0;
                         const r = Number(line.use_pack ? line.pack_rate : line.rate) || 0;
-                        const lineTotalVal = q * r;
-
                         const conv = Number(line.conversion_factor) || 1;
                         const baseQty = line.use_pack ? q * conv : q;
-                        const baseRate = line.use_pack && conv > 0 ? r / conv : r;
+                        const lineTotal = line.line_total !== undefined && line.line_total !== null && line.line_total !== ''
+                          ? Number(line.line_total)
+                          : q * r;
+                        const baseRate = baseQty > 0 ? lineTotal / baseQty : (line.use_pack && conv > 0 ? r / conv : r);
 
                         return (
                           <tr key={idx} className="hover:bg-amber-50/20 transition-colors">
-                            {/* Particulars (Item & Brand) */}
+                            {/* Particulars (Item & Brand) with tappable brand chip */}
                             <td className="py-2 px-3 align-middle">
                               <div className="flex items-center gap-1.5 truncate">
                                 <span className="font-bold text-stone-900 truncate">
                                   {line.group_name || line.item_name}
                                 </span>
-                                {line.brand_name && (
-                                  <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold shrink-0">
-                                    {line.brand_name}
-                                  </span>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenBrandSelector(idx)}
+                                  className="px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-semibold shrink-0 flex items-center gap-1 transition-colors cursor-pointer border border-amber-300"
+                                  title={t('purchases.bills.selectBrand')}
+                                >
+                                  <span>{line.brand_name || 'Generic'}</span>
+                                  <ChevronDown className="h-2.5 w-2.5 text-amber-700" />
+                                </button>
                               </div>
                               {/* Subline helper */}
-                              {(line.use_pack || line.previous_rate) && (
+                              {((line.use_pack && q > 0) || line.previous_rate) && (
                                 <div className="text-[10px] text-stone-500 pt-0.5 flex items-center gap-2">
-                                  {line.use_pack && (
+                                  {line.use_pack && q > 0 && (
                                     <span className="font-mono text-amber-900">
                                       ↳ {q} {line.pack_unit} = <strong>{baseQty.toFixed(2)} {line.base_unit_symbol}</strong> @ {formatINR(baseRate)}/{line.base_unit_symbol}
                                     </span>
                                   )}
                                   {line.previous_rate && (
                                     <span className="text-stone-400">
-                                      Prev: {formatINR(line.previous_rate)} {line.previous_date ? `(${line.previous_date})` : ''}
+                                      Last: {formatINR(line.previous_rate)}/{line.use_pack ? line.pack_unit : line.base_unit_symbol} {line.previous_date ? `(${line.previous_date})` : ''}
                                     </span>
                                   )}
                                 </div>
@@ -1034,13 +1284,7 @@ export function PurchaseModal({
                                 type="text"
                                 inputMode="decimal"
                                 value={line.use_pack ? (line.pack_quantity ?? '') : (line.quantity ?? '')}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const next = [...lines];
-                                  if (line.use_pack) next[idx].pack_quantity = val;
-                                  else next[idx].quantity = val;
-                                  setLines(next);
-                                }}
+                                onChange={(e) => handleQuantityChange(idx, e.target.value)}
                                 placeholder={t('purchases.bills.enterQty')}
                                 className="w-full rounded border border-stone-300 p-1.5 text-stone-900 text-xs font-semibold focus:outline-none focus:border-amber-500 bg-white"
                               />
@@ -1064,21 +1308,22 @@ export function PurchaseModal({
                                 type="text"
                                 inputMode="decimal"
                                 value={line.use_pack ? (line.pack_rate ?? '') : (line.rate ?? '')}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  const next = [...lines];
-                                  if (line.use_pack) next[idx].pack_rate = val;
-                                  else next[idx].rate = val;
-                                  setLines(next);
-                                }}
+                                onChange={(e) => handleRateChange(idx, e.target.value)}
                                 placeholder={t('purchases.bills.enterRate')}
                                 className="w-full rounded border border-stone-300 p-1.5 text-stone-900 text-xs font-semibold focus:outline-none focus:border-amber-500 bg-white"
                               />
                             </td>
 
-                            {/* Line Amount */}
-                            <td className="py-2 px-3 align-middle text-right font-bold text-stone-900 text-sm whitespace-nowrap">
-                              {formatINR(lineTotalVal)}
+                            {/* Line Amount Input (Editable!) */}
+                            <td className="py-2 px-3 align-middle">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={line.line_total ?? ''}
+                                onChange={(e) => handleTotalChange(idx, e.target.value)}
+                                placeholder="0.00"
+                                className="w-full rounded border border-amber-300 bg-amber-50/30 p-1.5 text-stone-900 text-xs font-bold text-right focus:outline-none focus:border-amber-500"
+                              />
                             </td>
 
                             {/* Delete Action */}
@@ -1099,104 +1344,115 @@ export function PurchaseModal({
                   </table>
                 </div>
 
-                {/* 2. Mobile 2-Line Bill View (Screen < 640px) */}
+                {/* 2. Mobile 2x2 Grid View (Screen < 640px) */}
                 <div className="block sm:hidden divide-y divide-stone-200 border border-stone-200 rounded-lg bg-stone-50/40 overflow-hidden">
                   {lines.map((line, idx) => {
                     const q = Number(line.use_pack ? line.pack_quantity : line.quantity) || 0;
                     const r = Number(line.use_pack ? line.pack_rate : line.rate) || 0;
-                    const lineTotalVal = q * r;
-
                     const conv = Number(line.conversion_factor) || 1;
                     const baseQty = line.use_pack ? q * conv : q;
-                    const baseRate = line.use_pack && conv > 0 ? r / conv : r;
+                    const lineTotal = line.line_total !== undefined && line.line_total !== null && line.line_total !== ''
+                      ? Number(line.line_total)
+                      : q * r;
+                    const baseRate = baseQty > 0 ? lineTotal / baseQty : (line.use_pack && conv > 0 ? r / conv : r);
 
                     return (
-                      <div key={idx} className="p-2.5 space-y-1.5 bg-white">
-                        {/* Line 1: Item Name & Brand */}
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-bold text-stone-900 text-xs truncate">
-                            {line.group_name || line.item_name}
-                          </span>
-                          {line.brand_name && (
-                            <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold shrink-0">
-                              {line.brand_name}
+                      <div key={idx} className="p-3 space-y-2 bg-white">
+                        {/* Row 1: Item Name + Brand chip + Delete button */}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                            <span className="font-bold text-stone-900 text-xs truncate">
+                              {line.group_name || line.item_name}
                             </span>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenBrandSelector(idx)}
+                              className="px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-semibold shrink-0 flex items-center gap-1 transition-colors cursor-pointer border border-amber-300"
+                            >
+                              <span>{line.brand_name || 'Generic'}</span>
+                              <ChevronDown className="h-2.5 w-2.5 text-amber-700" />
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLines(lines.filter((_, i) => i !== idx))}
+                            className="text-stone-400 hover:text-rose-600 p-1 rounded transition-colors shrink-0"
+                            title={t('purchases.bills.delete')}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
 
-                        {/* Line 2: Quantity, Unit, Rate, Amount, Delete */}
-                        <div className="flex items-center justify-between gap-1">
-                          <div className="flex items-center gap-1">
+                        {/* Row 2: 2x2 grid (Qty + Unit; Rate + Total) */}
+                        <div className="grid grid-cols-2 gap-2 pt-0.5">
+                          <div>
+                            <label className="text-[10px] font-semibold text-stone-500 mb-0.5 block">
+                              {t('purchases.bills.qty')}
+                            </label>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={line.use_pack ? (line.pack_quantity ?? '') : (line.quantity ?? '')}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const next = [...lines];
-                                if (line.use_pack) next[idx].pack_quantity = val;
-                                else next[idx].quantity = val;
-                                setLines(next);
-                              }}
-                              placeholder={t('purchases.bills.enterQty')}
-                              className="w-16 rounded border border-stone-300 p-1 text-stone-900 text-xs font-semibold focus:outline-none focus:border-amber-500 bg-white"
+                              onChange={(e) => handleQuantityChange(idx, e.target.value)}
+                              placeholder="0"
+                              className="w-full rounded border border-stone-300 p-1.5 text-stone-900 text-xs font-semibold focus:outline-none focus:border-amber-500 bg-white"
                             />
+                          </div>
 
+                          <div>
+                            <label className="text-[10px] font-semibold text-stone-500 mb-0.5 block">
+                              {t('purchases.bills.unit')}
+                            </label>
                             <button
                               type="button"
                               onClick={() => setUnitSelectLineIndex(idx)}
-                              className="px-1.5 py-1 rounded border border-amber-300 bg-amber-50/70 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 flex items-center gap-0.5 shrink-0"
+                              className="w-full px-2 py-1.5 rounded border border-amber-300 bg-amber-50/70 text-amber-900 text-xs font-semibold hover:bg-amber-100 flex items-center justify-between transition-colors"
                             >
-                              <span className="max-w-[65px] truncate">{line.use_pack ? line.pack_unit : line.base_unit_symbol}</span>
-                              <ChevronDown className="h-3 w-3 text-amber-700 shrink-0" />
+                              <span className="truncate">{line.use_pack ? line.pack_unit : line.base_unit_symbol}</span>
+                              <ChevronDown className="h-3 w-3 text-amber-700 shrink-0 ml-1" />
                             </button>
+                          </div>
 
-                            <span className="text-stone-400 text-xs">@</span>
-
+                          <div>
+                            <label className="text-[10px] font-semibold text-stone-500 mb-0.5 block">
+                              {t('purchases.bills.rate')} (₹)
+                            </label>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={line.use_pack ? (line.pack_rate ?? '') : (line.rate ?? '')}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const next = [...lines];
-                                if (line.use_pack) next[idx].pack_rate = val;
-                                else next[idx].rate = val;
-                                setLines(next);
-                              }}
-                              placeholder={t('purchases.bills.enterRate')}
-                              className="w-16 rounded border border-stone-300 p-1 text-stone-900 text-xs font-semibold focus:outline-none focus:border-amber-500 bg-white"
+                              onChange={(e) => handleRateChange(idx, e.target.value)}
+                              placeholder="0.00"
+                              className="w-full rounded border border-stone-300 p-1.5 text-stone-900 text-xs font-semibold focus:outline-none focus:border-amber-500 bg-white"
                             />
                           </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="font-bold text-stone-900 text-xs">
-                              {formatINR(lineTotalVal)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                              className="text-stone-400 hover:text-rose-600 p-0.5 rounded transition-colors"
-                              title={t('purchases.bills.delete')}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                          <div>
+                            <label className="text-[10px] font-semibold text-stone-500 mb-0.5 block">
+                              {t('purchases.bills.amount')} (₹)
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={line.line_total ?? ''}
+                              onChange={(e) => handleTotalChange(idx, e.target.value)}
+                              placeholder="0.00"
+                              className="w-full rounded border border-amber-300 bg-amber-50/30 p-1.5 text-stone-900 text-xs font-bold text-right focus:outline-none focus:border-amber-500"
+                            />
                           </div>
                         </div>
 
-                        {/* Subline helper */}
-                        {(line.use_pack || line.previous_rate) && (
-                          <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5">
-                            {line.use_pack ? (
+                        {/* Row 3: Subline helper (hidden if qty <= 0 and no previous rate) */}
+                        {((line.use_pack && q > 0) || line.previous_rate) && (
+                          <div className="flex items-center justify-between text-[10px] text-stone-500 pt-1 border-t border-stone-100">
+                            {line.use_pack && q > 0 ? (
                               <span className="font-mono text-amber-900 truncate">
                                 ↳ {q} {line.pack_unit} = <strong>{baseQty.toFixed(2)} {line.base_unit_symbol}</strong> @ {formatINR(baseRate)}/{line.base_unit_symbol}
                               </span>
-                            ) : (
-                              <span></span>
-                            )}
+                            ) : <span />}
                             {line.previous_rate && (
-                              <span className="text-stone-400 shrink-0">
-                                Prev: {formatINR(line.previous_rate)}
+                              <span className="text-stone-400 shrink-0 ml-2">
+                                Last: {formatINR(line.previous_rate)}/{line.use_pack ? line.pack_unit : line.base_unit_symbol}
                               </span>
                             )}
                           </div>
@@ -1204,6 +1460,23 @@ export function PurchaseModal({
                       </div>
                     );
                   })}
+
+                  {/* Mobile + Add Item button below the items list */}
+                  <div className="p-2.5 bg-stone-50 border-t border-stone-200">
+                    <Button
+                      type="button"
+                      variant="amber"
+                      size="sm"
+                      onClick={() => {
+                        setActiveLineIndex(lines.length);
+                        setSearchQuery('');
+                        setShowItemSearch(true);
+                      }}
+                      className="w-full justify-center gap-1.5 text-xs font-bold py-2 shadow-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> {t('purchases.bills.addItem')}
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
@@ -1223,7 +1496,9 @@ export function PurchaseModal({
                 {t('purchases.bills.cancel')}
               </Button>
               <Button type="submit" variant="amber" size="sm" disabled={saving || lines.length === 0} className="font-bold">
-                {saving ? t('purchases.bills.saving') : t('purchases.bills.postPurchase')}
+                {saving
+                  ? (isEdit ? t('purchases.bills.updating') : t('purchases.bills.saving'))
+                  : (isEdit ? t('purchases.bills.updatePurchase') : t('purchases.bills.postPurchase'))}
               </Button>
             </div>
           </div>
@@ -1301,7 +1576,7 @@ export function PurchaseModal({
                         </div>
                       </div>
                       <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        {variantCount > 1 ? t('purchases.bills.selectBrand') : t('common.labels.select')}
+                        {variantCount > 1 ? t('purchases.bills.selectBrand') : t('purchases.bills.select')}
                       </span>
                     </button>
                   );
