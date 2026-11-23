@@ -83,6 +83,17 @@ export function canViewCosting(
 }
 
 /**
+ * Checks whether user has permission to approve purchase requisitions.
+ */
+export function canApprovePurchases(
+  userRole: string | null | undefined,
+  userPermissions?: string[] | null | undefined
+): boolean {
+  if (userRole === 'Admin' || userRole === 'Owner' || userRole === 'General Manager') return true;
+  return hasPermission(userRole, userPermissions, 'finance.purchases.approve');
+}
+
+/**
  * Checks whether user has permission to edit purchase invoices.
  */
 export function canEditPurchases(

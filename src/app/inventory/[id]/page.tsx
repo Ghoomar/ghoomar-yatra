@@ -121,8 +121,19 @@ export default function InventoryDetailPage({ params }: InventoryDetailPageProps
   const valuation = item.total_valuation != null ? Number(item.total_valuation) : null;
   const totalStock = Number(item.current_stock || 0);
 
+  const abcClass = item.abc_class || (
+    item.abc_risk === 'High Control' ? 'high_control' :
+    item.abc_risk === 'Frequent Monitoring' ? 'frequent_monitoring' :
+    'routine_monitoring'
+  );
+
+  const abcLabel =
+    abcClass === 'high_control' ? t('inventory.abc.highControl') :
+    abcClass === 'frequent_monitoring' ? t('inventory.abc.frequentMonitoring') :
+    t('inventory.abc.routineMonitoring');
+
   const riskBadgeVariant =
-    item.abc_risk === 'High Control' ? 'danger' : item.abc_risk === 'Frequent Monitoring' ? 'warning' : 'outline';
+    abcClass === 'high_control' ? 'danger' : abcClass === 'frequent_monitoring' ? 'warning' : 'outline';
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -161,7 +172,7 @@ export default function InventoryDetailPage({ params }: InventoryDetailPageProps
                   </span>
                 )}
                 <Badge variant={riskBadgeVariant} className="text-[10px]">
-                  {item.abc_risk || 'Routine Monitoring'}
+                  {abcLabel}
                 </Badge>
                 {/* Costing Status Badge */}
                 {isCosted ? (
@@ -252,6 +263,34 @@ export default function InventoryDetailPage({ params }: InventoryDetailPageProps
                     {formatINR(valuation || 0)}
                   </span>
                 )}
+              </div>
+            </div>
+
+            {/* Par Limits, Shelf Life & Count Verification */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/70">
+                <span className="text-[11px] text-stone-500 block mb-0.5">{t('inventory.stock.table.min')}</span>
+                <span className="text-sm font-mono font-bold text-stone-900">
+                  {formatNumber(Number(item.minimum_stock || 0))} <span className="text-xs font-normal text-stone-500">{unitSymbol}</span>
+                </span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/70">
+                <span className="text-[11px] text-stone-500 block mb-0.5">{t('inventory.abc.maxStock')}</span>
+                <span className="text-sm font-mono font-bold text-stone-900">
+                  {item.max_stock_level != null ? `${formatNumber(Number(item.max_stock_level))} ${unitSymbol}` : '—'}
+                </span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/70">
+                <span className="text-[11px] text-stone-500 block mb-0.5">{t('inventory.abc.shelfLife')}</span>
+                <span className="text-sm font-mono font-bold text-stone-900">
+                  {item.shelf_life_days != null ? `${item.shelf_life_days} ${locale === 'hi' ? 'दिन' : 'days'}` : '—'}
+                </span>
+              </div>
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200/70">
+                <span className="text-[11px] text-stone-500 block mb-0.5">{t('inventory.abc.lastCounted')}</span>
+                <span className="text-xs font-mono font-bold text-stone-900">
+                  {item.last_counted_at ? new Date(item.last_counted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                </span>
               </div>
             </div>
 

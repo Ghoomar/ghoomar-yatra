@@ -11,7 +11,10 @@ import { VendorModal } from '@/components/vendors/VendorModal';
 import { VendorCategoryModal } from '@/components/vendors/VendorCategoryModal';
 import { VendorsView } from '@/components/purchases/VendorsView';
 import { PurchaseInvoicesView, PurchaseInvoiceRecord } from '@/components/purchases/PurchaseInvoicesView';
-import { PurchaseModal } from '@/components/purchases/PurchaseModal';
+import { PurchaseModal, PurchaseLineForm } from '@/components/purchases/PurchaseModal';
+import { PurchaseRequestsView } from '@/components/purchases/PurchaseRequestsView';
+import { CreatePurchaseRequestModal } from '@/components/purchases/CreatePurchaseRequestModal';
+import { PolicySettingsModal } from '@/components/purchases/PolicySettingsModal';
 import { getSearchableItemText } from '@/lib/inventory/search';
 import {
   ShoppingBag,
@@ -25,6 +28,7 @@ import {
   Trash2,
   Tag,
   ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
@@ -37,6 +41,7 @@ function PurchasesContent() {
   const canEditInvoices = isAdmin || hasPermission('finance.purchases.edit');
   const canEditVendors = isAdmin || hasPermission('finance.vendors.edit');
   const canEditPayments = isAdmin || hasPermission('finance.payments.edit');
+  const canApprove = isAdmin || role === 'Owner' || role === 'General Manager' || hasPermission('finance.purchases.approve');
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -44,21 +49,23 @@ function PurchasesContent() {
   // Mobile KPI expansion toggle
   const [isMobileKpiExpanded, setIsMobileKpiExpanded] = useState(false);
 
-  // Active view tab state (synchronized with URL query param `?view=invoices` / `?view=vendors`)
+  // Active view tab state (synchronized with URL query param `?view=invoices` / `?view=vendors` / `?view=requests`)
   const urlView = searchParams.get('view');
-  const [activeView, setActiveView] = useState<'invoices' | 'vendors'>(
-    urlView === 'vendors' ? 'vendors' : 'invoices'
+  const [activeView, setActiveView] = useState<'invoices' | 'vendors' | 'requests'>(
+    urlView === 'vendors' ? 'vendors' : urlView === 'requests' ? 'requests' : 'invoices'
   );
 
   useEffect(() => {
     if (urlView === 'vendors') {
       setActiveView('vendors');
+    } else if (urlView === 'requests') {
+      setActiveView('requests');
     } else if (urlView === 'invoices') {
       setActiveView('invoices');
     }
   }, [urlView]);
 
-  const handleViewChange = (view: 'invoices' | 'vendors') => {
+  const handleViewChange = (view: 'invoices' | 'vendors' | 'requests') => {
     setActiveView(view);
     const params = new URLSearchParams(window.location.search);
     params.set('view', view);
@@ -118,6 +125,24 @@ function PurchasesContent() {
   const [deleteInvoiceModalOpen, setDeleteInvoiceModalOpen] = useState(false);
   const [deletingInvoice, setDeletingInvoice] = useState<PurchaseInvoiceRecord | null>(null);
   const [deleteInvoiceLoading, setDeleteInvoiceLoading] = useState(false);
+
+  // Purchase Requests & Approval State
+  const [purchaseRequests, setPurchaseRequests] = useState<any[]>([]);
+  const [policySettings, setPolicySettings] = useState<any | null>(null);
+  const [showCreateRequestModal, setShowCreateRequestModal] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [convertedVendorId, setConvertedVendorId] = useState<string | null>(null);
+  const [convertedLines, setConvertedLines] = useState<PurchaseLineForm[]>([]);
+
+  const pendingRequestsCount = useMemo(() => {
+    let count = 0;
+    (purchaseRequests || []).forEach((r: any) => {
+      (r.lines || []).forEach((l: any) => {
+        if (l.approval_status === 'pending_approval') count++;
+      });
+    });
+    return count;
+  }, [purchaseRequests]);
 
   // Fetch vendor price memory whenever selectedVendorId changes
   useEffect(() => {
@@ -262,6 +287,24 @@ function PurchasesContent() {
       setGroups(grpData || []);
       setCategories(catData || []);
       setUnits(unitData || []);
+
+      // Fetch purchase requests and approval settings
+      try {
+        const [reqRes, setRes] = await Promise.all([
+          fetch('/api/finance/purchase-requests'),
+          fetch('/api/finance/purchase-approval-settings'),
+        ]);
+        if (reqRes.ok) {
+          const reqJson = await reqRes.json();
+          setPurchaseRequests(reqJson.requests || []);
+        }
+        if (setRes.ok) {
+          const setJson = await setRes.json();
+          setPolicySettings(setJson.settings || null);
+        }
+      } catch (reqErr) {
+        console.warn('Could not load purchase requests:', reqErr);
+      }
 
       // Parse invoices
       const parsedInvoices: PurchaseInvoiceRecord[] = (pHeadersData || []).map((p: any) => {
@@ -455,6 +498,14 @@ function PurchasesContent() {
     } catch (err: any) {
       setMessage({ type: 'error', text: 'Failed to update status: ' + err.message });
     }
+  };
+
+  const handleConvertBasket = (vendorId: string | null, lines: PurchaseLineForm[]) => {
+    setConvertedVendorId(vendorId || '');
+    setConvertedLines(lines);
+    setSelectedVendorId(vendorId || '');
+    setEditingInvoice(null);
+    setShowPurchaseModal(true);
   };
 
   const handleInitiateDelete = async (vendorSummary: VendorOutstandingSummary) => {
@@ -822,6 +873,28 @@ function PurchasesContent() {
             {vendors.length}
           </span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => handleViewChange('requests')}
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-t-lg transition-all border-b-2 -mb-[5px] ${
+            activeView === 'requests'
+              ? 'border-amber-600 text-amber-900 bg-amber-50/60 shadow-xs'
+              : 'border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+          }`}
+        >
+          <Layers className="h-4 w-4" />
+          <span>{t('purchases.requests.tabTitle')}</span>
+          {pendingRequestsCount > 0 ? (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-bold animate-pulse">
+              {pendingRequestsCount}
+            </span>
+          ) : (
+            <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-stone-200/70 text-stone-700 font-normal">
+              {purchaseRequests.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Primary Views Content */}
@@ -850,7 +923,7 @@ function PurchasesContent() {
           }}
           onDeleteInvoice={handleInitiateDeleteInvoice}
         />
-      ) : (
+      ) : activeView === 'vendors' ? (
         <VendorsView
           vendors={vendors}
           vendorItems={vendorItems}
@@ -866,6 +939,20 @@ function PurchasesContent() {
           onEditVendor={handleOpenEditModal}
           onToggleStatus={handleToggleStatus}
           onInitiateDelete={handleInitiateDelete}
+        />
+      ) : (
+        <PurchaseRequestsView
+          requests={purchaseRequests}
+          vendors={vendors}
+          items={items}
+          groups={groups}
+          packagingUnits={packagingUnits}
+          canApprove={canApprove}
+          isAdmin={isAdmin}
+          onOpenCreateModal={() => setShowCreateRequestModal(true)}
+          onOpenPolicyModal={() => setShowPolicyModal(true)}
+          onConvertBasket={handleConvertBasket}
+          onRefresh={loadData}
         />
       )}
 
@@ -1039,9 +1126,13 @@ function PurchasesContent() {
       <PurchaseModal
         isOpen={showPurchaseModal}
         invoiceToEdit={editingInvoice}
+        initialVendorId={convertedVendorId}
+        initialLines={convertedLines}
         onClose={() => {
           setShowPurchaseModal(false);
           setEditingInvoice(null);
+          setConvertedVendorId(null);
+          setConvertedLines([]);
         }}
         vendors={vendors}
         items={items}
@@ -1299,6 +1390,32 @@ function PurchasesContent() {
           </div>
         </div>
       )}
+
+      {/* Create Purchase Request Modal */}
+      <CreatePurchaseRequestModal
+        isOpen={showCreateRequestModal}
+        onClose={() => setShowCreateRequestModal(false)}
+        items={items}
+        groups={groups}
+        packagingUnits={packagingUnits}
+        vendors={vendors}
+        aliases={aliases}
+        policySettings={policySettings}
+        onSubmitted={() => {
+          setMessage({
+            type: 'success',
+            text: 'Purchase requisition submitted successfully!',
+          });
+          loadData();
+        }}
+      />
+
+      {/* Policy Settings Modal */}
+      <PolicySettingsModal
+        isOpen={showPolicyModal}
+        onClose={() => setShowPolicyModal(false)}
+        onUpdated={loadData}
+      />
     </div>
   );
 }

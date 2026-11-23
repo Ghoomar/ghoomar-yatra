@@ -162,6 +162,7 @@ function InventoryContent() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>('ALL');
   const [loading, setLoading] = useState(true);
   const [filterClass, setFilterClass] = useState('ALL');
+  const [filterAbc, setFilterAbc] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [hideZeroStock, setHideZeroStock] = useState(false);
   const [search, setSearch] = useState('');
@@ -369,6 +370,7 @@ function InventoryContent() {
       })
       .filter((item) => {
         const matchesClass = filterClass === 'ALL' || item.inventory_class === filterClass;
+        const matchesAbc = filterAbc === 'ALL' || (item.abc_class || 'routine_monitoring') === filterAbc;
         const matchesStatus =
           statusFilter === 'ALL' ||
           (statusFilter === 'ACTIVE' && item.is_active !== false) ||
@@ -386,9 +388,9 @@ function InventoryContent() {
           if (hideZeroStock && locQty <= 0) return false;
         }
 
-        return matchesClass && matchesStatus && matchesSearch;
+        return matchesClass && matchesAbc && matchesStatus && matchesSearch;
       });
-  }, [consumableItems, filterClass, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup, itemAliasesMap]);
+  }, [consumableItems, filterClass, filterAbc, statusFilter, search, selectedLocationId, hideZeroStock, itemLocQtyLookup, itemAliasesMap]);
 
   const filteredMovements = useMemo(() => {
     return movements.filter((m) => {
@@ -722,9 +724,9 @@ function InventoryContent() {
               </div>
             </div>
 
-            {/* Bottom Row: Category Class Pills & Search Bar */}
+            {/* Bottom Row: Category Class Pills, ABC Pills & Search Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-stone-100">
-              <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+              <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 flex-wrap">
                 {['ALL', 'Food Raw Material', 'Non-Food Consumable'].map((cls) => (
                   <button
                     key={cls}
@@ -736,6 +738,27 @@ function InventoryContent() {
                     }`}
                   >
                     {cls === 'ALL' ? t('common.all') : t(`inventory.stock.classes.${cls}`, { defaultValue: cls })}
+                  </button>
+                ))}
+
+                <div className="h-5 w-px bg-stone-300 mx-1 shrink-0 hidden sm:block" />
+
+                {[
+                  { id: 'ALL', label: t('inventory.abc.filterAll') },
+                  { id: 'high_control', label: t('inventory.abc.filterHigh') },
+                  { id: 'frequent_monitoring', label: t('inventory.abc.filterFrequent') },
+                  { id: 'routine_monitoring', label: t('inventory.abc.filterRoutine') },
+                ].map((abc) => (
+                  <button
+                    key={abc.id}
+                    onClick={() => setFilterAbc(abc.id)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                      filterAbc === abc.id
+                        ? 'bg-stone-900 text-white shadow-xs'
+                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    {abc.label}
                   </button>
                 ))}
               </div>
@@ -790,7 +813,7 @@ function InventoryContent() {
                         {selectedLocationId === 'ALL' && (
                           <th className="py-2.5 px-3">{t('inventory.stock.table.locations')}</th>
                         )}
-                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.min')}</th>
+                        <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.minMax')}</th>
                         <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.wacCost')}</th>
                         <th className="py-2.5 px-3 text-right">{t('inventory.stock.table.valuation')}</th>
                         <th className="py-2.5 px-3 text-center">{t('inventory.stock.table.status')}</th>
@@ -824,12 +847,27 @@ function InventoryContent() {
                               </Link>
                             </td>
                             <td className="py-3 px-3">
-                              <Link
-                                href={`/inventory/${i.item_id}`}
-                                className="font-semibold text-stone-900 hover:text-amber-700 hover:underline cursor-pointer text-left block"
-                              >
-                                {getLocalizedMasterName(i, locale) || i.name}
-                              </Link>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <Link
+                                  href={`/inventory/${i.item_id}`}
+                                  className="font-semibold text-stone-900 hover:text-amber-700 hover:underline cursor-pointer text-left"
+                                >
+                                  {getLocalizedMasterName(i, locale) || i.name}
+                                </Link>
+                                {i.abc_class === 'high_control' ? (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                                    {t('inventory.abc.highControlShort')}
+                                  </span>
+                                ) : i.abc_class === 'frequent_monitoring' ? (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                    {t('inventory.abc.frequentShort')}
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 border border-stone-200">
+                                    {t('inventory.abc.routineShort')}
+                                  </span>
+                                )}
+                              </div>
                               {i.matched_alias && (
                                 <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mt-0.5 inline-block font-sans">
                                   {locale === 'hi' ? 'उर्फ़: ' : 'aka: '}{i.matched_alias}
@@ -862,8 +900,12 @@ function InventoryContent() {
                                 )}
                               </td>
                             )}
-                            <td className="py-3 px-3 text-right text-stone-500 font-mono">
-                              {Number(i.minimum_stock || 0).toFixed(1)}
+                            <td className="py-3 px-3 text-right text-stone-600 font-mono">
+                              <span>{Number(i.minimum_stock || 0).toFixed(1)}</span>
+                              <span className="text-stone-300 mx-1">/</span>
+                              <span className={i.max_stock_level != null ? 'font-semibold text-stone-900' : 'text-stone-400'}>
+                                {i.max_stock_level != null ? Number(i.max_stock_level).toFixed(1) : '—'}
+                              </span>
                             </td>
                             <td className="py-3 px-3 text-right text-stone-800 font-medium">
                               {!hasCostAccess ? (

@@ -25,6 +25,7 @@ import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/mas
 
 export interface PurchaseLineForm {
   line_id?: string | null;
+  source_request_line_id?: string | null;
   item_id: string;
   item_name?: string;
   brand_name?: string;
@@ -65,6 +66,8 @@ interface PurchaseModalProps {
   setSelectedVendorId: (id: string) => void;
   onNewItemCreated?: (newItem: any, newGroup?: any) => void;
   invoiceToEdit?: PurchaseInvoiceRecord | null;
+  initialVendorId?: string | null;
+  initialLines?: PurchaseLineForm[];
 }
 
 export function PurchaseModal({
@@ -87,6 +90,8 @@ export function PurchaseModal({
   setSelectedVendorId,
   onNewItemCreated,
   invoiceToEdit,
+  initialVendorId,
+  initialLines,
 }: PurchaseModalProps) {
   const { t, locale } = useI18n();
   const supabase = createClient();
@@ -148,10 +153,17 @@ export function PurchaseModal({
         setPurchaseDate(businessDate || getTodayBusinessDate());
         setInvoiceNumber('');
         setNotes('');
-        setLines([]);
+        if (initialVendorId) {
+          setSelectedVendorId(initialVendorId);
+        }
+        if (initialLines && initialLines.length > 0) {
+          setLines(initialLines);
+        } else {
+          setLines([]);
+        }
       }
     }
-  }, [isOpen, invoiceToEdit, businessDate]);
+  }, [isOpen, invoiceToEdit, businessDate, initialVendorId, initialLines]);
 
   // Item Search Submodal State
   const [showItemSearch, setShowItemSearch] = useState(false);
@@ -1064,6 +1076,55 @@ export function PurchaseModal({
           );
         } catch (memErr) {
           console.warn('Could not update vendor price memory:', memErr);
+        }
+      }
+
+      // Convert linked purchase request lines strictly for lines actually saved in this purchase
+      const savedRequestLineIds = lines
+        .map((l) => l.source_request_line_id)
+        .filter(Boolean) as string[];
+
+      if (savedRequestLineIds.length > 0) {
+        for (const reqLineId of savedRequestLineIds) {
+          await supabase
+            .from('purchase_request_lines')
+            .update({
+              approval_status: 'purchased',
+              converted_purchase_id: header.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', reqLineId)
+            .in('approval_status', ['auto_approved', 'approved']);
+        }
+
+        const { data: affectedLines } = await supabase
+          .from('purchase_request_lines')
+          .select('request_id')
+          .in('id', savedRequestLineIds);
+
+        const affectedRequestIds = Array.from(
+          new Set((affectedLines || []).map((al: any) => al.request_id).filter(Boolean))
+        );
+
+        for (const reqId of affectedRequestIds) {
+          const { data: allReqLines } = await supabase
+            .from('purchase_request_lines')
+            .select('id, approval_status')
+            .eq('request_id', reqId);
+
+          const allCompleted = (allReqLines || []).every((al: any) =>
+            ['purchased', 'rejected'].includes(al.approval_status)
+          );
+
+          if (allCompleted && (allReqLines || []).length > 0) {
+            await supabase
+              .from('purchase_requests')
+              .update({
+                status: 'completed',
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', reqId);
+          }
         }
       }
 

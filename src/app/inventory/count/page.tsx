@@ -36,6 +36,9 @@ interface CountItemRow {
   physical_qty: number;
   wac_cost: number;
   reason: string;
+  abc_class: string;
+  last_counted_at: string | null;
+  is_verified: boolean;
 }
 
 export default function StockCountPage() {
@@ -46,6 +49,7 @@ export default function StockCountPage() {
   const [locations, setLocations] = useState<any[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>('ALL');
   const [selectedClass, setSelectedClass] = useState<string>('CONSUMABLES');
+  const [selectedAbcFilter, setSelectedAbcFilter] = useState<'ALL' | 'high_control' | 'frequent_monitoring' | 'overdue'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [rows, setRows] = useState<CountItemRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,11 +124,36 @@ export default function StockCountPage() {
         physical_qty: expected, // defaults to expected
         wac_cost: Number(p.wac_cost) || 0,
         reason: '',
+        abc_class: p.abc_class || 'routine_monitoring',
+        last_counted_at: p.last_counted_at || null,
+        is_verified: false,
       };
     });
 
     setRows(newRows);
   }, [itemsMaster, selectedLocationId, locale]);
+
+  const isOverdue = (row: CountItemRow) => {
+    if (!row.last_counted_at) return true;
+    const diffDays = (Date.now() - new Date(row.last_counted_at).getTime()) / (1000 * 3600 * 24);
+    if (row.abc_class === 'high_control') return diffDays > 7;
+    if (row.abc_class === 'frequent_monitoring') return diffDays > 15;
+    return diffDays > 30;
+  };
+
+  const highControlStats = useMemo(() => {
+    const highRows = rows.filter(
+      (r) =>
+        r.abc_class === 'high_control' &&
+        (r.inventory_class === 'Food Raw Material' || r.inventory_class === 'Non-Food Consumable')
+    );
+    const dueCount = highRows.filter((r) => isOverdue(r)).length;
+    return {
+      total: highRows.length,
+      due: dueCount,
+      completed: highRows.length - dueCount,
+    };
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
@@ -135,6 +164,17 @@ export default function StockCountPage() {
       } else if (selectedClass !== 'All' && r.inventory_class !== selectedClass) {
         return false;
       }
+
+      if (selectedAbcFilter === 'high_control' && r.abc_class !== 'high_control') {
+        return false;
+      }
+      if (selectedAbcFilter === 'frequent_monitoring' && r.abc_class !== 'frequent_monitoring') {
+        return false;
+      }
+      if (selectedAbcFilter === 'overdue' && !isOverdue(r)) {
+        return false;
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const name = r.name.toLowerCase();
@@ -146,11 +186,17 @@ export default function StockCountPage() {
       }
       return true;
     });
-  }, [rows, selectedClass, searchQuery]);
+  }, [rows, selectedClass, selectedAbcFilter, searchQuery]);
 
   const handlePhysicalQtyChange = (itemId: string, val: number) => {
     setRows((prev) =>
-      prev.map((r) => (r.item_id === itemId ? { ...r, physical_qty: val } : r))
+      prev.map((r) => (r.item_id === itemId ? { ...r, physical_qty: val, is_verified: true } : r))
+    );
+  };
+
+  const handleToggleVerified = (itemId: string) => {
+    setRows((prev) =>
+      prev.map((r) => (r.item_id === itemId ? { ...r, is_verified: !r.is_verified } : r))
     );
   };
 
@@ -265,6 +311,21 @@ export default function StockCountPage() {
         }
       }
 
+      // 3. Update last_counted_at via RPC ONLY for explicitly verified or variance rows
+      const verifiedItemIds = filteredRows
+        .filter((r) => r.is_verified || calculatePhysicalCountVariance(r.expected_qty, r.physical_qty, r.wac_cost).varianceQuantity !== 0)
+        .map((r) => r.item_id);
+
+      if (verifiedItemIds.length > 0) {
+        const { error: rpcCountErr } = await supabase.rpc('record_inventory_count_verification', {
+          p_item_ids: verifiedItemIds,
+          p_counted_at: new Date().toISOString(),
+        });
+        if (rpcCountErr) {
+          console.error('Failed to update count verification timestamp:', rpcCountErr);
+        }
+      }
+
       await logAuditAction({
         action: 'CREATE',
         entity: 'Physical Count Verification',
@@ -330,6 +391,48 @@ export default function StockCountPage() {
           {message.text}
         </div>
       )}
+
+      {/* Compact Weekly Count Progress Banner */}
+      <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-lg bg-amber-100 text-amber-800">
+            <Scale className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="font-bold text-amber-950">
+              {t('inventory.count.weeklyProgress', {
+                due: highControlStats.due,
+                total: highControlStats.total,
+              })}
+            </div>
+            <div className="text-[11px] text-amber-700">
+              {highControlStats.completed} / {highControlStats.total} {locale === 'hi' ? 'साप्ताहिक गिनती पूर्ण' : 'counted within last 7 days'}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSelectedAbcFilter('high_control')}
+            className={`text-xs h-7 border-amber-300 ${selectedAbcFilter === 'high_control' ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-white text-amber-900 hover:bg-amber-100'}`}
+          >
+            {t('inventory.count.filterWeeklyHigh')}
+          </Button>
+          {highControlStats.due > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setSelectedAbcFilter('overdue')}
+              className={`text-xs h-7 border-rose-300 ${selectedAbcFilter === 'overdue' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-white text-rose-800 hover:bg-rose-50'}`}
+            >
+              {t('inventory.count.filterOverdue')} ({highControlStats.due})
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Variance Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -421,6 +524,30 @@ export default function StockCountPage() {
             className="w-full pl-8 pr-3 py-1.5 rounded-md border border-stone-300 text-stone-900 focus:outline-none"
           />
         </div>
+
+        {/* ABC Filter Pills */}
+        <div className="flex items-center gap-1.5 flex-wrap col-span-1 sm:col-span-3 pt-2 border-t border-stone-100">
+          <span className="text-stone-500 font-semibold mr-1">{t('inventory.abc.filterAll')}:</span>
+          {[
+            { id: 'ALL', label: t('inventory.count.filterAllAbc') },
+            { id: 'high_control', label: t('inventory.count.filterWeeklyHigh') },
+            { id: 'frequent_monitoring', label: t('inventory.count.filterFrequent15') },
+            { id: 'overdue', label: t('inventory.count.filterOverdue') },
+          ].map((abc) => (
+            <button
+              key={abc.id}
+              type="button"
+              onClick={() => setSelectedAbcFilter(abc.id as any)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                selectedAbcFilter === abc.id
+                  ? 'bg-stone-900 text-white shadow-xs'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}
+            >
+              {abc.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Verification Form Table */}
@@ -451,6 +578,7 @@ export default function StockCountPage() {
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-stone-200 text-stone-500 font-semibold bg-stone-50/50">
+                      <th className="py-2.5 px-3 text-center w-10">{t('inventory.count.verified')}</th>
                       <th className="py-2.5 px-3">{t('inventory.count.table.sku')}</th>
                       <th className="py-2.5 px-3">{t('inventory.count.table.item')}</th>
                       <th className="py-2.5 px-3">{t('inventory.count.table.class')}</th>
@@ -473,11 +601,41 @@ export default function StockCountPage() {
                             varianceQuantity !== 0 ? 'bg-amber-50/20' : ''
                           }`}
                         >
+                          <td className="py-2.5 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={row.is_verified}
+                              onChange={() => handleToggleVerified(row.item_id)}
+                              title={t('inventory.count.markVerified')}
+                              className="h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                            />
+                          </td>
                           <td className="py-2.5 px-3 font-mono text-amber-800 font-bold whitespace-nowrap">
                             {row.item_code || 'SKU'}
                           </td>
-                          <td className="py-2.5 px-3 font-semibold text-stone-900">
-                            {row.name}
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-stone-900">{row.name}</span>
+                              {row.abc_class === 'high_control' ? (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                                  {t('inventory.abc.highControlShort')}
+                                </span>
+                              ) : row.abc_class === 'frequent_monitoring' ? (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                  {t('inventory.abc.frequentShort')}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-[10px] text-stone-400 mt-0.5">
+                              {row.last_counted_at
+                                ? t('inventory.count.lastCountedDate', {
+                                    date: new Date(row.last_counted_at).toLocaleDateString('en-IN', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                    }),
+                                  })
+                                : t('inventory.count.neverCounted')}
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 text-stone-500">
                             <Badge variant="outline" className="text-[10px] py-0">
@@ -535,7 +693,7 @@ export default function StockCountPage() {
                     })}
                     {filteredRows.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="py-10 text-center text-stone-400">
+                        <td colSpan={9} className="py-10 text-center text-stone-400">
                           {t('inventory.count.noMatchingItems')}
                         </td>
                       </tr>

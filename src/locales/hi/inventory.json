@@ -79,6 +79,7 @@
       "valuation": "कीमत (₹)",
       "status": "स्टेटस",
       "min": "न्यूनतम",
+      "minMax": "न्यूनतम / अधिकतम",
       "actions": "एक्शन",
       "ledger": "लेजर",
       "movements": "हलचल",
@@ -218,7 +219,14 @@
     "conversionNotesPlaceholder": "वैकल्पिक रूपांतरण विवरण (उदा. प्रति ब्रेड पैकेट 15 स्लाइस)",
     "addConversion": "रूपांतरण जोड़ें",
     "confirmDeleteConversion": "क्या आप वाकई इस यूनिट रूपांतरण को हटाना चाहते हैं?",
-    "conversionInputsRequired": "कृपया एक मान्य गुणक और लक्ष्य इकाई प्रदान करें।"
+    "conversionInputsRequired": "कृपया एक मान्य गुणक और लक्ष्य इकाई प्रदान करें।",
+    "abcClassification": "एबीसी वर्गीकरण",
+    "maxStock": "अधिकतम पार स्टॉक स्तर",
+    "shelfLife": "शेल्फ लाइफ (दिन)",
+    "enterInKg": "किग्रा में दर्ज करें",
+    "enterInL": "लीटर में दर्ज करें",
+    "enterInBase": "मूल इकाई में दर्ज करें",
+    "liveConversion": "अनुमानित: {entered} = {converted}"
   },
   "categories": {
     "title": "इन्वेंटरी कैटेगरी",
@@ -413,7 +421,16 @@
       "variance": "अंतर",
       "value": "असर (₹)",
       "notes": "वजह / नोट्स"
-    }
+    },
+    "weeklyProgress": "{total} में से {due} उच्च नियंत्रण वस्तुएं साप्ताहिक गणना हेतु बकाया",
+    "filterAllAbc": "सभी वस्तुएं",
+    "filterWeeklyHigh": "उच्च नियंत्रण (साप्ताहिक)",
+    "filterFrequent15": "नियमित (15 दिन)",
+    "filterOverdue": "केवल बकाया",
+    "verified": "सत्यापित",
+    "markVerified": "भौतिक गणना पूर्ण होने पर टिक करें",
+    "lastCountedDate": "अंतिम गणना: {date}",
+    "neverCounted": "कभी नहीं गिना गया"
   },
   "assets": {
     "title": "एसेट्स और प्रॉपर्टी रजिस्टर",
@@ -728,5 +745,20 @@
     "cancel": "रद्द करें",
     "merging": "मर्ज हो रहा है...",
     "executeMergeBtn": "पुष्टि करें और मर्ज निष्पादित करें"
+  },
+  "abc": {
+    "highControl": "उच्च नियंत्रण (वर्ग A)",
+    "frequentMonitoring": "नियमित निगरानी (वर्ग B)",
+    "routineMonitoring": "सामान्य निगरानी (वर्ग C)",
+    "highControlShort": "उच्च नियंत्रण",
+    "frequentShort": "नियमित",
+    "routineShort": "सामान्य",
+    "filterAll": "सभी एबीसी",
+    "filterHigh": "उच्च नियंत्रण",
+    "filterFrequent": "नियमित निगरानी",
+    "filterRoutine": "सामान्य निगरानी",
+    "maxStock": "अधिकतम पार",
+    "shelfLife": "शेल्फ लाइफ",
+    "lastCounted": "अंतिम गणना"
   }
 }

@@ -79,6 +79,7 @@
       "valuation": "Value",
       "status": "Status",
       "min": "Min",
+      "minMax": "Min / Max",
       "actions": "Actions",
       "ledger": "Ledger",
       "movements": "Movements",
@@ -218,7 +219,14 @@
     "conversionNotesPlaceholder": "Optional conversion notes (e.g. 15 slices per bread loaf)",
     "addConversion": "Add Conversion",
     "confirmDeleteConversion": "Are you sure you want to delete this unit conversion?",
-    "conversionInputsRequired": "Please provide a valid multiplier and target unit."
+    "conversionInputsRequired": "Please provide a valid multiplier and target unit.",
+    "abcClassification": "ABC Classification",
+    "maxStock": "Max-Par Stock Level",
+    "shelfLife": "Shelf Life (Days)",
+    "enterInKg": "Enter in kg",
+    "enterInL": "Enter in L",
+    "enterInBase": "Enter in base unit",
+    "liveConversion": "Live: {entered} = {converted}"
   },
   "categories": {
     "title": "Inventory Categories",
@@ -413,7 +421,16 @@
       "variance": "Variance",
       "value": "Impact (₹)",
       "notes": "Reason / Note"
-    }
+    },
+    "weeklyProgress": "{due} of {total} High-Control items due for weekly count",
+    "filterAllAbc": "All Items",
+    "filterWeeklyHigh": "High Control (Weekly)",
+    "filterFrequent15": "Frequent (15d)",
+    "filterOverdue": "Overdue Only",
+    "verified": "Verified",
+    "markVerified": "Check when physically counted",
+    "lastCountedDate": "Last counted: {date}",
+    "neverCounted": "Never counted"
   },
   "assets": {
     "title": "Physical Assets & Equipment Register",
@@ -728,5 +745,20 @@
     "cancel": "Cancel",
     "merging": "Merging...",
     "executeMergeBtn": "Confirm & Execute Merge"
+  },
+  "abc": {
+    "highControl": "High Control (Class A)",
+    "frequentMonitoring": "Frequent Monitoring (Class B)",
+    "routineMonitoring": "Routine Monitoring (Class C)",
+    "highControlShort": "High Control",
+    "frequentShort": "Frequent",
+    "routineShort": "Routine",
+    "filterAll": "All ABC",
+    "filterHigh": "High Control",
+    "filterFrequent": "Frequent Monitoring",
+    "filterRoutine": "Routine Monitoring",
+    "maxStock": "Max-Par",
+    "shelfLife": "Shelf Life",
+    "lastCounted": "Last Counted"
   }
 }

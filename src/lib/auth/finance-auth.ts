@@ -6,6 +6,8 @@ import {
   canEditVendors,
   canEditPayments,
   canDeleteFinancials,
+  canApprovePurchases,
+  hasPermission,
 } from '@/lib/rbac';
 
 export interface FinanceCallerAuth {
@@ -17,6 +19,8 @@ export interface FinanceCallerAuth {
   canEditVendors: boolean;
   canEditPayments: boolean;
   canDelete: boolean;
+  canApprovePurchases: boolean;
+  canManagePurchases: boolean;
 }
 
 export async function resolveFinanceCallerAuth(
@@ -91,5 +95,9 @@ export async function resolveFinanceCallerAuth(
     canEditVendors: canEditVendors(roleName, permissionCodes),
     canEditPayments: canEditPayments(roleName, permissionCodes),
     canDelete: canDeleteFinancials(roleName),
+    canApprovePurchases: canApprovePurchases(roleName, permissionCodes),
+    canManagePurchases:
+      hasPermission(roleName, permissionCodes, 'finance.purchases') ||
+      ['Admin', 'Owner', 'General Manager', 'Accountant', 'Storekeeper'].includes(roleName || ''),
   };
 }

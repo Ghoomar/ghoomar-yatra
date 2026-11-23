@@ -10,6 +10,7 @@ import { X, Package, Check, AlertCircle, Tag, ArrowLeftRight, Trash2, Plus, Load
 
 import { logAuditAction } from '@/lib/audit-logger';
 import { BilingualNameInput } from '@/components/admin/BilingualNameInput';
+import { formatNumber } from '@/lib/utils';
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -58,6 +59,10 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
   const [storageType, setStorageType] = useState('Ambient');
   const [minimumStock, setMinimumStock] = useState<number>(0);
   const [preferredStock, setPreferredStock] = useState<number>(0);
+  const [abcClass, setAbcClass] = useState<string>('routine_monitoring');
+  const [maxStockLevel, setMaxStockLevel] = useState<string>('');
+  const [shelfLifeDays, setShelfLifeDays] = useState<string>('');
+  const [minMaxUnitMode, setMinMaxUnitMode] = useState<'base' | 'kilo_liter'>('base');
   const [replenishmentFrequency, setReplenishmentFrequency] = useState('As Required');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -297,6 +302,10 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setStorageType(item.storage_type || 'Ambient');
       setMinimumStock(Number(item.minimum_stock) || 0);
       setPreferredStock(Number(item.preferred_stock) || 0);
+      setAbcClass(item.abc_class || (item.abc_risk === 'High Control' ? 'high_control' : item.abc_risk === 'Frequent Monitoring' ? 'frequent_monitoring' : 'routine_monitoring'));
+      setMaxStockLevel(item.max_stock_level != null ? String(item.max_stock_level) : '');
+      setShelfLifeDays(item.shelf_life_days != null ? String(item.shelf_life_days) : '');
+      setMinMaxUnitMode('base');
       setReplenishmentFrequency(item.replenishment_frequency || 'As Required');
       setNotes(item.notes || '');
       setIsActive(item.is_active !== false);
@@ -312,6 +321,10 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
       setStorageType('Ambient');
       setMinimumStock(0);
       setPreferredStock(0);
+      setAbcClass('routine_monitoring');
+      setMaxStockLevel('');
+      setShelfLifeDays('');
+      setMinMaxUnitMode('base');
       setReplenishmentFrequency('As Required');
       setNotes('');
       setIsActive(true);
@@ -405,6 +418,20 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         }
       }
 
+      const riskLabel =
+        abcClass === 'high_control'
+          ? 'High Control'
+          : abcClass === 'frequent_monitoring'
+          ? 'Frequent Monitoring'
+          : 'Routine Monitoring';
+
+      let finalMinStock = Number(minimumStock) || 0;
+      let finalMaxStock = maxStockLevel && !isNaN(Number(maxStockLevel)) ? Number(maxStockLevel) : null;
+      if (minMaxUnitMode === 'kilo_liter') {
+        finalMinStock = finalMinStock * 1000;
+        if (finalMaxStock != null) finalMaxStock = finalMaxStock * 1000;
+      }
+
       const payload: any = {
         item_code: itemCode.trim() || null,
         name: name.trim(),
@@ -416,8 +443,12 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         secondary_unit_id: secondaryUnitId || null,
         conversion_factor: parsedFactor,
         storage_type: isFood ? storageType : 'Ambient',
-        minimum_stock: minimumStock,
+        minimum_stock: finalMinStock,
         preferred_stock: preferredStock,
+        max_stock_level: finalMaxStock,
+        shelf_life_days: shelfLifeDays && !isNaN(parseInt(shelfLifeDays, 10)) ? parseInt(shelfLifeDays, 10) : null,
+        abc_class: abcClass,
+        abc_risk: riskLabel,
         replenishment_frequency: replenishmentFrequency,
         notes: notes.trim() || null,
         is_active: isActive,
@@ -439,6 +470,13 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
         if (error) throw error;
         savedResult = data;
 
+        if (assignedGroupId) {
+          await supabase
+            .from('logical_ingredient_groups')
+            .update({ abc_risk: riskLabel })
+            .eq('id', assignedGroupId);
+        }
+
         await logAuditAction({
           action: 'UPDATE',
           entityType: 'inventory_items',
@@ -459,6 +497,13 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
           .single();
         if (error) throw error;
         savedResult = data;
+
+        if (assignedGroupId) {
+          await supabase
+            .from('logical_ingredient_groups')
+            .update({ abc_risk: riskLabel })
+            .eq('id', assignedGroupId);
+        }
 
         await logAuditAction({
           action: 'CREATE',
@@ -929,16 +974,111 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
               )}
 
               <div>
-                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.minStock')}</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  value={minimumStock || ''}
-                  onChange={(e) => setMinimumStock(parseFloat(e.target.value) || 0)}
-                  placeholder="0"
+                <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.abcClassification')}</label>
+                <select
+                  value={abcClass}
+                  onChange={(e) => setAbcClass(e.target.value)}
                   className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
-                />
+                >
+                  <option value="routine_monitoring">{t('inventory.abc.routineMonitoring')}</option>
+                  <option value="frequent_monitoring">{t('inventory.abc.frequentMonitoring')}</option>
+                  <option value="high_control">{t('inventory.abc.highControl')}</option>
+                </select>
               </div>
+
+              {(() => {
+                const selectedUnitObj = units.find((u) => u.id === unitId);
+                const isGramOrMl = selectedUnitObj?.symbol === 'g' || selectedUnitObj?.symbol === 'ml';
+                const unitSymbolDisplay = selectedUnitObj?.symbol || 'units';
+                const altUnit = unitSymbolDisplay === 'g' ? 'kg' : 'L';
+
+                return (
+                  <>
+                    {isGramOrMl && (
+                      <div className="col-span-full flex items-center gap-2 p-2 bg-amber-50/60 border border-amber-200/70 rounded-lg text-xs">
+                        <span className="text-stone-700 font-semibold">Par Unit:</span>
+                        <button
+                          type="button"
+                          onClick={() => setMinMaxUnitMode('base')}
+                          className={`px-2 py-0.5 rounded font-bold transition-all ${
+                            minMaxUnitMode === 'base'
+                              ? 'bg-amber-700 text-white shadow-2xs'
+                              : 'bg-white text-stone-700 border hover:bg-stone-50'
+                          }`}
+                        >
+                          {t('inventory.modal.enterInBase')} ({unitSymbolDisplay})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMinMaxUnitMode('kilo_liter')}
+                          className={`px-2 py-0.5 rounded font-bold transition-all ${
+                            minMaxUnitMode === 'kilo_liter'
+                              ? 'bg-amber-700 text-white shadow-2xs'
+                              : 'bg-white text-stone-700 border hover:bg-stone-50'
+                          }`}
+                        >
+                          {unitSymbolDisplay === 'g' ? t('inventory.modal.enterInKg') : t('inventory.modal.enterInL')}
+                        </button>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-medium text-stone-700">{t('inventory.modal.minStock')}</label>
+                        {isGramOrMl && minimumStock > 0 && (
+                          <span className="text-[10px] text-amber-800 font-mono font-medium">
+                            {minMaxUnitMode === 'kilo_liter'
+                              ? `(${formatNumber(minimumStock * 1000)} ${unitSymbolDisplay})`
+                              : `(${formatNumber(minimumStock / 1000)} ${altUnit})`}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={minimumStock || ''}
+                        onChange={(e) => setMinimumStock(parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-medium text-stone-700">{t('inventory.modal.maxStock')}</label>
+                        {isGramOrMl && maxStockLevel && Number(maxStockLevel) > 0 && (
+                          <span className="text-[10px] text-amber-800 font-mono font-medium">
+                            {minMaxUnitMode === 'kilo_liter'
+                              ? `(${formatNumber(Number(maxStockLevel) * 1000)} ${unitSymbolDisplay})`
+                              : `(${formatNumber(Number(maxStockLevel) / 1000)} ${altUnit})`}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={maxStockLevel}
+                        onChange={(e) => setMaxStockLevel(e.target.value)}
+                        placeholder="0"
+                        className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.shelfLife')}</label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={shelfLifeDays}
+                        onChange={(e) => setShelfLifeDays(e.target.value)}
+                        placeholder="e.g. 7"
+                        className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 font-mono"
+                      />
+                    </div>
+                  </>
+                );
+              })()}
 
               <div>
                 <label className="block font-medium text-stone-700 mb-1">{t('inventory.modal.preferredStock')}</label>
@@ -948,7 +1088,7 @@ export function ItemModal({ isOpen, onClose, item, onSaved }: ItemModalProps) {
                   value={preferredStock || ''}
                   onChange={(e) => setPreferredStock(parseFloat(e.target.value) || 0)}
                   placeholder="0"
-                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500"
+                  className="w-full rounded-md border border-stone-300 p-2 text-stone-900 focus:outline-none focus:border-amber-500 font-mono"
                 />
               </div>
             </div>
