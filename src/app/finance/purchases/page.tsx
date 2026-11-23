@@ -32,16 +32,17 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { useAppRole } from '@/components/layout/AppShell';
+import { canApprovePurchases } from '@/lib/rbac';
 import { getLocalizedMasterName, getLocalizedMasterSymbol } from '@/lib/i18n/master-data';
 
 function PurchasesContent() {
   const { t, locale } = useI18n();
-  const { role, hasPermission } = useAppRole();
+  const { role, permissions, hasPermission } = useAppRole();
   const isAdmin = role === 'Admin';
   const canEditInvoices = isAdmin || hasPermission('finance.purchases.edit');
   const canEditVendors = isAdmin || hasPermission('finance.vendors.edit');
   const canEditPayments = isAdmin || hasPermission('finance.payments.edit');
-  const canApprove = isAdmin || role === 'Owner' || role === 'General Manager' || hasPermission('finance.purchases.approve');
+  const canApprove = canApprovePurchases(role, permissions);
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -338,7 +338,7 @@ AS $$
     FROM public.profiles p
     JOIN public.roles r ON p.role_id = r.id
     WHERE p.id = auth.uid()
-      AND r.name IN ('Admin', 'Owner', 'General Manager')
+      AND r.name = 'Admin'
   );
 $$;
 
@@ -354,8 +354,20 @@ FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "purchase_approval_settings_update" ON public.purchase_approval_settings;
 CREATE POLICY "purchase_approval_settings_update" ON public.purchase_approval_settings
 FOR UPDATE TO authenticated
-USING (public.can_approve_purchases())
-WITH CHECK (public.can_approve_purchases());
+USING (
+  EXISTS (
+    SELECT 1 FROM public.profiles p
+    JOIN public.roles r ON p.role_id = r.id
+    WHERE p.id = auth.uid() AND r.name = 'Admin'
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.profiles p
+    JOIN public.roles r ON p.role_id = r.id
+    WHERE p.id = auth.uid() AND r.name = 'Admin'
+  )
+);
 
 -- RLS on purchase_requests
 ALTER TABLE public.purchase_requests ENABLE ROW LEVEL SECURITY;

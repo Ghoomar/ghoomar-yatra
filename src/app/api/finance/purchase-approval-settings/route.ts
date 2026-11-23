@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
     }
 
-    if (!auth.isAdmin && auth.roleName !== 'Owner') {
+    if (!auth.isAdmin) {
       return NextResponse.json(
         { error: 'Forbidden. Only administrators can update approval policy settings.' },
         { status: 403 }

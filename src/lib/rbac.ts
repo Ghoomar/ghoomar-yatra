@@ -89,7 +89,6 @@ export function canApprovePurchases(
   userRole: string | null | undefined,
   userPermissions?: string[] | null | undefined
 ): boolean {
-  if (userRole === 'Admin' || userRole === 'Owner' || userRole === 'General Manager') return true;
   return hasPermission(userRole, userPermissions, 'finance.purchases.approve');
 }
 
