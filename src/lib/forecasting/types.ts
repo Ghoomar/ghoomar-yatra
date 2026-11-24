@@ -119,7 +119,7 @@ export interface ModelStateRow {
   // Mixes
   category_volume_mix_json: Record<string, number>;
   category_revenue_mix_json: Record<string, number>;
-  dish_volume_mix_json: Record<string, { share: number; avg_price: number }>;
+  dish_volume_mix_json: Record<string, { share: number; avg_price: number; category?: string }>;
   sample_weeks_count: number;
   last_trained_date?: string | null;
   updated_at?: string;
@@ -170,6 +170,8 @@ export interface DayForecastResult {
   qty_applied_bias_pct: number;
   
   // Decomposition & Additive Group Demand
+  event_rev_multiplier_used: number;
+  event_qty_multiplier_used: number;
   additive_group_revenue: number;
   additive_group_units: number;
   implied_dish_net_revenue: number;

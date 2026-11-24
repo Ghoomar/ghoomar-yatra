@@ -154,15 +154,15 @@ export function ForecastHistoryView() {
   const getBillClassBadge = (bClass: string) => {
     switch (bClass) {
       case 'large_group':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">LARGE GROUP</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">{t('finance.sales.largeGroup') || 'LARGE GROUP'}</span>;
       case 'high_value_anomaly':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">HIGH VALUE</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">{t('finance.sales.highValue') || 'HIGH VALUE'}</span>;
       case 'data_anomaly':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">ANOMALY</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">{t('finance.sales.markAnomaly') || 'ANOMALY'}</span>;
       case 'cancelled':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-500 line-through">CANCELLED</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-500 line-through">{t('finance.sales.cancelled') || 'CANCELLED'}</span>;
       default:
-        return <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">NORMAL</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">{t('finance.sales.normal') || 'NORMAL'}</span>;
     }
   };
 
@@ -199,7 +199,7 @@ export function ForecastHistoryView() {
                   {t('finance.sales.walkForwardReplay') || '82-Day Walk-Forward Replay'}
                 </span>
                 <span className="text-xs text-stone-400">
-                  {summary.total_days} {t('finance.sales.gradedDates') || 'graded dates'} &middot; 8,864 bills
+                  {summary.total_days} {t('finance.sales.gradedDates') || 'graded dates'} &middot; 8,864 {t('finance.sales.bills') || 'bills'}
                 </span>
               </div>
               <h2 className="text-lg font-bold text-white mt-1">
@@ -279,12 +279,12 @@ export function ForecastHistoryView() {
                   <div className="flex items-center gap-1 mt-1">
                     {hasGroup && (
                       <span className={`px-1 py-0.2 rounded text-[9px] ${isSelected ? 'bg-amber-500/40 text-amber-100' : 'bg-amber-100 text-amber-800'}`}>
-                        Group
+                        {t('finance.sales.largeGroup') || 'Group'}
                       </span>
                     )}
                     {hasAnomaly && (
                       <span className={`px-1 py-0.2 rounded text-[9px] ${isSelected ? 'bg-purple-500/40 text-purple-100' : 'bg-purple-100 text-purple-800'}`}>
-                        Anomaly
+                        {t('finance.sales.highValue') || 'Anomaly'}
                       </span>
                     )}
                     <span className={`text-[10px] ml-auto ${isSelected ? 'text-amber-200' : 'text-stone-400'}`}>
@@ -302,7 +302,7 @@ export function ForecastHistoryView() {
           {loadingDay ? (
             <div className="py-20 flex flex-col items-center justify-center gap-2 text-stone-400">
               <RefreshCw className="h-5 w-5 animate-spin text-amber-600" />
-              <p className="text-xs">Loading day decomposition...</p>
+              <p className="text-xs">{t('finance.sales.loadingDayDecomposition') || 'Loading day decomposition...'}</p>
             </div>
           ) : daySnapshot ? (
             <>
@@ -356,13 +356,13 @@ export function ForecastHistoryView() {
                   <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
                     <span className="text-[10px] font-semibold text-stone-500 uppercase">{t('finance.sales.activities') || 'Outside Act.'}</span>
                     <p className="text-sm font-bold text-stone-800 mt-0.5">{formatCurrency(Number(daySnapshot.decomp_outside_activities_net || 0))}</p>
-                    <span className="text-[10px] text-stone-400">Village rides</span>
+                    <span className="text-[10px] text-stone-400">{t('finance.sales.villageRides') || 'Village rides'}</span>
                   </div>
 
                   <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200">
                     <span className="text-[10px] font-semibold text-emerald-800 uppercase">{t('finance.sales.complimentary') || 'Complimentary'}</span>
                     <p className="text-sm font-bold text-emerald-900 mt-0.5">{formatCurrency(Number(daySnapshot.decomp_complimentary_menu_value || 0))}</p>
-                    <span className="text-[10px] text-emerald-700 font-medium">₹0 realized (food retained)</span>
+                    <span className="text-[10px] text-emerald-700 font-medium">{t('finance.sales.zeroRealizedFoodRetained') || '₹0 realized (food retained)'}</span>
                   </div>
                 </div>
               </div>
@@ -373,7 +373,7 @@ export function ForecastHistoryView() {
                   <div className="flex items-center gap-2">
                     <Tag className="h-4 w-4 text-amber-600" />
                     <h4 className="text-xs font-bold text-stone-900">
-                      {t('finance.sales.classifiedBills') || 'Classified Transactions'} ({filteredBills.length} bills)
+                      {t('finance.sales.classifiedBills') || 'Classified Transactions'} ({filteredBills.length} {t('finance.sales.bills') || 'bills'})
                     </h4>
                   </div>
 
@@ -382,7 +382,7 @@ export function ForecastHistoryView() {
                       <Search className="h-3.5 w-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
-                        placeholder="Search invoice or name..."
+                        placeholder={t('finance.sales.searchInvoiceOrName') || 'Search invoice or name...'}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-8 pr-3 py-1 border border-stone-300 rounded-lg text-xs w-44"
@@ -394,12 +394,12 @@ export function ForecastHistoryView() {
                       onChange={(e) => setBillFilter(e.target.value as any)}
                       className="px-2.5 py-1 border border-stone-300 rounded-lg text-xs"
                     >
-                      <option value="all">All Classes</option>
-                      <option value="large_group">Large Groups</option>
-                      <option value="high_value_anomaly">High Value</option>
-                      <option value="data_anomaly">Anomalies</option>
-                      <option value="normal">Normal</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="all">{t('finance.sales.allClasses') || 'All Classes'}</option>
+                      <option value="large_group">{t('finance.sales.largeGroups') || 'Large Groups'}</option>
+                      <option value="high_value_anomaly">{t('finance.sales.highValue') || 'High Value'}</option>
+                      <option value="data_anomaly">{t('finance.sales.markAnomaly') || 'Anomalies'}</option>
+                      <option value="normal">{t('finance.sales.normal') || 'Normal'}</option>
+                      <option value="cancelled">{t('finance.sales.cancelled') || 'Cancelled'}</option>
                     </select>
                   </div>
                 </div>
@@ -408,14 +408,14 @@ export function ForecastHistoryView() {
                   <table className="w-full text-left text-xs">
                     <thead className="bg-stone-50 text-stone-500 border-b border-stone-200 font-medium sticky top-0 z-10">
                       <tr>
-                        <th className="py-2.5 px-3">Inv #</th>
-                        <th className="py-2.5 px-3">Customer / Phone</th>
-                        <th className="py-2.5 px-3 text-center">PAX</th>
-                        <th className="py-2.5 px-3 text-right">Net Sales</th>
-                        <th className="py-2.5 px-3 text-right">Spend/PAX</th>
-                        <th className="py-2.5 px-3">Class</th>
-                        <th className="py-2.5 px-3">Reason</th>
-                        <th className="py-2.5 px-3 text-center">Action</th>
+                        <th className="py-2.5 px-3">{t('finance.sales.invNumber') || 'Inv #'}</th>
+                        <th className="py-2.5 px-3">{t('finance.sales.customerPhone') || 'Customer / Phone'}</th>
+                        <th className="py-2.5 px-3 text-center">{t('finance.sales.pax') || 'PAX'}</th>
+                        <th className="py-2.5 px-3 text-right">{t('finance.sales.netSales') || 'Net Sales'}</th>
+                        <th className="py-2.5 px-3 text-right">{t('finance.sales.spendPerPax') || 'Spend/PAX'}</th>
+                        <th className="py-2.5 px-3">{t('finance.sales.class') || 'Class'}</th>
+                        <th className="py-2.5 px-3">{t('finance.sales.reason') || 'Reason'}</th>
+                        <th className="py-2.5 px-3 text-center">{t('finance.sales.action') || 'Action'}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100 text-stone-800">
@@ -426,7 +426,7 @@ export function ForecastHistoryView() {
                           </td>
                           <td className="py-2 px-3">
                             <div className="font-medium text-stone-900 truncate max-w-[130px]">
-                              {b.order?.customer_name || 'Walk-In Customer'}
+                              {b.order?.customer_name || t('finance.sales.walkInCustomer') || 'Walk-In Customer'}
                             </div>
                             {b.order?.customer_phone && (
                               <div className="text-[10px] text-stone-400 font-mono">
@@ -457,10 +457,10 @@ export function ForecastHistoryView() {
                                 onChange={(e) => handleReclassify(b.sales_order_id, e.target.value)}
                                 className="px-2 py-0.5 border border-stone-200 rounded text-[11px] bg-white hover:border-amber-400 font-medium cursor-pointer"
                               >
-                                <option value="normal">Mark Normal</option>
-                                <option value="large_group">Mark Group</option>
-                                <option value="high_value_anomaly">Mark High Value</option>
-                                <option value="data_anomaly">Mark Anomaly</option>
+                                <option value="normal">{t('finance.sales.markNormal') || 'Mark Normal'}</option>
+                                <option value="large_group">{t('finance.sales.markGroup') || 'Mark Group'}</option>
+                                <option value="high_value_anomaly">{t('finance.sales.markHighValue') || 'Mark High Value'}</option>
+                                <option value="data_anomaly">{t('finance.sales.markAnomaly') || 'Mark Anomaly'}</option>
                               </select>
                             )}
                           </td>
@@ -473,7 +473,7 @@ export function ForecastHistoryView() {
             </>
           ) : (
             <div className="p-8 text-center text-stone-400 text-xs">
-              Select a date on the left to view historical bill decomposition.
+              {t('finance.sales.selectDatePrompt') || 'Select a date on the left to view historical bill decomposition.'}
             </div>
           )}
         </div>

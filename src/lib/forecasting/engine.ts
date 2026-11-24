@@ -24,6 +24,97 @@ import {
 import { classifyBill, associateGroupClusters, RawOrderForClassification, EXCLUDED_NON_RESTAURANT_ITEMS } from './bill-classifier';
 
 /**
+ * Resolves menu item category based on canonical category or menu item patterns.
+ */
+export function resolveDishCategory(dishName: string, explicitCategory?: string): string {
+  if (explicitCategory && explicitCategory !== 'Uncategorized' && explicitCategory !== 'Main Course') {
+    return explicitCategory;
+  }
+  const n = (dishName || '').toLowerCase().trim();
+  if (
+    n.includes('tea') ||
+    n.includes('chai') ||
+    n.includes('coffee') ||
+    n.includes('shake') ||
+    n.includes('lassi') ||
+    n.includes('chaas') ||
+    n.includes('buttermilk') ||
+    n.includes('mojito') ||
+    n.includes('water') ||
+    n.includes('drink') ||
+    n.includes('beverage') ||
+    n.includes('lemonade') ||
+    n.includes('soda')
+  ) {
+    return 'Beverages';
+  }
+  if (n.includes('thali') || n.includes('dal baati') || n.includes('churma') || n.includes('gatta') || n.includes('rajasthani')) {
+    return 'Rajasthani';
+  }
+  if (
+    n.includes('parantha') ||
+    n.includes('paratha') ||
+    n.includes('poha') ||
+    n.includes('puri') ||
+    n.includes('poori') ||
+    n.includes('bhature') ||
+    n.includes('sandwich') ||
+    n.includes('toast') ||
+    n.includes('maggi') ||
+    n.includes('breakfast')
+  ) {
+    return 'All Day Breakfast';
+  }
+  if (n.includes('chaap') || n.includes('soya')) {
+    return 'Soya Specials';
+  }
+  if (n.includes('pizza') || n.includes('pasta') || n.includes('burger') || n.includes('garlic bread') || n.includes('italian')) {
+    return 'Italian';
+  }
+  if (
+    n.includes('noodle') ||
+    n.includes('manchurian') ||
+    n.includes('fried rice') ||
+    n.includes('chilli') ||
+    n.includes('spring roll') ||
+    n.includes('momo') ||
+    n.includes('soup') ||
+    n.includes('chinese')
+  ) {
+    return 'Chinese';
+  }
+  if (
+    n.includes('halwa') ||
+    n.includes('jamun') ||
+    n.includes('rasgulla') ||
+    n.includes('kheer') ||
+    n.includes('ice cream') ||
+    n.includes('dessert') ||
+    n.includes('mithai')
+  ) {
+    return 'Desserts';
+  }
+  if (
+    n.includes('paneer') ||
+    n.includes('dal') ||
+    n.includes('roti') ||
+    n.includes('naan') ||
+    n.includes('kulcha') ||
+    n.includes('sabzi') ||
+    n.includes('kofta') ||
+    n.includes('curry') ||
+    n.includes('rice') ||
+    n.includes('pulao') ||
+    n.includes('biryani') ||
+    n.includes('raita') ||
+    n.includes('papad')
+  ) {
+    return 'Indian';
+  }
+  return explicitCategory || 'Main Course';
+}
+
+/**
  * Generates next-day or future-day dual-track forecast.
  */
 export function generateDayForecast(
@@ -118,7 +209,7 @@ export function generateDayForecast(
 
     dishes.push({
       dish_name: dishName,
-      category: 'Main Course',
+      category: resolveDishCategory(dishName, meta.category),
       predicted_quantity: pQty,
       avg_price: round(avgPrice, 2),
       implied_net_sales: dishNet,
@@ -134,17 +225,38 @@ export function generateDayForecast(
 
   // Categories
   const categories: CategoryPredictionItem[] = [];
-  for (const [catName, volShare] of Object.entries(catMix)) {
-    const pUnits = round(predicted_total_units * volShare, 1);
-    const rShare = catRevMix[catName] || volShare;
-    const pRev = round(predicted_net_revenue * rShare, 2);
-    categories.push({
-      category: catName,
-      predicted_units: pUnits,
-      predicted_net_sales: pRev,
-      volume_share_pct: round(volShare * 100, 2),
-      revenue_share_pct: round(rShare * 100, 2),
-    });
+  const hasCatMix = Object.keys(catMix).length > 0;
+  if (hasCatMix) {
+    for (const [catName, volShare] of Object.entries(catMix)) {
+      const pUnits = round(predicted_total_units * volShare, 1);
+      const rShare = catRevMix[catName] || volShare;
+      const pRev = round(predicted_net_revenue * rShare, 2);
+      categories.push({
+        category: catName,
+        predicted_units: pUnits,
+        predicted_net_sales: pRev,
+        volume_share_pct: round(volShare * 100, 2),
+        revenue_share_pct: round(rShare * 100, 2),
+      });
+    }
+  } else {
+    // Dynamic derivation from predicted dishes
+    const catAgg = new Map<string, { units: number; net: number }>();
+    for (const d of dishes) {
+      const cur = catAgg.get(d.category) || { units: 0, net: 0 };
+      cur.units += d.predicted_quantity;
+      cur.net += d.implied_net_sales;
+      catAgg.set(d.category, cur);
+    }
+    for (const [catName, data] of catAgg.entries()) {
+      categories.push({
+        category: catName,
+        predicted_units: round(data.units, 1),
+        predicted_net_sales: round(data.net, 2),
+        volume_share_pct: predicted_total_units > 0 ? round((data.units / predicted_total_units) * 100, 2) : 0,
+        revenue_share_pct: predicted_net_revenue > 0 ? round((data.net / predicted_net_revenue) * 100, 2) : 0,
+      });
+    }
   }
   categories.sort((a, b) => b.predicted_net_sales - a.predicted_net_sales);
 
@@ -169,6 +281,8 @@ export function generateDayForecast(
     qty_confidence_tier: getConfidenceTier(modelState.qty_confidence_score),
     qty_alpha_used: modelState.qty_ewma_alpha,
     qty_applied_bias_pct: modelState.qty_applied_bias_pct,
+    event_rev_multiplier_used: revMultiplier,
+    event_qty_multiplier_used: qtyMultiplier,
     additive_group_revenue: additiveGroupRev,
     additive_group_units: additiveGroupUnits,
     implied_dish_net_revenue,
@@ -273,6 +387,7 @@ export function gradeDaySnapshot(
     // Collect dish and category units (complimentary dishes ARE preserved in volume!)
     if (raw?.items && raw.items.length > 0) {
       for (const it of raw.items) {
+        if (EXCLUDED_NON_RESTAURANT_ITEMS.has(it.item_name)) continue;
         const q = Number(it.quantity || 0);
         const ns = isComplimentary ? 0 : Number(it.net_sales || 0);
 
@@ -280,6 +395,12 @@ export function gradeDaySnapshot(
         curD.qty += q;
         curD.net += ns;
         actualDishesMap.set(it.item_name, curD);
+
+        const cat = resolveDishCategory(it.item_name);
+        const curC = actualCategoriesMap.get(cat) || { qty: 0, net: 0 };
+        curC.qty += q;
+        curC.net += ns;
+        actualCategoriesMap.set(cat, curC);
       }
     }
   }
@@ -333,6 +454,16 @@ export function gradeDaySnapshot(
   }));
   const dish_wape = computeDishWape(snapshot.dishes, actualDishesList);
 
+  // Categories list
+  const actualCategoriesList = Array.from(actualCategoriesMap.entries()).map(([name, c]) => ({
+    category: name,
+    quantity: round(c.qty, 1),
+    net_sales: round(c.net, 2),
+    volume_share_pct: actual_total_units > 0 ? round((c.qty / actual_total_units) * 100, 2) : 0,
+    revenue_share_pct: actual_net_revenue > 0 ? round((c.net / actual_net_revenue) * 100, 2) : 0,
+  }));
+  actualCategoriesList.sort((a, b) => b.net_sales - a.net_sales);
+
   // Signed Pax error
   const pax_signed_error = actual_pax - snapshot.predicted_pax;
 
@@ -378,8 +509,8 @@ export function gradeDaySnapshot(
 
     day_mode_at_prediction: snapshot.day_mode,
     event_type_id: snapshot.context?.event_type_id || null,
-    event_rev_multiplier_used: 1.0,
-    event_qty_multiplier_used: 1.0,
+    event_rev_multiplier_used: snapshot.event_rev_multiplier_used || 1.0,
+    event_qty_multiplier_used: snapshot.event_qty_multiplier_used || 1.0,
     expected_guests: snapshot.context?.expected_guests || 0,
     additive_group_revenue: snapshot.additive_group_revenue,
     additive_group_units: snapshot.additive_group_units,
@@ -399,7 +530,7 @@ export function gradeDaySnapshot(
 
     predicted_categories_json: snapshot.categories,
     predicted_dishes_json: snapshot.dishes.slice(0, 50),
-    actual_categories_json: null,
+    actual_categories_json: actualCategoriesList,
     actual_dishes_json: actualDishesList.slice(0, 50),
     learning_summary_json: {
       rev_tracking_signal: revUpdate.tracking_signal,
@@ -413,7 +544,21 @@ export function gradeDaySnapshot(
   };
 
   // 4. Update Model State for this day of week
-  // Update mix with EWMA (0.15 fresh / 0.85 persistent)
+  // Update category mixes with EWMA (0.15 fresh / 0.85 persistent)
+  const updatedCatVolMix = { ...(priorModelState.category_volume_mix_json || {}) };
+  const updatedCatRevMix = { ...(priorModelState.category_revenue_mix_json || {}) };
+  if (actual_total_units > 0 && actual_net_revenue > 0) {
+    for (const c of actualCategoriesList) {
+      const volShare = c.quantity / actual_total_units;
+      const revShare = c.net_sales / actual_net_revenue;
+      const priorVolShare = updatedCatVolMix[c.category] || 0;
+      const priorRevShare = updatedCatRevMix[c.category] || 0;
+      updatedCatVolMix[c.category] = round(0.15 * volShare + 0.85 * priorVolShare, 4);
+      updatedCatRevMix[c.category] = round(0.15 * revShare + 0.85 * priorRevShare, 4);
+    }
+  }
+
+  // Update dish mix with EWMA (0.15 fresh / 0.85 persistent)
   const updatedDishMix = { ...(priorModelState.dish_volume_mix_json || {}) };
   if (actual_total_units > 0) {
     for (const d of actualDishesList) {
@@ -425,6 +570,7 @@ export function gradeDaySnapshot(
       updatedDishMix[d.dish_name] = {
         share: round(newShare, 4),
         avg_price: round(avgPrice, 2),
+        category: resolveDishCategory(d.dish_name),
       };
     }
   }
@@ -456,6 +602,8 @@ export function gradeDaySnapshot(
     qty_error_std: qtyUpdate.error_std,
     qty_confidence_score: qtyUpdate.confidence_score,
 
+    category_volume_mix_json: updatedCatVolMix,
+    category_revenue_mix_json: updatedCatRevMix,
     dish_volume_mix_json: updatedDishMix,
     sample_weeks_count: (priorModelState.sample_weeks_count || 0) + 1,
     last_trained_date: snapshot.business_date,

@@ -439,5 +439,14 @@
     "maxPar": "Max-Par:",
     "abcClass": "Class:",
     "thirtyDayUsage": "30d Usage:"
-  }
+  },
+  "smartSuggestionsTitle": "Smart Reorder Suggestions",
+  "smartSuggestionsDesc": "{count} items below par level based on tomorrow's culinary dish forecasts.",
+  "buildRequestFromSuggestions": "Build Request from Suggestions (1-Tap)",
+  "creatingRequest": "Creating Request...",
+  "orderQtyLabel": "Order: {qty} {unit}",
+  "requestBuiltSuccess": "Successfully created purchase request from Smart Suggestions!",
+  "tomorrowForecastDemand": "Tomorrow Forecast Demand: {demand} {unit} · Suggested Order: {suggested} {unit}",
+  "useSuggested": "Use Suggested ({qty})",
+  "autoBuiltFromSuggestions": "Auto-built from Tomorrow Forecast Smart Suggestions"
 }

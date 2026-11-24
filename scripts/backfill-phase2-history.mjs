@@ -279,15 +279,16 @@ async function run() {
         decomp_outside_activities_net, decomp_normal_units, decomp_group_units,
         decomp_high_value_units, decomp_data_anomaly_units, decomp_complimentary_menu_value,
         daypart_breakdown_json, predicted_categories_json, predicted_dishes_json,
-        actual_dishes_json, learning_summary_json, graded_at
+        actual_categories_json, actual_dishes_json, learning_summary_json, graded_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38,
         $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56,
-        $57, now()
+        $57, $58, now()
       ) ON CONFLICT (business_date) DO UPDATE SET
         actual_net_revenue = EXCLUDED.actual_net_revenue,
         actual_total_units = EXCLUDED.actual_total_units,
+        actual_categories_json = EXCLUDED.actual_categories_json,
         graded_at = now();
     `, [
       graded.business_date, graded.day_of_week, 'backfill_replay',
@@ -306,8 +307,8 @@ async function run() {
       graded.decomp_outside_activities_net, graded.decomp_normal_units, graded.decomp_group_units,
       graded.decomp_high_value_units, graded.decomp_data_anomaly_units, graded.decomp_complimentary_menu_value,
       JSON.stringify(graded.daypart_breakdown_json), JSON.stringify(graded.predicted_categories_json),
-      JSON.stringify(graded.predicted_dishes_json), JSON.stringify(graded.actual_dishes_json),
-      JSON.stringify(graded.learning_summary_json),
+      JSON.stringify(graded.predicted_dishes_json), JSON.stringify(graded.actual_categories_json),
+      JSON.stringify(graded.actual_dishes_json), JSON.stringify(graded.learning_summary_json),
     ]);
 
     // Update in-memory state
@@ -331,9 +332,10 @@ async function run() {
         qty_ewma_alpha = $15, qty_smoothed_signed_error = $16, qty_smoothed_abs_error = $17,
         qty_tracking_signal = $18, qty_signed_bias_pct = $19, qty_applied_bias_pct = $20,
         qty_recent_wape = $21, qty_error_std = $22, qty_confidence_score = $23,
-        dish_volume_mix_json = $24, sample_weeks_count = $25, last_trained_date = $26,
+        category_volume_mix_json = $24, category_revenue_mix_json = $25,
+        dish_volume_mix_json = $26, sample_weeks_count = $27, last_trained_date = $28,
         updated_at = now()
-      WHERE day_of_week = $27;
+      WHERE day_of_week = $29;
     `, [
       s.rev_baseline_net, s.rev_baseline_gross, s.rev_ewma_alpha,
       s.rev_smoothed_signed_error, s.rev_smoothed_abs_error, s.rev_tracking_signal,
@@ -343,7 +345,8 @@ async function run() {
       s.qty_ewma_alpha, s.qty_smoothed_signed_error, s.qty_smoothed_abs_error,
       s.qty_tracking_signal, s.qty_signed_bias_pct, s.qty_applied_bias_pct,
       s.qty_recent_wape, s.qty_error_std, s.qty_confidence_score,
-      JSON.stringify(s.dish_volume_mix_json), s.sample_weeks_count, s.last_trained_date,
+      JSON.stringify(s.category_volume_mix_json || {}), JSON.stringify(s.category_revenue_mix_json || {}),
+      JSON.stringify(s.dish_volume_mix_json || {}), s.sample_weeks_count, s.last_trained_date,
       dow,
     ]);
   }

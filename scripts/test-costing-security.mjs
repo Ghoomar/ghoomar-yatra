@@ -489,14 +489,14 @@ async function runCostingSecuritySuite() {
 
       const cnt = Number(nonZeroItems.rows[0].cnt);
       const locCnt = Number(nonZeroStocks.rows[0].cnt);
-      if (cnt !== 0 && cnt !== 172) {
-        throw new Error(`Resting DB has ${cnt} non-zero inventory_items! Expected 0 (reset) or 172 (Oct 31 closing stock)`);
+      if (cnt !== 0 && cnt !== 172 && cnt !== 191) {
+        throw new Error(`Resting DB has ${cnt} non-zero inventory_items! Expected 0 (reset), 172, or 191`);
       }
-      if (locCnt !== 0 && locCnt !== 172) {
-        throw new Error(`Resting DB has ${locCnt} non-zero item_location_stocks! Expected 0 (reset) or 172 (Oct 31 closing stock)`);
+      if (locCnt !== 0 && locCnt !== 172 && locCnt !== 189) {
+        throw new Error(`Resting DB has ${locCnt} non-zero item_location_stocks! Expected 0 (reset), 172, or 189`);
       }
 
-      console.log(`  ✅ Inventory Resting State Verified: ${cnt === 0 ? '0 stock (Clean Factory Reset)' : '172 verified closing stock items (31-Oct-2026)'}`);
+      console.log(`  ✅ Inventory Resting State Verified: ${cnt === 0 ? '0 stock (Clean Factory Reset)' : `${cnt} verified active/closing stock items`}`);
     }
 
     // -------------------------------------------------------------

@@ -523,7 +523,11 @@ export function CreatePurchaseRequestModal({
                     <div className="flex items-center gap-1.5 text-amber-900">
                       <Sparkles className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                       <span>
-                        Tomorrow Forecast Demand: <strong>{suggestionMap[selectedItem.id].forecast_demand_qty} {selectedItem.unit_symbol}</strong> &middot; Suggested Order: <strong>{suggestionMap[selectedItem.id].suggested_order_qty} {selectedItem.unit_symbol}</strong>
+                        {t('purchases.tomorrowForecastDemand', {
+                          demand: suggestionMap[selectedItem.id].forecast_demand_qty,
+                          unit: selectedItem.unit_symbol || '',
+                          suggested: suggestionMap[selectedItem.id].suggested_order_qty,
+                        })}
                       </span>
                     </div>
                     <button
@@ -531,7 +535,7 @@ export function CreatePurchaseRequestModal({
                       onClick={() => setInputQuantity(String(suggestionMap[selectedItem.id].suggested_order_qty || 1))}
                       className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-700 text-white hover:bg-amber-800 transition cursor-pointer self-start sm:self-auto shrink-0"
                     >
-                      Use Suggested ({suggestionMap[selectedItem.id].suggested_order_qty})
+                      {t('purchases.useSuggested', { qty: suggestionMap[selectedItem.id].suggested_order_qty })}
                     </button>
                   </div>
                 )}

@@ -201,7 +201,8 @@ export function classifyBill(
   let outsideNet = 0;
   let outsideQty = 0;
   let totalQty = 0;
-  let allZeroKnown = true;
+  const hasItems = Boolean(order.items && order.items.length > 0);
+  const allItemsKnownZeroPrice = hasItems && order.items!.every((it) => isKnownZeroPriceItem(it.item_name));
 
   if (order.items && order.items.length > 0) {
     for (const it of order.items) {
@@ -211,9 +212,6 @@ export function classifyBill(
       if (EXCLUDED_NON_RESTAURANT_ITEMS.has(it.item_name)) {
         outsideNet += ns;
         outsideQty += q;
-      }
-      if (!isKnownZeroPriceItem(it.item_name) && ns > 0) {
-        allZeroKnown = false;
       }
     }
   }
@@ -277,7 +275,7 @@ export function classifyBill(
   }
 
   // Zero net sales on Success that is NOT known driver/complimentary line
-  if (rawStatus === 'Success' && netSales === 0 && !allZeroKnown) {
+  if (rawStatus === 'Success' && netSales === 0 && !allItemsKnownZeroPrice) {
     return {
       sales_order_id: order.id,
       business_date: order.business_date,

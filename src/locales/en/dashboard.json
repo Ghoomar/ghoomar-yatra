@@ -123,6 +123,10 @@
     "loading": "Loading sales outlook...",
     "predictedNet": "Predicted Net Sales",
     "predictedUnits": "Predicted Plates & Volume",
-    "viewRibbon": "View 7-Day Forecast"
+    "viewRibbon": "View 7-Day Forecast",
+    "rangeLabel": "Range: {low} – {high}",
+    "coversAndBills": "~{covers} covers · ~{bills} bills",
+    "eventOrGroupMultipliers": "✨ Event or Group Multipliers Applied",
+    "standardWeeklyPace": "Standard weekly pace model"
   }
 }

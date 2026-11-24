@@ -111,7 +111,7 @@ export function PurchaseRequestsView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           target_purchase_date: new Date().toISOString().slice(0, 10),
-          notes: 'Auto-built from Tomorrow Forecast Smart Suggestions',
+          notes: t('purchases.autoBuiltFromSuggestions') || 'Auto-built from Tomorrow Forecast Smart Suggestions',
           lines,
         }),
       });
@@ -119,7 +119,7 @@ export function PurchaseRequestsView({
       const data = await res.json();
       if (data.success) {
         onRefresh();
-        alert('Successfully created purchase request from Smart Suggestions!');
+        alert(t('purchases.requestBuiltSuccess') || 'Successfully created purchase request from Smart Suggestions!');
       } else {
         alert(data.error || 'Failed to create request');
       }
@@ -340,13 +340,13 @@ export function PurchaseRequestsView({
               </div>
               <div>
                 <h3 className="text-xs font-bold text-stone-900 flex items-center gap-2">
-                  <span>Smart Reorder Suggestions</span>
+                  <span>{t('purchases.smartSuggestionsTitle') || 'Smart Reorder Suggestions'}</span>
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
                     {forecastConfidence}% Volume Confidence
                   </span>
                 </h3>
                 <p className="text-[11px] text-stone-500">
-                  {forecastSuggestions.length} items below par level based on tomorrow&apos;s culinary dish forecasts.
+                  {t('purchases.smartSuggestionsDesc', { count: forecastSuggestions.length })}
                 </p>
               </div>
             </div>
@@ -358,7 +358,7 @@ export function PurchaseRequestsView({
               className="gap-1.5 text-xs bg-amber-700 hover:bg-amber-800 text-white shadow-2xs self-start sm:self-auto"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span>{buildingRequest ? 'Creating Request...' : 'Build Request from Suggestions (1-Tap)'}</span>
+              <span>{buildingRequest ? (t('purchases.creatingRequest') || 'Creating Request...') : (t('purchases.buildRequestFromSuggestions') || 'Build Request from Suggestions (1-Tap)')}</span>
             </Button>
           </div>
 
@@ -379,7 +379,7 @@ export function PurchaseRequestsView({
 
                 <div className="mt-2 pt-2 border-t border-stone-100 flex items-center justify-between">
                   <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
-                    Order: {s.suggested_order_qty} {s.unit_symbol}
+                    {t('purchases.orderQtyLabel', { qty: s.suggested_order_qty, unit: s.unit_symbol })}
                   </span>
                   {s.line_cost != null && (
                     <span className="text-[11px] font-bold text-stone-700">

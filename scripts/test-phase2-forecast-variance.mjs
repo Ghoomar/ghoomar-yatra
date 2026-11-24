@@ -179,10 +179,10 @@ async function runTests() {
       SELECT item_name, COUNT(*) as cnt, SUM(quantity) as qty
       FROM sales_order_items
       WHERE item_name IN (
-        'Camel Ride', 'Horse Ride', 'Trampoline', 'Kids Game Zone',
-        'Bull Ride', 'Bungee Jumping', 'Pottery Making', 'Carnival Games',
-        'Boating', 'Zip Line', 'Archery', 'Gun Shooting',
-        'Darts', 'Mini Train', 'Toy Train', 'Special Entry Ticket'
+        'Camel Ride', 'Camel Adult', 'Camel Child', 'Skill Games', 'Meetha Paan',
+        'Jyotish Ticket', 'Barf Kar Gola', 'Champi Maalish', 'Mehendi', 'Couple Pass',
+        'Male Pass', 'Female Pass', 'Early Bird Couple Pass', 'Student Couple Pass',
+        'Dandiya Sticks', 'Tip'
       )
       GROUP BY item_name
     `);
@@ -333,6 +333,104 @@ async function runTests() {
       parseInt(syntheticCheck[0].count, 10) === 0,
       'No orphaned synthetic test records present in sales_orders'
     );
+
+    // ----------------------------------------------------
+    // TEST 10: Zero-Price Bill Classification Anomaly Unit Test
+    // ----------------------------------------------------
+    console.log('\nTest 10: Zero-Price Bill Classification Anomaly Unit Test');
+    const { classifyBill } = await import('../src/lib/forecasting/bill-classifier.ts');
+
+    // Case A: Success order with net_sales = 0 and unexpected item (e.g. Butter Naan) -> MUST be data_anomaly
+    const unexplainedZeroOrder = {
+      id: 'test-zero-unexplained',
+      business_date: '2026-11-20',
+      status: 'Success',
+      order_type: 'Dine In',
+      area: 'Restaurant',
+      covers_pax: 2,
+      gross_sales: 0,
+      total_discount: 0,
+      net_sales: 0,
+      items: [{ item_name: 'Butter Naan', quantity: 2, rate: 0, net_sales: 0 }]
+    };
+    const unexplainedClass = classifyBill(unexplainedZeroOrder, { p80_spend_per_pax: 300, pax_anomaly_threshold: 800, large_group_pax_threshold: 15, bill_net_sales_anomaly_threshold: 10000 });
+    assert(
+      unexplainedClass.bill_class === 'data_anomaly',
+      `Unexplained zero-net Success order classified as data_anomaly (actual: ${unexplainedClass.bill_class})`
+    );
+
+    // Case B: Success order with net_sales = 0 and known complimentary item (Driver Mitra Thali) -> MUST be normal
+    const driverMitraOrder = {
+      id: 'test-driver-mitra',
+      business_date: '2026-11-20',
+      status: 'Success',
+      order_type: 'Dine In',
+      area: 'Restaurant',
+      covers_pax: 1,
+      gross_sales: 0,
+      total_discount: 0,
+      net_sales: 0,
+      items: [{ item_name: 'Driver Mitra Thali', quantity: 1, rate: 0, net_sales: 0 }]
+    };
+    const driverClass = classifyBill(driverMitraOrder, { p80_spend_per_pax: 300, pax_anomaly_threshold: 800, large_group_pax_threshold: 15, bill_net_sales_anomaly_threshold: 10000 });
+    assert(
+      driverClass.bill_class === 'normal',
+      `Known complimentary zero-net order classified as normal (actual: ${driverClass.bill_class})`
+    );
+
+    // ----------------------------------------------------
+    // TEST 11: Dynamic Category Derivation & Mix Learning
+    // ----------------------------------------------------
+    console.log('\nTest 11: Category Mix Learning & Dynamic Category Derivation');
+    const { rows: modelStates } = await client.query(
+      `SELECT day_of_week, category_volume_mix_json, category_revenue_mix_json 
+       FROM sales_forecast_model_state`
+    );
+    assert(modelStates.length === 7, `All 7 days of week model states present (actual: ${modelStates.length})`);
+    
+    let hasNonEmptyCatVol = false;
+    let hasNonEmptyCatRev = false;
+    for (const ms of modelStates) {
+      const volKeys = Object.keys(ms.category_volume_mix_json || {});
+      const revKeys = Object.keys(ms.category_revenue_mix_json || {});
+      if (volKeys.length > 0) hasNonEmptyCatVol = true;
+      if (revKeys.length > 0) hasNonEmptyCatRev = true;
+    }
+    assert(hasNonEmptyCatVol, 'category_volume_mix_json populated across model states');
+    assert(hasNonEmptyCatRev, 'category_revenue_mix_json populated across model states');
+
+    const { rows: snapCats } = await client.query(
+      `SELECT COUNT(*) as count 
+       FROM sales_forecast_snapshots 
+       WHERE actual_categories_json IS NOT NULL AND jsonb_array_length(actual_categories_json) > 0`
+    );
+    const snapCatCount = parseInt(snapCats[0].count, 10);
+    assert(snapCatCount >= 80, `At least 80 snapshots have non-empty actual_categories_json (actual: ${snapCatCount})`);
+
+    // ----------------------------------------------------
+    // TEST 12: Event Multipliers Verification
+    // ----------------------------------------------------
+    console.log('\nTest 12: Snapshot Multipliers Verification');
+    const { rows: multiplierRows } = await client.query(
+      `SELECT business_date, event_rev_multiplier_used, event_qty_multiplier_used
+       FROM sales_forecast_snapshots
+       WHERE event_rev_multiplier_used IS NOT NULL AND event_qty_multiplier_used IS NOT NULL`
+    );
+    assert(multiplierRows.length === 82, `All 82 snapshots have valid event_rev_multiplier_used and event_qty_multiplier_used (actual: ${multiplierRows.length})`);
+
+    // ----------------------------------------------------
+    // TEST 13: Movement-Based vs Count-Bounded Variance Calculation Modes
+    // ----------------------------------------------------
+    console.log('\nTest 13: Movement-Based vs Count-Bounded Variance Calculation Modes');
+    const { calculateInventoryVariance } = await import('../src/lib/inventory/variance.ts');
+
+    const mReport = await calculateInventoryVariance(supabase, '2026-11-10', '2026-11-17', 'movement_based');
+    assert(mReport.mode === 'movement_based', `movement_based report generated with mode: ${mReport.mode}`);
+    assert(Array.isArray(mReport.items), `movement_based report returns items array (count: ${mReport.items.length})`);
+
+    const cReport = await calculateInventoryVariance(supabase, '2026-11-10', '2026-11-17', 'count_bounded');
+    assert(cReport.mode === 'count_bounded', `count_bounded report generated with mode: ${cReport.mode}`);
+    assert(Array.isArray(cReport.items), `count_bounded report returns items array (count: ${cReport.items.length})`);
 
   } catch (err) {
     console.error('Test execution error:', err);

@@ -123,6 +123,10 @@
     "loading": "बिक्री आउटलुक लोड हो रहा है...",
     "predictedNet": "पूर्वानुमानित शुद्ध बिक्री",
     "predictedUnits": "पूर्वानुमानित प्लेटें एवं मात्रा",
-    "viewRibbon": "7-दिवसीय पूर्वानुमान देखें"
+    "viewRibbon": "7-दिवसीय पूर्वानुमान देखें",
+    "rangeLabel": "सीमा: {low} – {high}",
+    "coversAndBills": "~{covers} लोग · ~{bills} बिल",
+    "eventOrGroupMultipliers": "✨ विशेष उत्सव या ग्रुप गुणांक लागू",
+    "standardWeeklyPace": "मानक साप्ताहिक गति मॉडल"
   }
 }

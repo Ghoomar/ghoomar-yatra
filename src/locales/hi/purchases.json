@@ -439,5 +439,14 @@
     "maxPar": "अधिकतम पार:",
     "abcClass": "वर्ग:",
     "thirtyDayUsage": "30 दिन की खपत:"
-  }
+  },
+  "smartSuggestionsTitle": "स्मार्ट पुनः ऑर्डर सुझाव",
+  "smartSuggestionsDesc": "कल के भोजन पूर्वानुमान के आधार पर पार स्तर से नीचे {count} वस्तुएं।",
+  "buildRequestFromSuggestions": "सुझावों से मांग पत्र बनाएं (1-टैप)",
+  "creatingRequest": "मांग पत्र बन रहा है...",
+  "orderQtyLabel": "ऑर्डर: {qty} {unit}",
+  "requestBuiltSuccess": "स्मार्ट सुझावों से खरीद मांग पत्र सफलतापूर्वक बन गया!",
+  "tomorrowForecastDemand": "कल की पूर्वानुमानित मांग: {demand} {unit} · सुझाया गया ऑर्डर: {suggested} {unit}",
+  "useSuggested": "सुझाव अपनाएं ({qty})",
+  "autoBuiltFromSuggestions": "कल के पूर्वानुमान स्मार्ट सुझावों से स्वचालित निर्मित"
 }

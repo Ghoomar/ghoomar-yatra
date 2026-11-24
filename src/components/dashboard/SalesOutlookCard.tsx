@@ -86,7 +86,10 @@ export function SalesOutlookCard({ businessDate }: { businessDate: string }) {
             {formatINR(forecast.predicted_net_revenue)}
           </div>
           <span className="text-[10px] text-stone-400">
-            Range: {formatINR(forecast.predicted_net_revenue_low)} – {formatINR(forecast.predicted_net_revenue_high)}
+            {t('dashboard.salesOutlook.rangeLabel', {
+              low: formatINR(forecast.predicted_net_revenue_low),
+              high: formatINR(forecast.predicted_net_revenue_high),
+            })}
           </span>
         </div>
 
@@ -97,17 +100,24 @@ export function SalesOutlookCard({ businessDate }: { businessDate: string }) {
           </span>
           <div className="text-base font-extrabold text-stone-900 mt-0.5">
             ~{Math.round(forecast.predicted_total_units)}{' '}
-            <span className="text-xs font-normal text-stone-500">units</span>
+            <span className="text-xs font-normal text-stone-500">
+              {t('finance.sales.units') || 'units'}
+            </span>
           </div>
           <span className="text-[10px] text-stone-400">
-            ~{forecast.predicted_pax} covers &middot; ~{forecast.predicted_orders} bills
+            {t('dashboard.salesOutlook.coversAndBills', {
+              covers: forecast.predicted_pax,
+              bills: forecast.predicted_orders,
+            })}
           </span>
         </div>
       </div>
 
       <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between text-xs">
         <span className="text-[11px] text-stone-500">
-          {forecast.day_mode !== 'normal' ? '✨ Event or Group Multipliers Applied' : 'Standard weekly pace model'}
+          {forecast.day_mode !== 'normal'
+            ? t('dashboard.salesOutlook.eventOrGroupMultipliers')
+            : t('dashboard.salesOutlook.standardWeeklyPace')}
         </span>
         <Link
           href="/finance/sales?view=forecast"

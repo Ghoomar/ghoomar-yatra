@@ -137,7 +137,7 @@ export function InventoryVarianceView() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              Movement-Based
+              {t('inventory.variance.modeMovementBased') || 'Movement-Based'}
             </button>
             <button
               type="button"
@@ -148,7 +148,7 @@ export function InventoryVarianceView() {
                   : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              Count-Bounded
+              {t('inventory.variance.modeCountBounded') || 'Count-Bounded'}
             </button>
           </div>
 
@@ -161,7 +161,7 @@ export function InventoryVarianceView() {
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center gap-2 text-stone-400">
           <RefreshCw className="h-6 w-6 animate-spin text-amber-600" />
-          <p className="text-xs">Exploding BOM recipe demands & calculating variance...</p>
+          <p className="text-xs">{t('inventory.variance.loadingVariance') || 'Exploding BOM recipe demands & calculating variance...'}</p>
         </div>
       ) : report ? (
         <>
@@ -174,7 +174,7 @@ export function InventoryVarianceView() {
               <div className="text-xl font-extrabold text-stone-900 mt-1">
                 {report.total_theoretical_items_count}
               </div>
-              <span className="text-[10px] text-stone-400">Kitchen & Bar items</span>
+              <span className="text-[10px] text-stone-400">{t('inventory.variance.kitchenBarItems') || 'Kitchen & Bar items'}</span>
             </div>
 
             <div className="bg-rose-50/70 p-4 rounded-xl border border-rose-200 shadow-2xs">
@@ -185,7 +185,7 @@ export function InventoryVarianceView() {
               <div className="text-xl font-extrabold text-rose-900 mt-1">
                 {report.unfavorable_count}
               </div>
-              <span className="text-[10px] text-rose-600">Over-consumption vs BOM</span>
+              <span className="text-[10px] text-rose-600">{t('inventory.variance.overConsumption') || 'Over-consumption vs BOM'}</span>
             </div>
 
             <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200 shadow-2xs">
@@ -196,7 +196,7 @@ export function InventoryVarianceView() {
               <div className="text-xl font-extrabold text-emerald-900 mt-1">
                 {report.favorable_count}
               </div>
-              <span className="text-[10px] text-emerald-600">Under-consumption / Yield save</span>
+              <span className="text-[10px] text-emerald-600">{t('inventory.variance.underConsumption') || 'Under-consumption / Yield save'}</span>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs">
@@ -208,7 +208,7 @@ export function InventoryVarianceView() {
               }`}>
                 {report.total_variance_cost != null ? formatINR(report.total_variance_cost) : '—'}
               </div>
-              <span className="text-[10px] text-stone-400">Valued at current WAC</span>
+              <span className="text-[10px] text-stone-400">{t('inventory.variance.valuedAtWac') || 'Valued at current WAC'}</span>
             </div>
           </div>
 
@@ -219,7 +219,7 @@ export function InventoryVarianceView() {
                 <Search className="h-3.5 w-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search item or category..."
+                  placeholder={t('inventory.variance.searchItemOrCategory') || 'Search item or category...'}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-8 pr-3 py-1.5 border border-stone-300 rounded-lg text-xs w-56"
@@ -232,10 +232,10 @@ export function InventoryVarianceView() {
                   onChange={(e) => setStatusFilter(e.target.value as any)}
                   className="px-3 py-1.5 border border-stone-300 rounded-lg text-xs"
                 >
-                  <option value="all">All Variances ({items.length})</option>
-                  <option value="unfavorable">Unfavorable ({report.unfavorable_count})</option>
-                  <option value="favorable">Favorable ({report.favorable_count})</option>
-                  <option value="aligned">Aligned ({report.aligned_count})</option>
+                  <option value="all">{t('inventory.variance.filterAll', { count: items.length }) || `All Variances (${items.length})`}</option>
+                  <option value="unfavorable">{t('inventory.variance.filterUnfavorable', { count: report.unfavorable_count }) || `Unfavorable (${report.unfavorable_count})`}</option>
+                  <option value="favorable">{t('inventory.variance.filterFavorable', { count: report.favorable_count }) || `Favorable (${report.favorable_count})`}</option>
+                  <option value="aligned">{t('inventory.variance.filterAligned', { count: report.aligned_count }) || `Aligned (${report.aligned_count})`}</option>
                 </select>
               </div>
             </div>
@@ -244,16 +244,16 @@ export function InventoryVarianceView() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-stone-50 text-stone-500 border-b border-stone-200 font-medium">
                   <tr>
-                    <th className="py-2.5 px-4">Item Code</th>
-                    <th className="py-2.5 px-4">Item Name</th>
-                    <th className="py-2.5 px-4">Category</th>
-                    <th className="py-2.5 px-4 text-right">Theoretical (BOM)</th>
-                    <th className="py-2.5 px-4 text-right">Actual Consumed</th>
-                    <th className="py-2.5 px-4 text-right">Variance Qty</th>
-                    <th className="py-2.5 px-4 text-right">Variance %</th>
-                    <th className="py-2.5 px-4 text-right">WAC Rate</th>
-                    <th className="py-2.5 px-4 text-right">Variance Cost</th>
-                    <th className="py-2.5 px-4 text-center">Status</th>
+                    <th className="py-2.5 px-4">{t('inventory.variance.colItemCode') || 'Item Code'}</th>
+                    <th className="py-2.5 px-4">{t('inventory.variance.colItemName') || 'Item Name'}</th>
+                    <th className="py-2.5 px-4">{t('inventory.variance.colCategory') || 'Category'}</th>
+                    <th className="py-2.5 px-4 text-right">{t('inventory.variance.colTheoreticalBom') || 'Theoretical (BOM)'}</th>
+                    <th className="py-2.5 px-4 text-right">{t('inventory.variance.colActualConsumed') || 'Actual Consumed'}</th>
+                    <th className="py-2.5 px-4 text-right">{t('inventory.variance.colVarianceQty') || 'Variance Qty'}</th>
+                    <th className="py-2.5 px-4 text-right">{t('inventory.variance.colVariancePct') || 'Variance %'}</th>
+                    <th className="py-2.5 px-4 text-right">{t('inventory.variance.colWacRate') || 'WAC Rate'}</th>
+                    <th className="py-2.5 px-4 text-right">{t('inventory.variance.colVarianceCost') || 'Variance Cost'}</th>
+                    <th className="py-2.5 px-4 text-center">{t('inventory.variance.colStatus') || 'Status'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 text-stone-800">
@@ -287,17 +287,17 @@ export function InventoryVarianceView() {
                       <td className="py-2.5 px-4 text-center">
                         {item.status === 'unfavorable' && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-                            UNFAVORABLE
+                            {t('inventory.variance.statusUnfavorable') || 'UNFAVORABLE'}
                           </span>
                         )}
                         {item.status === 'favorable' && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            FAVORABLE
+                            {t('inventory.variance.statusFavorable') || 'FAVORABLE'}
                           </span>
                         )}
                         {item.status === 'aligned' && (
                           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-600">
-                            ALIGNED
+                            {t('inventory.variance.statusAligned') || 'ALIGNED'}
                           </span>
                         )}
                       </td>
@@ -306,7 +306,7 @@ export function InventoryVarianceView() {
                   {filteredItems.length === 0 && (
                     <tr>
                       <td colSpan={10} className="py-8 text-center text-stone-400 text-xs">
-                        No items match the current filters.
+                        {t('inventory.variance.noItemsMatch') || 'No items match the current filters.'}
                       </td>
                     </tr>
                   )}

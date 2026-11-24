@@ -34,6 +34,7 @@ export function SalesForecastView() {
   const [yesterdayScorecard, setYesterdayScorecard] = useState<GradedSnapshotRecord | null>(null);
   const [eventTypes, setEventTypes] = useState<EventType[]>([]);
   const [groupProfiles, setGroupProfiles] = useState<GroupProfile[]>([]);
+  const [breakdownView, setBreakdownView] = useState<'dishes' | 'categories'>('dishes');
 
   // Modals & Drawers
   const [isContextModalOpen, setIsContextModalOpen] = useState(false);
@@ -466,54 +467,127 @@ export function SalesForecastView() {
         </div>
       )}
 
-      {/* 5. Top Dishes Forecast Table */}
+      {/* 5. Top Dishes & Categories Breakdown Table */}
       <div className="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-stone-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Utensils className="h-4 w-4 text-amber-600" />
+            {breakdownView === 'dishes' ? (
+              <Utensils className="h-4 w-4 text-amber-600" />
+            ) : (
+              <Layers className="h-4 w-4 text-amber-600" />
+            )}
             <h3 className="text-sm font-bold text-stone-900">
-              {t('finance.sales.topDishesForecast') || 'Top Predicted Dishes'} ({activeDay.dishes.length} dishes)
+              {breakdownView === 'dishes'
+                ? `${t('finance.sales.topDishesForecast') || 'Top Predicted Dishes'} (${activeDay.dishes.length})`
+                : `${t('finance.sales.categoryForecastTitle') || 'Menu Category Forecast'} (${activeDay.categories.length})`}
             </h3>
           </div>
-          <span className="text-xs text-stone-500">
-            {t('finance.sales.sortedByVolume') || 'Ranked by volume demand'}
-          </span>
+
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg bg-stone-100 p-0.5 border border-stone-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setBreakdownView('dishes')}
+                className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                  breakdownView === 'dishes'
+                    ? 'bg-white text-stone-900 shadow-2xs font-bold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {t('finance.sales.topDishesTab') || 'Top Dishes'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBreakdownView('categories')}
+                className={`px-3 py-1 rounded-md font-semibold transition cursor-pointer ${
+                  breakdownView === 'categories'
+                    ? 'bg-white text-stone-900 shadow-2xs font-bold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {t('finance.sales.categoriesTab') || 'Categories'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-stone-50 text-stone-500 border-b border-stone-200 font-medium">
-              <tr>
-                <th className="py-2.5 px-4 w-12 text-center">#</th>
-                <th className="py-2.5 px-4">{t('finance.sales.dishName') || 'Dish Name'}</th>
-                <th className="py-2.5 px-4 text-right">{t('finance.sales.predictedUnits') || 'Predicted Units'}</th>
-                <th className="py-2.5 px-4 text-right">{t('finance.sales.avgPrice') || 'Avg Selling Price'}</th>
-                <th className="py-2.5 px-4 text-right">{t('finance.sales.impliedSales') || 'Implied Sales'}</th>
-                <th className="py-2.5 px-4 text-right">{t('finance.sales.share') || 'Volume Share'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100 text-stone-800">
-              {activeDay.dishes.slice(0, 20).map((dish, i) => (
-                <tr key={dish.dish_name} className="hover:bg-amber-50/30 transition-colors">
-                  <td className="py-2 px-4 text-center text-stone-400 font-medium">{i + 1}</td>
-                  <td className="py-2 px-4 font-semibold text-stone-900">{dish.dish_name}</td>
-                  <td className="py-2 px-4 text-right font-bold text-amber-700">
-                    {Math.round(dish.predicted_quantity)}
-                  </td>
-                  <td className="py-2 px-4 text-right text-stone-600">
-                    {formatCurrency(dish.avg_price)}
-                  </td>
-                  <td className="py-2 px-4 text-right font-semibold text-stone-900">
-                    {formatCurrency(dish.implied_net_sales)}
-                  </td>
-                  <td className="py-2 px-4 text-right text-stone-500">
-                    {dish.volume_share_pct.toFixed(1)}%
-                  </td>
+        {breakdownView === 'dishes' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-stone-50 text-stone-500 border-b border-stone-200 font-medium">
+                <tr>
+                  <th className="py-2.5 px-4 w-12 text-center">#</th>
+                  <th className="py-2.5 px-4">{t('finance.sales.dishName') || 'Dish Name'}</th>
+                  <th className="py-2.5 px-4">{t('finance.sales.categoryName') || 'Category'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.predictedUnits') || 'Predicted Units'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.avgPrice') || 'Avg Selling Price'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.impliedSales') || 'Implied Sales'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.volumeShare') || 'Volume Share'}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-stone-100 text-stone-800">
+                {activeDay.dishes.slice(0, 20).map((dish, i) => (
+                  <tr key={dish.dish_name} className="hover:bg-amber-50/30 transition-colors">
+                    <td className="py-2 px-4 text-center text-stone-400 font-medium">{i + 1}</td>
+                    <td className="py-2 px-4 font-semibold text-stone-900">{dish.dish_name}</td>
+                    <td className="py-2 px-4 text-stone-500">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-stone-100 text-stone-700">
+                        {dish.category}
+                      </span>
+                    </td>
+                    <td className="py-2 px-4 text-right font-bold text-amber-700">
+                      {Math.round(dish.predicted_quantity)}
+                    </td>
+                    <td className="py-2 px-4 text-right text-stone-600">
+                      {formatCurrency(dish.avg_price)}
+                    </td>
+                    <td className="py-2 px-4 text-right font-semibold text-stone-900">
+                      {formatCurrency(dish.implied_net_sales)}
+                    </td>
+                    <td className="py-2 px-4 text-right text-stone-500">
+                      {dish.volume_share_pct.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-stone-50 text-stone-500 border-b border-stone-200 font-medium">
+                <tr>
+                  <th className="py-2.5 px-4 w-12 text-center">#</th>
+                  <th className="py-2.5 px-4">{t('finance.sales.categoryName') || 'Category'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.predictedUnits') || 'Predicted Units'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.volumeShare') || 'Volume Share'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.impliedSales') || 'Implied Sales'}</th>
+                  <th className="py-2.5 px-4 text-right">{t('finance.sales.revenueShare') || 'Revenue Share'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 text-stone-800">
+                {activeDay.categories.map((cat, i) => (
+                  <tr key={cat.category} className="hover:bg-amber-50/30 transition-colors">
+                    <td className="py-2.5 px-4 text-center text-stone-400 font-medium">{i + 1}</td>
+                    <td className="py-2.5 px-4 font-bold text-stone-900">{cat.category}</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-amber-700">
+                      {Math.round(cat.predicted_units)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right text-stone-500 font-medium">
+                      {cat.volume_share_pct.toFixed(1)}%
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-bold text-stone-900">
+                      {formatCurrency(cat.predicted_net_sales)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right text-stone-600 font-semibold">
+                      {cat.revenue_share_pct.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Plan Event / Group Booking Modal */}

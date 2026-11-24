@@ -148,18 +148,71 @@ export async function calculateInventoryVariance(
     }
   }
 
-  // 3. Fetch Actual Consumption from stock movements or counts
-  const { data: movements } = await supabase
-    .from('stock_movements')
-    .select('item_id, movement_type, quantity')
-    .gte('business_date', startDate)
-    .lte('business_date', endDate);
-
+  // 3. Fetch Actual Consumption based on mode
   const actualConsumptionMap = new Map<string, number>();
-  for (const mov of (movements || [])) {
-    const q = Number(mov.quantity || 0);
-    // Count adjustment or issue represents consumption/variance
-    actualConsumptionMap.set(mov.item_id, (actualConsumptionMap.get(mov.item_id) || 0) + q);
+
+  if (mode === 'count_bounded') {
+    // Mode A: Count-Bounded mode
+    // Actual Consumption = Opening Stock + Inward Purchases - Closing Stock
+    const { data: movements } = await supabase
+      .from('stock_movements')
+      .select('item_id, movement_type, quantity, business_date')
+      .gte('business_date', startDate)
+      .lte('business_date', endDate);
+
+    const purchaseMap = new Map<string, number>();
+    const countMap = new Map<string, { earliest: number; latest: number }>();
+
+    for (const mov of (movements || [])) {
+      const q = Number(mov.quantity || 0);
+      if (mov.movement_type === 'purchase') {
+        purchaseMap.set(mov.item_id, (purchaseMap.get(mov.item_id) || 0) + q);
+      } else if (mov.movement_type === 'count_adjustment') {
+        const cur = countMap.get(mov.item_id) || { earliest: q, latest: q };
+        cur.latest = q;
+        countMap.set(mov.item_id, cur);
+      }
+    }
+
+    for (const itemId of theoreticalDemandMap.keys()) {
+      const p = purchaseMap.get(itemId) || 0;
+      const c = countMap.get(itemId);
+      if (c) {
+        // Consumption = Opening + Purchases - Closing
+        const consumed = Math.max(0, c.earliest + p - c.latest);
+        actualConsumptionMap.set(itemId, consumed);
+      } else if (p > 0) {
+        // If purchases occurred without counts, consumption matches theoretical capped by purchases
+        const theo = theoreticalDemandMap.get(itemId) || 0;
+        actualConsumptionMap.set(itemId, Math.min(theo, p));
+      }
+    }
+  } else {
+    // Mode B: Movement-Based mode
+    // Actual Consumption = Store Issues + Kitchen Wastage + Direct Usage Movements
+    // Note: 'purchase' is strictly INWARD receipt, NEVER consumption!
+    const { data: issues } = await supabase
+      .from('consumption_issue_items')
+      .select('item_id, quantity, issue:consumption_issues!consumption_issue_items_issue_id_fkey(business_date)')
+      .gte('issue.business_date', startDate)
+      .lte('issue.business_date', endDate);
+
+    for (const iss of (issues || [])) {
+      const q = Number(iss.quantity || 0);
+      actualConsumptionMap.set(iss.item_id, (actualConsumptionMap.get(iss.item_id) || 0) + q);
+    }
+
+    const { data: movements } = await supabase
+      .from('stock_movements')
+      .select('item_id, movement_type, quantity')
+      .gte('business_date', startDate)
+      .lte('business_date', endDate)
+      .in('movement_type', ['issue', 'consumption', 'wastage']);
+
+    for (const mov of (movements || [])) {
+      const q = Number(mov.quantity || 0);
+      actualConsumptionMap.set(mov.item_id, (actualConsumptionMap.get(mov.item_id) || 0) + q);
+    }
   }
 
   // 4. Assemble Variance Items
