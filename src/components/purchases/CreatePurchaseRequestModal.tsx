@@ -87,6 +87,32 @@ export function CreatePurchaseRequestModal({
   const [selectedPackUnit, setSelectedPackUnit] = useState<any | null>(null);
   const [inputQuantity, setInputQuantity] = useState<string>('1');
 
+  // Purchase Forecast Suggestions Map
+  const [suggestionMap, setSuggestionMap] = useState<Record<string, any>>({});
+
+  React.useEffect(() => {
+    let active = true;
+    const loadSuggestions = async () => {
+      try {
+        const res = await fetch('/api/finance/purchase-forecast');
+        const data = await res.json();
+        if (active && data.success && data.suggestions) {
+          const map: Record<string, any> = {};
+          for (const s of data.suggestions) {
+            map[s.item_id] = s;
+          }
+          setSuggestionMap(map);
+        }
+      } catch (err) {
+        // Non-blocking
+      }
+    };
+    loadSuggestions();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Filter items matching search query using alias-aware search
   const aliasesMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -490,6 +516,25 @@ export function CreatePurchaseRequestModal({
                     </span>
                   </div>
                 </div>
+
+                {/* Inline Tomorrow Forecast Hint & 1-Tap Use Suggested */}
+                {selectedItem && suggestionMap[selectedItem.id] && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2.5 rounded-lg bg-amber-50/80 border border-amber-200/90 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-amber-900">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                      <span>
+                        Tomorrow Forecast Demand: <strong>{suggestionMap[selectedItem.id].forecast_demand_qty} {selectedItem.unit_symbol}</strong> &middot; Suggested Order: <strong>{suggestionMap[selectedItem.id].suggested_order_qty} {selectedItem.unit_symbol}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInputQuantity(String(suggestionMap[selectedItem.id].suggested_order_qty || 1))}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-700 text-white hover:bg-amber-800 transition cursor-pointer self-start sm:self-auto shrink-0"
+                    >
+                      Use Suggested ({suggestionMap[selectedItem.id].suggested_order_qty})
+                    </button>
+                  </div>
+                )}
 
                 {/* Brand Selection Chips */}
                 {availableBrands.length > 1 && (

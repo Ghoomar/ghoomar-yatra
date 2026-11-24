@@ -19,6 +19,7 @@ import { TargetPacing } from '@/components/dashboard/TargetPacing';
 import { MonthlyPosition } from '@/components/dashboard/MonthlyPosition';
 import { ActionRequiredFlags, ActionFlag } from '@/components/dashboard/ActionRequiredFlags';
 import { BusinessHealth } from '@/components/dashboard/BusinessHealth';
+import { SalesOutlookCard } from '@/components/dashboard/SalesOutlookCard';
 import { LayoutDashboard, RefreshCw } from 'lucide-react';
 import { MTDFinancialSummary } from '@/lib/types/database';
 import { getMonthDateRange } from '@/lib/utils';
@@ -315,6 +316,9 @@ export default function DashboardPage() {
         projectedMonthEndRevenue={breakEven.projectedMonthEndRevenue}
         calculatedBreakEven={breakEven.calculatedBreakEven}
       />
+
+      {/* Compact Sales Outlook & Dual-Track Pace */}
+      <SalesOutlookCard businessDate={businessDate} />
 
       <OperatingMetrics from={businessDate} to={businessDate} />
 

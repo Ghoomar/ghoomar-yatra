@@ -23,6 +23,7 @@ import {
   ArrowRight,
   Shield,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 interface PurchaseRequestsViewProps {
@@ -62,6 +63,72 @@ export function PurchaseRequestsView({
   const [actionMaxParUnitMode, setActionMaxParUnitMode] = useState<'base' | 'kilo_liter'>('base');
   const [actionNote, setActionNote] = useState('');
   const [processingLineId, setProcessingLineId] = useState<string | null>(null);
+
+  // Smart Suggestions state
+  const [forecastSuggestions, setForecastSuggestions] = useState<any[]>([]);
+  const [forecastConfidence, setForecastConfidence] = useState<number>(85);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [buildingRequest, setBuildingRequest] = useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    const loadSuggestions = async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await fetch('/api/finance/purchase-forecast');
+        const data = await res.json();
+        if (active && data.success) {
+          setForecastSuggestions((data.suggestions || []).filter((s: any) => s.suggested_order_qty > 0));
+          setForecastConfidence(data.qty_confidence_score || 85);
+        }
+      } catch (err) {
+        console.error('Failed to load purchase suggestions:', err);
+      } finally {
+        if (active) setLoadingSuggestions(false);
+      }
+    };
+    loadSuggestions();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleBuildRequestFromSuggestions = async () => {
+    if (forecastSuggestions.length === 0) return;
+    setBuildingRequest(true);
+    try {
+      const lines = forecastSuggestions.map((s) => ({
+        item_id: s.item_id,
+        requested_quantity: s.suggested_order_qty,
+        pack_unit_snapshot: null,
+        pack_quantity: null,
+        conversion_factor_snapshot: 1,
+        notes: `Smart Suggestion (Demand: ${s.forecast_demand_qty} ${s.unit_symbol}, Source: ${s.demand_source})`,
+      }));
+
+      const res = await fetch('/api/finance/purchase-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_purchase_date: new Date().toISOString().slice(0, 10),
+          notes: 'Auto-built from Tomorrow Forecast Smart Suggestions',
+          lines,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        onRefresh();
+        alert('Successfully created purchase request from Smart Suggestions!');
+      } else {
+        alert(data.error || 'Failed to create request');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to build request');
+    } finally {
+      setBuildingRequest(false);
+    }
+  };
 
   const switchActionMaxParMode = (newMode: 'base' | 'kilo_liter') => {
     if (newMode === actionMaxParUnitMode) return;
@@ -262,6 +329,69 @@ export function PurchaseRequestsView({
           </Button>
         </div>
       </div>
+
+      {/* Smart Suggestions Panel (Powered by Phase 2 BOM Explosion) */}
+      {forecastSuggestions.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40 border border-amber-200/90 rounded-xl p-4 shadow-2xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2.5 border-b border-amber-100">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-amber-600 text-white">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-stone-900 flex items-center gap-2">
+                  <span>Smart Reorder Suggestions</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                    {forecastConfidence}% Volume Confidence
+                  </span>
+                </h3>
+                <p className="text-[11px] text-stone-500">
+                  {forecastSuggestions.length} items below par level based on tomorrow&apos;s culinary dish forecasts.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              disabled={buildingRequest}
+              onClick={handleBuildRequestFromSuggestions}
+              className="gap-1.5 text-xs bg-amber-700 hover:bg-amber-800 text-white shadow-2xs self-start sm:self-auto"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>{buildingRequest ? 'Creating Request...' : 'Build Request from Suggestions (1-Tap)'}</span>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+            {forecastSuggestions.slice(0, 8).map((s) => (
+              <div
+                key={s.item_id}
+                className="bg-white p-2.5 rounded-lg border border-stone-200 text-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="font-bold text-stone-900 truncate" title={s.item_name}>
+                    {s.item_name}
+                  </div>
+                  <div className="text-[10px] text-stone-400 mt-0.5">
+                    Stock: {s.current_stock} &middot; Par: {s.par_level} {s.unit_symbol}
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-stone-100 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                    Order: {s.suggested_order_qty} {s.unit_symbol}
+                  </span>
+                  {s.line_cost != null && (
+                    <span className="text-[11px] font-bold text-stone-700">
+                      ₹{Math.round(s.line_cost).toLocaleString('en-IN')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* QUEUE 1: Pending Approval */}
       <Card className="border-amber-200/80 shadow-2xs overflow-hidden">

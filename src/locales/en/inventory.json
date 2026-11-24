@@ -37,7 +37,8 @@
     },
     "topTabs": {
       "stock": "Inventory",
-      "assets": "Physical Assets"
+      "assets": "Physical Assets",
+      "variance": "Theo-vs-Act Variance"
     },
     "secondaryKpi": {
       "assetsValue": "Assets: {val}",
@@ -760,5 +761,15 @@
     "maxStock": "Max-Par",
     "shelfLife": "Shelf Life",
     "lastCounted": "Last Counted"
+  },
+  "variance": {
+    "title": "Theoretical vs. Actual (Theo-vs-Act) Variance Tracker",
+    "subtitle": "Recipe BOM consumption compared against recorded store movements and stock counts.",
+    "restrictedTitle": "Costing & Variance Access Restricted",
+    "restrictedDesc": "Theoretical vs. Actual Variance contains confidential recipe costing and WAC valuations. Accessible exclusively to Managers, Costing Accountants, and Administrators.",
+    "totalItems": "Evaluated Items",
+    "unfavorable": "Unfavorable Variance",
+    "favorable": "Favorable Variance",
+    "netCostVariance": "Net Cost Variance"
   }
 }

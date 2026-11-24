@@ -4,6 +4,7 @@ import { parsePetpoojaBuffer } from '@/lib/petpooja/parser';
 import { loadMenuMasterLookupFromDb, resolveItemCategory, normalizeItemName, isOpenItemDescription } from '@/lib/petpooja/matcher';
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 import { marketingError } from '@/lib/marketing/http';
+import { runAutoGradingForDate } from '@/lib/forecasting/auto-grade';
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,6 +48,14 @@ export async function POST(request: NextRequest) {
           metadata, orders: data, overwrite, expected_revision: Number(formData.get('expected_revision') || '0')},
       });
       if (error) return marketingError(error);
+
+      // Auto-grade and classify bills idempotently on ORDERS_MASTER import
+      try {
+        await runAutoGradingForDate(supabase, businessDate);
+      } catch (gradeErr) {
+        console.error('Auto-grading on ORDERS_MASTER import error:', gradeErr);
+      }
+
       return NextResponse.json(result, {status: result?.code ? 409 : 200});
     }
 
@@ -320,6 +329,13 @@ export async function POST(request: NextRequest) {
             await supabase.from('pos_menu_items').insert(chunk);
           }
         }
+      }
+
+      // Auto-grade and classify bills idempotently on ITEM_ORDER_DETAILS import
+      try {
+        await runAutoGradingForDate(supabase, businessDate);
+      } catch (gradeErr) {
+        console.error('Auto-grading on ITEM_ORDER_DETAILS import error:', gradeErr);
       }
     } else if (reportType === 'MENU_MASTER') {
       // Fetch existing items to preserve human-customized Hindi names and selling prices

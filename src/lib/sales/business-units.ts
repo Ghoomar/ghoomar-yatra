@@ -16,6 +16,7 @@ export interface OrderClassificationFields {
   order_type?: string | null;
   area?: string | null;
   payment_type?: string | null;
+  customer_phone?: string | null;
 }
 
 /**
@@ -24,14 +25,16 @@ export interface OrderClassificationFields {
  * - area === 'LANCHO' (case-insensitive)
  * - order_type === 'LANCHO' (case-insensitive)
  * - payment_type contains 'lancho' (case-insensitive)
+ * - customer_phone === '9927300836' (Lancho Aggregator Support phone)
  */
 export function isLanchoOrder(order: OrderClassificationFields): boolean {
   if (!order) return false;
   const area = (order.area || '').trim().toUpperCase();
   const orderType = (order.order_type || '').trim().toUpperCase();
   const paymentType = (order.payment_type || '').trim().toLowerCase();
+  const phone = (order.customer_phone || '').trim().replace(/\D/g, '');
 
-  return area === 'LANCHO' || orderType === 'LANCHO' || paymentType.includes('lancho');
+  return area === 'LANCHO' || orderType === 'LANCHO' || paymentType.includes('lancho') || phone === '9927300836';
 }
 
 /**

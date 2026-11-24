@@ -117,5 +117,12 @@
     "lowStockWarning": "{count} critical inventory items are below minimum reorder threshold.",
     "salesPending": "Petpooja POS sales report not uploaded for {date}.",
     "attendancePending": "Staff attendance muster roll has not been saved for today."
+  },
+  "salesOutlook": {
+    "title": "Sales Outlook & Dual-Track Pace",
+    "loading": "Loading sales outlook...",
+    "predictedNet": "Predicted Net Sales",
+    "predictedUnits": "Predicted Plates & Volume",
+    "viewRibbon": "View 7-Day Forecast"
   }
 }

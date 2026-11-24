@@ -15,6 +15,7 @@ import { MergeItemModal } from '@/components/inventory/MergeItemModal';
 import { UnitModal } from '@/components/admin/UnitModal';
 import { ItemMovementDrawer } from '@/components/inventory/ItemMovementDrawer';
 import { PhysicalAssetsView } from '@/components/inventory/PhysicalAssetsView';
+import { InventoryVarianceView } from '@/components/inventory/InventoryVarianceView';
 import { useAppRole } from '@/components/layout/AppShell';
 import { canViewCosting } from '@/lib/rbac';
 import { filterInventoryItems, getSearchableItemText } from '@/lib/inventory/search';
@@ -125,8 +126,10 @@ function InventoryContent() {
   const subtabParam = searchParams.get('subtab');
 
   // Resolve effective top-level tab based on explicit granular permissions
-  let effectiveTopTab: 'stock' | 'assets' = 'stock';
-  if (tabParam === 'assets') {
+  let effectiveTopTab: 'stock' | 'assets' | 'variance' = 'stock';
+  if (tabParam === 'variance') {
+    effectiveTopTab = 'variance';
+  } else if (tabParam === 'assets') {
     effectiveTopTab = 'assets';
   } else if (!canAccessStock && canAccessAssets) {
     // User only has permission for assets, default to assets
@@ -137,7 +140,8 @@ function InventoryContent() {
 
   const isTabAuthorized =
     (effectiveTopTab === 'stock' && canAccessStock) ||
-    (effectiveTopTab === 'assets' && canAccessAssets);
+    (effectiveTopTab === 'assets' && canAccessAssets) ||
+    (effectiveTopTab === 'variance' && (canAccessStock || canAccessAssets));
 
   const topTab = effectiveTopTab;
 
@@ -505,12 +509,28 @@ function InventoryContent() {
               <Layers className="h-4 w-4" />
               {t('inventory.stock.topTabs.assets')}
             </button>
+
+            <button
+              onClick={() => {
+                router.push('/inventory?tab=variance');
+              }}
+              className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                topTab === 'variance'
+                  ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              <Scale className="h-4 w-4" />
+              {t('inventory.stock.topTabs.variance') || 'Theo-vs-Act Variance'}
+            </button>
           </div>
         </div>
       )}
 
       {topTab === 'assets' ? (
         <PhysicalAssetsView />
+      ) : topTab === 'variance' ? (
+        <InventoryVarianceView />
       ) : (
         <>
           {/* Page Header */}
