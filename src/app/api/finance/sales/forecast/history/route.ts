@@ -4,6 +4,7 @@ import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { hasPermission } from '@/lib/rbac';
 import { gradeDaySnapshot, generateDayForecast } from '@/lib/forecasting/engine';
 import { GroupProfile } from '@/lib/forecasting/types';
+import { loadCanonicalMenuLookup } from '@/lib/sales/canonical-menu';
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,18 +56,33 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: billsErr.message }, { status: 500 });
       }
 
-      const { data: context } = await admin
-        .from('sales_forecast_day_context')
-        .select('*, event_type:sales_forecast_event_types(*)')
-        .eq('business_date', requestedDate)
-        .maybeSingle();
+      const [{ data: context }, { data: manualEdits }] = await Promise.all([
+        admin
+          .from('sales_forecast_day_context')
+          .select('*, event_type:sales_forecast_event_types(*)')
+          .eq('business_date', requestedDate)
+          .maybeSingle(),
+        admin
+          .from('sales_bill_manual_edits')
+          .select('sales_order_id, override_covers_pax, override_order_type, override_area, override_payment_type, override_customer_name, override_customer_phone, override_status, override_notes, reason, edited_at, edited_by, original_snapshot_json')
+          .eq('business_date', requestedDate)
+          .eq('is_active', true),
+      ]);
+
+      const manualEditByOrderId = new Map<string, any>(
+        (manualEdits || []).map((e: any) => [e.sales_order_id, e])
+      );
+      const hydratedBills = (bills || []).map((b: any) => ({
+        ...b,
+        manual_edit: manualEditByOrderId.get(b.sales_order_id) || null,
+      }));
 
       return NextResponse.json({
         success: true,
         business_date: requestedDate,
         snapshot: snapshot || null,
         context: context || null,
-        bills: bills || [],
+        bills: hydratedBills,
       });
     }
 
@@ -86,6 +102,7 @@ export async function GET(request: NextRequest) {
     let sumAbsRevError = 0;
     let sumAbsUnitError = 0;
     let totalUnits = 0;
+    let totalBills = 0;
     let totalNormalNet = 0;
     let totalGroupNet = 0;
     let totalHighValueNet = 0;
@@ -97,6 +114,7 @@ export async function GET(request: NextRequest) {
         sumAbsRevError += Math.abs(Number(s.signed_rev_error || 0));
         totalUnits += Number(s.actual_total_units || 0);
         sumAbsUnitError += Math.abs(Number(s.signed_unit_error || 0));
+        totalBills += Number(s.actual_orders || 0);
         totalNormalNet += Number(s.decomp_normal_net || 0);
         totalGroupNet += Number(s.decomp_group_net || 0);
         totalHighValueNet += Number(s.decomp_high_value_net || 0);
@@ -112,6 +130,7 @@ export async function GET(request: NextRequest) {
       count: snapshots?.length || 0,
       summary: {
         total_days: snapshots?.length || 0,
+        total_bills: totalBills,
         total_net_revenue: Math.round(totalNetRevenue * 100) / 100,
         average_rev_wape_pct: Math.round(avgRevWape * 100) / 100,
         average_unit_wape_pct: Math.round(avgUnitWape * 100) / 100,
@@ -216,14 +235,21 @@ export async function POST(request: NextRequest) {
       .eq('business_date', businessDate)
       .maybeSingle();
 
-    const { data: grpProfiles } = await admin
-      .from('sales_forecast_group_profiles')
-      .select('*');
+    const [{ data: grpProfiles }, menuLookup] = await Promise.all([
+      admin.from('sales_forecast_group_profiles').select('*'),
+      loadCanonicalMenuLookup(admin),
+    ]);
     const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
 
     if (modelState) {
-      const forecast = generateDayForecast(businessDate, modelState, dayContext, groupProfileMap);
-      const { graded, updatedModelState } = gradeDaySnapshot(forecast, allDateBills || [], fullRawOrders, modelState);
+      const forecast = generateDayForecast(businessDate, modelState, dayContext, groupProfileMap, menuLookup);
+      const { graded, updatedModelState } = gradeDaySnapshot(
+        forecast,
+        allDateBills || [],
+        fullRawOrders,
+        modelState,
+        menuLookup
+      );
 
       await admin
         .from('sales_forecast_snapshots')

@@ -13,6 +13,7 @@
   "items": {
     "dashboard": "Dashboard",
     "dailyOperations": "Daily Operations",
+    "dailySales": "Daily Sales",
     "gateCounter": "Gate Counter",
     "purchases": "Purchases",
     "vendors": "Vendors",

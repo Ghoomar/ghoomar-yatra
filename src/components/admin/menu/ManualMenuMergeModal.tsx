@@ -40,10 +40,13 @@ export function ManualMenuMergeModal({
   const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
-    if (initialSourceItem?.id) {
-      setSourceId(initialSourceItem.id);
-    }
-  }, [initialSourceItem]);
+    if (!isOpen) return;
+    setSourceId(initialSourceItem?.id || '');
+    setTargetId('');
+    setSourceSearch('');
+    setTargetSearch('');
+    setError(null);
+  }, [isOpen, initialSourceItem]);
 
   const activeItems = useMemo(() => {
     return allItems.filter((i) => i.is_active);
@@ -59,11 +62,11 @@ export function ManualMenuMergeModal({
 
   const filteredSources = useMemo(() => {
     const term = sourceSearch.toLowerCase().trim();
-    return allItems
+    return activeItems
       .filter((i) => i.id !== targetId)
       .filter((i) => !term || i.name.toLowerCase().includes(term) || (i.category && i.category.toLowerCase().includes(term)))
       .slice(0, 30);
-  }, [allItems, targetId, sourceSearch]);
+  }, [activeItems, targetId, sourceSearch]);
 
   const targetItem = useMemo(() => allItems.find((i) => i.id === targetId), [allItems, targetId]);
   const sourceItem = useMemo(() => allItems.find((i) => i.id === sourceId), [allItems, sourceId]);

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useI18n } from '@/lib/i18n/context';
+import { useAppRole } from '@/components/layout/AppShell';
 import {
   Calendar,
   CheckCircle2,
@@ -17,9 +18,11 @@ import {
   ChevronRight,
   Sparkles,
   Info,
+  Edit2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { GradedSnapshotRecord } from '@/lib/forecasting/types';
+import { EditBillModal, EditableBillData } from './EditBillModal';
 
 interface DayDetailBill {
   id: string;
@@ -42,10 +45,12 @@ interface DayDetailBill {
   restaurant_food_net: number;
   restaurant_food_qty: number;
   classification_reason: string;
+  manual_edit?: any;
   order?: {
     invoice_no: string;
     order_type: string;
     area: string;
+    payment_type?: string | null;
     customer_name: string | null;
     customer_phone: string | null;
     covers_pax: number;
@@ -55,6 +60,9 @@ interface DayDetailBill {
 
 export function ForecastHistoryView() {
   const { t, locale } = useI18n();
+  const { role } = useAppRole();
+  const isAdmin = role === 'Admin';
+  const [editingBill, setEditingBill] = useState<EditableBillData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [snapshots, setSnapshots] = useState<GradedSnapshotRecord[]>([]);
@@ -196,10 +204,11 @@ export function ForecastHistoryView() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  {t('finance.sales.walkForwardReplay') || '82-Day Walk-Forward Replay'}
+                  {t('finance.sales.walkForwardReplayDynamic', { count: summary.total_days })}
                 </span>
                 <span className="text-xs text-stone-400">
-                  {summary.total_days} {t('finance.sales.gradedDates') || 'graded dates'} &middot; 8,864 {t('finance.sales.bills') || 'bills'}
+                  {summary.total_days} {t('finance.sales.gradedDates') || 'graded dates'} &middot;{' '}
+                  {Number(summary.total_bills || 0).toLocaleString('en-IN')} {t('finance.sales.bills') || 'bills'}
                 </span>
               </div>
               <h2 className="text-lg font-bold text-white mt-1">
@@ -210,11 +219,15 @@ export function ForecastHistoryView() {
             <div className="flex items-center gap-4 text-xs">
               <div className="bg-stone-800/80 px-3 py-2 rounded-xl border border-stone-700">
                 <div className="text-[10px] text-stone-400 uppercase font-semibold">{t('finance.sales.revenueWape') || 'Rev WAPE'}</div>
-                <div className="text-sm font-bold text-emerald-400 mt-0.5">{summary.average_rev_wape_pct}%</div>
+                <div className="text-sm font-bold text-emerald-400 mt-0.5">
+                  {Number(summary.average_rev_wape_pct || 0).toFixed(1)}%
+                </div>
               </div>
               <div className="bg-stone-800/80 px-3 py-2 rounded-xl border border-stone-700">
                 <div className="text-[10px] text-stone-400 uppercase font-semibold">{t('finance.sales.dishWape') || 'Dish WAPE'}</div>
-                <div className="text-sm font-bold text-amber-400 mt-0.5">{summary.average_unit_wape_pct}%</div>
+                <div className="text-sm font-bold text-amber-400 mt-0.5">
+                  {Number(summary.average_unit_wape_pct || 0).toFixed(1)}%
+                </div>
               </div>
             </div>
           </div>
@@ -365,6 +378,86 @@ export function ForecastHistoryView() {
                     <span className="text-[10px] text-emerald-700 font-medium">{t('finance.sales.zeroRealizedFoodRetained') || '₹0 realized (food retained)'}</span>
                   </div>
                 </div>
+
+                {/* What the Engine Learned Insight Panel */}
+                {daySnapshot.learning_summary_json && (
+                  <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-3.5 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                        {t('finance.sales.engineLearnedTitle')}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {(daySnapshot.learning_summary_json.rev_outlier_dampened || daySnapshot.was_rev_outlier_dampened) && (
+                          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">
+                            {t('finance.sales.revOutlierDampenedBadge')}
+                          </span>
+                        )}
+                        {(daySnapshot.learning_summary_json.qty_outlier_dampened || daySnapshot.was_qty_outlier_dampened) && (
+                          <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-semibold">
+                            {t('finance.sales.qtyOutlierDampenedBadge')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] text-stone-700">
+                      <div className="bg-white rounded-lg border border-stone-200/80 px-2.5 py-2">
+                        <div className="text-[10px] text-stone-400 uppercase font-semibold">
+                          {t('finance.sales.engineLearnedRevBaseline')}
+                        </div>
+                        <div className="font-semibold text-stone-900 mt-0.5">
+                          {daySnapshot.learning_summary_json.rev_baseline_before != null &&
+                          daySnapshot.learning_summary_json.rev_baseline_after != null
+                            ? `${formatCurrency(Number(daySnapshot.learning_summary_json.rev_baseline_before))} → ${formatCurrency(Number(daySnapshot.learning_summary_json.rev_baseline_after))}`
+                            : '—'}
+                        </div>
+                        <div className="text-[10px] text-stone-500 mt-0.5">
+                          α = {Number(daySnapshot.learning_summary_json.rev_alpha ?? daySnapshot.rev_alpha_used ?? 0).toFixed(2)} ·{' '}
+                          {t('finance.sales.biasLabel')}:{' '}
+                          {Number(daySnapshot.learning_summary_json.rev_applied_bias_pct ?? daySnapshot.rev_bias_correction_used ?? 0) >= 0 ? '+' : ''}
+                          {Number(daySnapshot.learning_summary_json.rev_applied_bias_pct ?? daySnapshot.rev_bias_correction_used ?? 0).toFixed(1)}%
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-stone-200/80 px-2.5 py-2">
+                        <div className="text-[10px] text-stone-400 uppercase font-semibold">
+                          {t('finance.sales.engineLearnedQtyBaseline')}
+                        </div>
+                        <div className="font-semibold text-stone-900 mt-0.5">
+                          {daySnapshot.learning_summary_json.qty_baseline_before != null &&
+                          daySnapshot.learning_summary_json.qty_baseline_after != null
+                            ? `${Math.round(Number(daySnapshot.learning_summary_json.qty_baseline_before))} → ${Math.round(Number(daySnapshot.learning_summary_json.qty_baseline_after))} ${t('finance.sales.unitsShort')}`
+                            : '—'}
+                        </div>
+                        <div className="text-[10px] text-stone-500 mt-0.5">
+                          α = {Number(daySnapshot.learning_summary_json.qty_alpha ?? daySnapshot.qty_alpha_used ?? 0).toFixed(2)} ·{' '}
+                          {t('finance.sales.trackingSignalLabel')}:{' '}
+                          {Number(daySnapshot.learning_summary_json.qty_tracking_signal ?? 0).toFixed(2)}
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-lg border border-stone-200/80 px-2.5 py-2">
+                        <div className="text-[10px] text-stone-400 uppercase font-semibold">
+                          {t('finance.sales.engineLearnedFoodReconciliation')}
+                        </div>
+                        <div className="font-semibold text-stone-900 mt-0.5">
+                          {formatCurrency(Number(daySnapshot.actual_net_revenue || 0))} ({t('finance.sales.foodOnlyShort')})
+                        </div>
+                        <div className="text-[10px] text-stone-500 mt-0.5">
+                          {t('finance.sales.petpoojaTotalShort')}:{' '}
+                          {formatCurrency(
+                            Number(
+                              daySnapshot.learning_summary_json.total_petpooja_net_revenue ??
+                                Number(daySnapshot.actual_net_revenue || 0) +
+                                  Number(daySnapshot.decomp_outside_activities_net || 0)
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Classified Bills Table with 1-Tap Reclassification */}
@@ -422,7 +515,17 @@ export function ForecastHistoryView() {
                       {filteredBills.map((b) => (
                         <tr key={b.id} className="hover:bg-amber-50/20 transition-colors">
                           <td className="py-2 px-3 font-mono font-semibold text-stone-900">
-                            {b.order?.invoice_no}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{b.order?.invoice_no}</span>
+                              {b.manual_edit && (
+                                <span
+                                  className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-sans font-bold"
+                                  title={b.manual_edit.reason || ''}
+                                >
+                                  {t('finance.sales.editBill.editedBadge')}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2 px-3">
                             <div className="font-medium text-stone-900 truncate max-w-[130px]">
@@ -450,19 +553,46 @@ export function ForecastHistoryView() {
                             {b.classification_reason}
                           </td>
                           <td className="py-2 px-3 text-center">
-                            {b.bill_class !== 'cancelled' && (
-                              <select
-                                value={b.bill_class}
-                                disabled={reclassifyingId === b.sales_order_id}
-                                onChange={(e) => handleReclassify(b.sales_order_id, e.target.value)}
-                                className="px-2 py-0.5 border border-stone-200 rounded text-[11px] bg-white hover:border-amber-400 font-medium cursor-pointer"
-                              >
-                                <option value="normal">{t('finance.sales.markNormal') || 'Mark Normal'}</option>
-                                <option value="large_group">{t('finance.sales.markGroup') || 'Mark Group'}</option>
-                                <option value="high_value_anomaly">{t('finance.sales.markHighValue') || 'Mark High Value'}</option>
-                                <option value="data_anomaly">{t('finance.sales.markAnomaly') || 'Mark Anomaly'}</option>
-                              </select>
-                            )}
+                            <div className="inline-flex items-center gap-1.5 justify-center">
+                              {b.bill_class !== 'cancelled' && (
+                                <select
+                                  value={b.bill_class}
+                                  disabled={reclassifyingId === b.sales_order_id}
+                                  onChange={(e) => handleReclassify(b.sales_order_id, e.target.value)}
+                                  className="px-2 py-0.5 border border-stone-200 rounded text-[11px] bg-white hover:border-amber-400 font-medium cursor-pointer"
+                                >
+                                  <option value="normal">{t('finance.sales.classOptionNormal')}</option>
+                                  <option value="large_group">{t('finance.sales.classOptionGroup')}</option>
+                                  <option value="high_value_anomaly">{t('finance.sales.classOptionHighValue')}</option>
+                                  <option value="data_anomaly">{t('finance.sales.classOptionAnomaly')}</option>
+                                </select>
+                              )}
+                              {isAdmin && b.order && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingBill({
+                                      id: b.sales_order_id,
+                                      business_date: b.business_date,
+                                      invoice_no: b.order!.invoice_no,
+                                      covers_pax: b.order!.covers_pax,
+                                      status: b.bill_status,
+                                      order_type: b.order!.order_type,
+                                      area: b.order!.area,
+                                      payment_type: b.order!.payment_type ?? null,
+                                      customer_name: b.order!.customer_name,
+                                      customer_phone: b.order!.customer_phone,
+                                      net_sales: b.order!.net_sales,
+                                      manual_edit: b.manual_edit || null,
+                                    })
+                                  }
+                                  className="p-1 rounded border border-stone-200 text-stone-600 hover:text-amber-700 hover:border-amber-400 hover:bg-amber-50 transition-colors"
+                                  title={t('finance.sales.editBill.editButton')}
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -478,6 +608,18 @@ export function ForecastHistoryView() {
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <EditBillModal
+          isOpen={Boolean(editingBill)}
+          bill={editingBill}
+          onClose={() => setEditingBill(null)}
+          onSaved={async () => {
+            await fetchDayDetails(selectedDate);
+            await fetchHistory();
+          }}
+        />
+      )}
     </div>
   );
 }

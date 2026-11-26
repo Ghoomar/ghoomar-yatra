@@ -5,6 +5,7 @@ import { loadMenuMasterLookupFromDb, resolveItemCategory, normalizeItemName, isO
 import { suggestHindiName } from '@/lib/i18n/suggest-hindi';
 import { marketingError } from '@/lib/marketing/http';
 import { runAutoGradingForDate } from '@/lib/forecasting/auto-grade';
+import { reapplyManualBillEditsForDate } from '@/lib/sales/manual-bill-edits';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,8 +50,9 @@ export async function POST(request: NextRequest) {
       });
       if (error) return marketingError(error);
 
-      // Auto-grade and classify bills idempotently on ORDERS_MASTER import
+      // Re-apply Admin manual bill overrides (so re-importing CSV never erases manual fixes) before auto-grading
       try {
+        await reapplyManualBillEditsForDate(businessDate);
         await runAutoGradingForDate(supabase, businessDate);
       } catch (gradeErr) {
         console.error('Auto-grading on ORDERS_MASTER import error:', gradeErr);
@@ -290,14 +292,19 @@ export async function POST(request: NextRequest) {
 
       // Discover and register genuinely newly seen items into pos_menu_items with needs_setup: true
       if (unmappedItemsMap.size > 0) {
-        const { data: allMenuItems } = await supabase
-          .from('pos_menu_items')
-          .select('name, normalized_name, needs_setup, category');
+        const [{ data: allMenuItems }, { data: allAliases }] = await Promise.all([
+          supabase.from('pos_menu_items').select('name, normalized_name, needs_setup, category'),
+          supabase.from('pos_menu_item_aliases').select('alias, normalized_alias'),
+        ]);
 
         const existingNames = new Set((allMenuItems || []).map((e) => e.name.toLowerCase().trim()));
         const existingNorms = new Set(
           (allMenuItems || []).map((e) => e.normalized_name || normalizeItemName(e.name))
         );
+        for (const a of allAliases || []) {
+          if (a.alias) existingNames.add(a.alias.toLowerCase().trim());
+          if (a.normalized_alias) existingNorms.add(a.normalized_alias.toLowerCase().trim());
+        }
 
         const newItemsToRegister: any[] = [];
         for (const [name, price] of unmappedItemsMap.entries()) {
@@ -331,8 +338,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Auto-grade and classify bills idempotently on ITEM_ORDER_DETAILS import
+      // Re-apply Admin manual bill overrides onto newly imported items, then auto-grade idempotently
       try {
+        await reapplyManualBillEditsForDate(businessDate);
         await runAutoGradingForDate(supabase, businessDate);
       } catch (gradeErr) {
         console.error('Auto-grading on ITEM_ORDER_DETAILS import error:', gradeErr);

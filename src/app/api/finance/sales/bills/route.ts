@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 async function fetchAllRows<T = any>(queryBuilder: any): Promise<T[]> {
   const PAGE_SIZE = 1000;
@@ -188,8 +189,32 @@ export async function GET(request: NextRequest) {
       totalCovers += Number(r.covers_pax) || 0;
     });
 
+    // Attach active Admin manual edit badges cleanly
+    const rowIds = (rows || []).map((r: any) => r.id).filter(Boolean);
+    const manualEditByOrderId = new Map<string, any>();
+    if (rowIds.length > 0) {
+      try {
+        const admin = createAdminClient();
+        const { data: edits } = await admin
+          .from('sales_bill_manual_edits')
+          .select('sales_order_id, override_covers_pax, override_order_type, override_area, override_payment_type, override_customer_name, override_customer_phone, override_status, override_notes, reason, edited_at, original_snapshot_json')
+          .in('sales_order_id', rowIds)
+          .eq('is_active', true);
+        for (const e of edits || []) {
+          manualEditByOrderId.set(e.sales_order_id, e);
+        }
+      } catch {
+        // Non-blocking badge hydration fallback
+      }
+    }
+
+    const hydratedRows = (rows || []).map((r: any) => ({
+      ...r,
+      manual_edit: manualEditByOrderId.get(r.id) || null,
+    }));
+
     return NextResponse.json({
-      rows: rows || [],
+      rows: hydratedRows,
       page,
       pageSize,
       totalCount: count || 0,

@@ -292,7 +292,7 @@ export function SalesForecastView() {
               size="sm"
               variant="outline"
               onClick={() => openContextModalForDay(activeDay)}
-              className="text-xs border-stone-600 text-stone-200 hover:bg-stone-800 self-start sm:self-auto"
+              className="text-xs bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white self-start sm:self-auto"
             >
               {t('finance.sales.editContext') || 'Modify Day Context'}
             </Button>
@@ -379,7 +379,11 @@ export function SalesForecastView() {
               <div className="flex justify-between text-stone-600">
                 <span>{t('finance.sales.topDishesVolume') || 'Volume in Mapped Recipes'}:</span>
                 <span className="font-semibold text-stone-800">
-                  {Math.round(activeDay.dishes.reduce((acc, d) => acc + d.predicted_quantity, 0))} units
+                  {Math.min(
+                    Math.round(activeDay.predicted_total_units),
+                    Math.round(activeDay.dishes.reduce((acc, d) => acc + d.predicted_quantity, 0))
+                  )}{' '}
+                  units
                 </span>
               </div>
               <div className="flex justify-between text-stone-600">

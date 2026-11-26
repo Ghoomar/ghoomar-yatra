@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       supabase.from('pos_parent_categories').select('*').order('display_order', { ascending: true }),
       supabase.from('pos_categories').select('*').order('display_order', { ascending: true }),
-      supabase.from('pos_menu_items').select('*').order('name', { ascending: true }),
+      supabase.from('pos_menu_items').select('*').eq('is_active', true).order('name', { ascending: true }),
       supabase.from('pos_menu_item_aliases').select('*'),
     ]);
 

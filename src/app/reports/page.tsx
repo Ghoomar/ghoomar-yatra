@@ -131,6 +131,7 @@ export default function ReportsPage() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [directExpenses, setDirectExpenses] = useState<number>(0);
   const [electricityCost, setElectricityCost] = useState<number>(0);
+  const [canonicalDishMap, setCanonicalDishMap] = useState<Record<string, string>>({});
 
   // Historical comparative data (DoD and WoW for single-day drilldown only)
   const [prevDaySummary, setPrevDaySummary] = useState<any>(null);
@@ -219,6 +220,8 @@ async function fetchPagedRows<T = any>(
         fetch(gateUrl),
         supabase.from('expenses').select('amount').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
         supabase.from('daily_electricity_allocations').select('daily_kvah, operational_cost').gte('business_date', effectiveStartDate).lte('business_date', effectiveEndDate),
+        supabase.from('pos_menu_items').select('id, name, normalized_name, is_active').eq('is_active', true),
+        supabase.from('pos_menu_item_aliases').select('alias, normalized_alias, menu_item_id'),
       ];
 
       if (isSingleDay) {
@@ -242,6 +245,24 @@ async function fetchPagedRows<T = any>(
       const gateRes = results[7];
       const expRes = results[8];
       const elecRes = results[9];
+      const menuItemsRes = results[10];
+      const menuAliasesRes = results[11];
+
+      const normKey = (s: string) => (s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const activeById = new Map<string, string>();
+      const aliasLookup: Record<string, string> = {};
+      for (const m of menuItemsRes?.data || []) {
+        activeById.set(m.id, m.name);
+        aliasLookup[normKey(m.name)] = m.name;
+        if (m.normalized_name) aliasLookup[normKey(m.normalized_name)] = m.name;
+      }
+      for (const a of menuAliasesRes?.data || []) {
+        const target = activeById.get(a.menu_item_id);
+        if (!target) continue;
+        if (a.alias && !aliasLookup[normKey(a.alias)]) aliasLookup[normKey(a.alias)] = target;
+        if (a.normalized_alias && !aliasLookup[normKey(a.normalized_alias)]) aliasLookup[normKey(a.normalized_alias)] = target;
+      }
+      setCanonicalDishMap(aliasLookup);
 
       setDailyData(dFinRes.data || []);
       setSalesSummary(sSumRes.data || []);
@@ -264,11 +285,11 @@ async function fetchPagedRows<T = any>(
         setGateSummary(null);
       }
 
-      if (isSingleDay && results.length >= 14) {
-        const prevDaySumRes = results[10];
-        const prevWeekSumRes = results[11];
-        const prevDayGateRes = results[12];
-        const prevWeekGateRes = results[13];
+      if (isSingleDay && results.length >= 16) {
+        const prevDaySumRes = results[12];
+        const prevWeekSumRes = results[13];
+        const prevDayGateRes = results[14];
+        const prevWeekGateRes = results[15];
 
         setPrevDaySummary(prevDaySumRes?.data || null);
         setPrevWeekSummary(prevWeekSumRes?.data || null);
@@ -432,7 +453,7 @@ async function fetchPagedRows<T = any>(
     });
   }, [snacksOrders]);
 
-  // Top items sold during evening snack service from Hourly Items
+  // Top items sold during evening snack service from Hourly Items (canonicalized cleanly)
   const snacksTopItems = useMemo(() => {
     const snackKeywords = ['pakoda', 'tikki', 'tea', 'jalebi', 'golgappe', 'chaat', 'vada', 'snack', 'samosa'];
     const filtered = hourlyItems.filter((i) => {
@@ -442,17 +463,19 @@ async function fetchPagedRows<T = any>(
 
     const map = new Map<string, { name: string; qty: number; net: number; gross: number }>();
     filtered.forEach((i) => {
-      const curr = map.get(i.item_name) || { name: i.item_name, qty: 0, net: 0, gross: 0 };
+      const norm = (i.item_name || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const canonicalName = canonicalDishMap[norm] || i.item_name;
+      const curr = map.get(canonicalName) || { name: canonicalName, qty: 0, net: 0, gross: 0 };
       curr.qty += Number(i.quantity) || 0;
       curr.net += Number(i.net_sales) || 0;
       curr.gross += Number(i.total_sales) || 0;
-      map.set(i.item_name, curr);
+      map.set(canonicalName, curr);
     });
 
     return Array.from(map.values())
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-  }, [hourlyItems]);
+  }, [hourlyItems, canonicalDishMap]);
 
   // 5. Village Attractions from Petpooja Hourly Items (ONLY authoritative source)
   const parseActivityStream = (itemNamePattern: string) => {

@@ -7,6 +7,11 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { round } from '@/lib/forecasting/math';
 import { EXCLUDED_NON_RESTAURANT_ITEMS } from '@/lib/forecasting/bill-classifier';
 import { explodeDishDemandsToRawMaterials } from './bom-explosion';
+import {
+  isNonFoodOrTestDishName,
+  loadCanonicalMenuLookup,
+  resolveCanonicalDishName,
+} from '@/lib/sales/canonical-menu';
 
 export interface VarianceItem {
   item_id: string;
@@ -68,12 +73,14 @@ export async function calculateInventoryVariance(
     page++;
   }
 
-  // Aggregate dish quantities
+  const menuLookup = await loadCanonicalMenuLookup(supabase);
+
+  // Aggregate dish quantities (canonicalized so [D] / (1 FULL) / aliases roll up cleanly)
   const dishQuantities = new Map<string, number>();
   for (const line of soldLines) {
-    if (EXCLUDED_NON_RESTAURANT_ITEMS.has(line.item_name)) continue;
-    const cleanName = (line.item_name || '').trim();
-    if (!cleanName) continue;
+    if (isNonFoodOrTestDishName(line.item_name, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+    const cleanName = resolveCanonicalDishName(line.item_name, menuLookup);
+    if (!cleanName || isNonFoodOrTestDishName(cleanName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
     dishQuantities.set(cleanName, (dishQuantities.get(cleanName) || 0) + Number(line.quantity || 0));
   }
 

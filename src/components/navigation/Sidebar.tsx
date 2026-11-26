@@ -56,6 +56,7 @@ export function Sidebar({ currentRole, isOpen, onClose }: SidebarProps) {
       titleKey: 'navigation.sections.operations',
       items: [
         { href: '/operations/daily', labelKey: 'navigation.items.dailyOperations', icon: ClipboardList, permission: 'operations.daily' },
+        { href: '/finance/sales', labelKey: 'navigation.items.dailySales', icon: IndianRupee, permission: 'finance.sales' },
         { href: '/operations/gate', labelKey: 'navigation.items.gateCounter', icon: Car, permission: 'operations.gate' },
         { href: '/operations/marketing/drivers', labelKey: 'marketing.drivers', groupKey: 'marketing.title', icon: Users, permission: ['marketing.view', 'marketing.manage'] },
       ]

@@ -4,6 +4,12 @@ import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { hasPermission } from '@/lib/rbac';
 import { generateDayForecast } from '@/lib/forecasting/engine';
 import { ModelStateRow, DayContext, GroupProfile, EventType } from '@/lib/forecasting/types';
+import {
+  isNonFoodOrTestDishName,
+  loadCanonicalMenuLookup,
+  resolveCanonicalDishName,
+} from '@/lib/sales/canonical-menu';
+import { EXCLUDED_NON_RESTAURANT_ITEMS } from '@/lib/forecasting/bill-classifier';
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,16 +54,13 @@ export async function GET(request: NextRequest) {
       stateMap.set(s.day_of_week, s);
     }
 
-    // 2. Fetch Group Profiles & Event Types
-    const { data: grpProfiles } = await admin
-      .from('sales_forecast_group_profiles')
-      .select('*');
+    // 2. Fetch Group Profiles, Event Types & Canonical Menu Lookup
+    const [{ data: grpProfiles }, { data: eventTypes }, menuLookup] = await Promise.all([
+      admin.from('sales_forecast_group_profiles').select('*'),
+      admin.from('sales_forecast_event_types').select('*').eq('is_active', true),
+      loadCanonicalMenuLookup(admin),
+    ]);
     const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
-
-    const { data: eventTypes } = await admin
-      .from('sales_forecast_event_types')
-      .select('*')
-      .eq('is_active', true);
     const eventTypeMap = new Map<string, EventType>((eventTypes || []).map((e) => [e.id, e]));
 
     // 3. Fetch Day Context for the next 7 days
@@ -81,16 +84,16 @@ export async function GET(request: NextRequest) {
       contextMap.set(ctx.business_date, ctx);
     }
 
-    // 4. Generate 7-day dual-track forecast ribbon
+    // 4. Generate 7-day dual-track forecast ribbon (canonicalizing dish mix on read)
     const ribbon = forecastDates.map((dateStr) => {
       const d = new Date(dateStr + 'T00:00:00Z');
       const dow = d.getUTCDay();
       const state = stateMap.get(dow)!;
       const ctx = contextMap.get(dateStr) || null;
-      return generateDayForecast(dateStr, state, ctx, groupProfileMap);
+      return generateDayForecast(dateStr, state, ctx, groupProfileMap, menuLookup);
     });
 
-    // 5. Fetch Yesterday's Graded Scorecard
+    // 5. Fetch Yesterday's Graded Scorecard (canonicalizing stored dish arrays on read)
     const yestDate = new Date(baseDate.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const { data: yestSnapshot } = await admin
       .from('sales_forecast_snapshots')
@@ -98,13 +101,47 @@ export async function GET(request: NextRequest) {
       .eq('business_date', yestDate)
       .maybeSingle();
 
+    const canonicalizeSnapshotDishes = (rows: any[] | null | undefined, predKey: 'predicted_quantity' | 'quantity') => {
+      if (!Array.isArray(rows)) return rows;
+      const rolled = new Map<string, any>();
+      for (const r of rows) {
+        if (!r?.dish_name || isNonFoodOrTestDishName(r.dish_name, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+        const cName = resolveCanonicalDishName(r.dish_name, menuLookup);
+        if (!cName || isNonFoodOrTestDishName(cName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+        const prev = rolled.get(cName);
+        if (!prev) {
+          rolled.set(cName, { ...r, dish_name: cName });
+        } else {
+          rolled.set(cName, {
+            ...prev,
+            [predKey]: Math.round(((Number(prev[predKey]) || 0) + (Number(r[predKey]) || 0)) * 10) / 10,
+            ...(prev.implied_net_sales != null
+              ? { implied_net_sales: Math.round(((Number(prev.implied_net_sales) || 0) + (Number(r.implied_net_sales) || 0)) * 100) / 100 }
+              : {}),
+            ...(prev.net_sales != null
+              ? { net_sales: Math.round(((Number(prev.net_sales) || 0) + (Number(r.net_sales) || 0)) * 100) / 100 }
+              : {}),
+          });
+        }
+      }
+      return Array.from(rolled.values());
+    };
+
+    const hydratedScorecard = yestSnapshot
+      ? {
+          ...yestSnapshot,
+          predicted_dishes_json: canonicalizeSnapshotDishes(yestSnapshot.predicted_dishes_json, 'predicted_quantity'),
+          actual_dishes_json: canonicalizeSnapshotDishes(yestSnapshot.actual_dishes_json, 'quantity'),
+        }
+      : null;
+
     return NextResponse.json({
       success: true,
       start_date: startDateStr,
       ribbon,
       today: ribbon[0],
       tomorrow: ribbon[1],
-      yesterday_scorecard: yestSnapshot || null,
+      yesterday_scorecard: hydratedScorecard,
       event_types: eventTypes || [],
       group_profiles: grpProfiles || [],
     });

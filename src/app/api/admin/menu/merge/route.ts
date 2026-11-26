@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveCallerAuth } from '@/lib/sops/auth';
+import { runAutoGradingForDate } from '@/lib/forecasting/auto-grade';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,6 +30,12 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient();
+    const { data: sourceItemsBeforeMerge } = await admin
+      .from('pos_menu_items')
+      .select('id, name')
+      .in('id', sourceIds);
+    const sourceNames = (sourceItemsBeforeMerge || []).map((s: any) => s.name).filter(Boolean);
+
     const { data, error } = await admin.rpc('fn_merge_pos_menu_items_atomic', {
       p_target_menu_item_id: target_menu_item_id,
       p_source_menu_item_ids: sourceIds,
@@ -48,7 +55,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, result: data });
+    // Auto-regrade any snapshot dates that sold the merged source items so forecast & history roll up cleanly
+    const regradedDates: string[] = [];
+    if (sourceNames.length > 0) {
+      try {
+        const { data: affectedItemRows } = await admin
+          .from('sales_order_items')
+          .select('business_date')
+          .in('item_name', sourceNames);
+
+        const candidateDates = Array.from(
+          new Set((affectedItemRows || []).map((r: any) => r.business_date).filter(Boolean))
+        ).sort();
+
+        if (candidateDates.length > 0) {
+          const { data: existingSnaps } = await admin
+            .from('sales_forecast_snapshots')
+            .select('business_date')
+            .in('business_date', candidateDates)
+            .order('business_date', { ascending: true });
+
+          for (const snap of existingSnaps || []) {
+            await runAutoGradingForDate(admin, snap.business_date);
+            regradedDates.push(snap.business_date);
+          }
+        }
+      } catch (regradeErr) {
+        console.warn('Post-merge forecast snapshot regrade warning:', regradeErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, result: data, regraded_dates: regradedDates });
   } catch (err: any) {
     console.error('API /api/admin/menu/merge error:', err);
     return NextResponse.json({ error: err.message || 'Failed to merge menu items' }, { status: 500 });

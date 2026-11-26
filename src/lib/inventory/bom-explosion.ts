@@ -7,6 +7,11 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { round } from '@/lib/forecasting/math';
 import { EXCLUDED_NON_RESTAURANT_ITEMS } from '@/lib/forecasting/bill-classifier';
 import { convertDirectQuantity, ExplicitConversion, normalizeUnit } from '@/lib/sops/costing/units';
+import {
+  isNonFoodOrTestDishName,
+  loadCanonicalMenuLookup,
+  resolveCanonicalMenuItem,
+} from '@/lib/sales/canonical-menu';
 
 export interface DishDemandInput {
   dish_name: string;
@@ -108,8 +113,7 @@ export async function explodeDishDemandsToRawMaterials(
   dishDemands: DishDemandInput[]
 ): Promise<BomExplosionContext> {
   const [
-    menuRes,
-    aliasRes,
+    canonicalLookup,
     variantRes,
     comboRes,
     recipeRes,
@@ -117,12 +121,7 @@ export async function explodeDishDemandsToRawMaterials(
     convRes,
     invRes,
   ] = await Promise.all([
-    supabase
-      .from('pos_menu_items')
-      .select('id, name, normalized_name, canonical_dish_id'),
-    supabase
-      .from('pos_menu_item_aliases')
-      .select('alias, normalized_alias, menu_item_id'),
+    loadCanonicalMenuLookup(supabase),
     supabase
       .from('yatra_menu_item_variants')
       .select('id, menu_item_id, recipe_id, serving_quantity, serving_unit, is_default, is_active')
@@ -176,22 +175,7 @@ export async function explodeDishDemandsToRawMaterials(
     if (primary) primaryItemByGroup.set(grpId, primary);
   }
 
-  // Build POS menu item lookups (direct name, normalized name, and aliases)
-  const menuById = new Map<string, any>((menuRes.data || []).map((m: any) => [m.id, m]));
-  const nameToMenuItem = new Map<string, any>();
-
-  for (const m of (menuRes.data || [])) {
-    if (m.name) nameToMenuItem.set(normalizeLookupKey(m.name), m);
-    if (m.normalized_name) nameToMenuItem.set(normalizeLookupKey(m.normalized_name), m);
-  }
-  for (const a of (aliasRes.data || [])) {
-    const target = menuById.get(a.menu_item_id);
-    if (!target) continue;
-    if (a.alias) nameToMenuItem.set(normalizeLookupKey(a.alias), target);
-    if (a.normalized_alias) nameToMenuItem.set(normalizeLookupKey(a.normalized_alias), target);
-  }
-
-  // Variant map (menu_item_id -> preferred default variant)
+  // POS menu lookup comes from canonical active items + aliases + transitive merge logs
   const variantByMenuId = new Map<string, any>();
   for (const v of (variantRes.data || [])) {
     const existing = variantByMenuId.get(v.menu_item_id);
@@ -322,12 +306,13 @@ export async function explodeDishDemandsToRawMaterials(
   }
 
   for (const demand of dishDemands) {
-    if (EXCLUDED_NON_RESTAURANT_ITEMS.has(demand.dish_name)) continue;
+    if (isNonFoodOrTestDishName(demand.dish_name, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
     const qty = Number(demand.predicted_quantity || 0);
     if (qty <= 0) continue;
 
-    const key = normalizeLookupKey(demand.dish_name);
-    const menuItem = nameToMenuItem.get(key);
+    const menuItem = resolveCanonicalMenuItem(demand.dish_name, canonicalLookup);
+    const resolvedDishName = menuItem?.name || demand.dish_name;
+    const key = normalizeLookupKey(resolvedDishName);
 
     if (menuItem) {
       const combo = comboByMenuId.get(menuItem.id);

@@ -5,6 +5,7 @@
 
 import { BillClassificationResult, BillClass, GroupType, GroupTier, Daypart, ClassificationThresholds } from './types';
 import { isLanchoOrder, isSnacksStallOrder, isTakeawayOrder, isDineInOrder } from '@/lib/sales/business-units';
+import { isNonFoodOrTestDishName } from '@/lib/sales/canonical-menu';
 
 /**
  * 16 Excluded Non-Restaurant Outside Activities, Stalls & Event Passes
@@ -211,7 +212,7 @@ export function classifyBill(
       const q = Number(it.quantity || 0);
       const ns = Number(it.net_sales || 0);
       totalQty += q;
-      if (EXCLUDED_NON_RESTAURANT_ITEMS.has(it.item_name)) {
+      if (isNonFoodOrTestDishName(it.item_name, EXCLUDED_NON_RESTAURANT_ITEMS)) {
         outsideNet += ns;
         outsideQty += q;
       }
@@ -369,8 +370,12 @@ export function classifyBill(
   }
 
   // 3. High Value Anomaly Evaluation
-  // Dine In: spend_per_pax > spend_per_pax_anomaly_threshold
-  if (isDineIn && spendPerPax > thresholds.spend_per_pax_anomaly_threshold) {
+  // Dine In: spend_per_pax > MAX(800, dine_in_spp_p99) AND kitchen food net >= ₹2,500
+  const effectiveDineInSppThreshold = Math.max(
+    800,
+    Number(thresholds.dine_in_spp_p99 || thresholds.spend_per_pax_anomaly_threshold || 800)
+  );
+  if (isDineIn && spendPerPax > effectiveDineInSppThreshold && foodNet >= 2500) {
     return {
       sales_order_id: order.id,
       business_date: order.business_date,
@@ -390,7 +395,7 @@ export function classifyBill(
       outside_activities_qty: outsideQty,
       restaurant_food_net: foodNet,
       restaurant_food_qty: foodQty,
-      classification_reason: `Spend/PAX (₹${spendPerPax.toFixed(2)}) exceeded anomaly threshold (₹${thresholds.spend_per_pax_anomaly_threshold})`,
+      classification_reason: `Spend/PAX (₹${spendPerPax.toFixed(2)}) exceeded anomaly threshold (₹${effectiveDineInSppThreshold.toFixed(2)}) on ₹${foodNet.toFixed(0)} food bill`,
     };
   }
 
@@ -421,7 +426,18 @@ export function classifyBill(
     };
   }
 
-  // 4. Normal Bill (including normal Complimentary bills and regular walk-ins)
+  // 4. Normal Bill (including normal Complimentary bills and regular channel transactions)
+  const normalReason =
+    rawStatus === 'Complimentary'
+      ? 'Complimentary bill (₹0 revenue realized, volume retained)'
+      : isLanchoOrder(order)
+      ? 'Standard Lancho delivery order'
+      : isSnacksStallOrder(order)
+      ? 'Standard Snacks Stall order'
+      : isTakeawayOrder(order)
+      ? 'Standard Pick Up / Takeaway order'
+      : 'Standard dining transaction';
+
   return {
     sales_order_id: order.id,
     business_date: order.business_date,
@@ -441,7 +457,7 @@ export function classifyBill(
     outside_activities_qty: outsideQty,
     restaurant_food_net: foodNet,
     restaurant_food_qty: foodQty,
-    classification_reason: rawStatus === 'Complimentary' ? 'Complimentary bill (₹0 revenue realized, volume retained)' : 'Standard dining transaction',
+    classification_reason: normalReason,
   };
 }
 

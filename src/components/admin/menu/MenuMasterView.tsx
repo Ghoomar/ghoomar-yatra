@@ -663,6 +663,18 @@ export function MenuMasterView() {
                                   >
                                     <Link2 className="h-3 w-3" />
                                   </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setMergeSourceItem(it);
+                                      setMergeModalOpen(true);
+                                    }}
+                                    className="px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold inline-flex items-center gap-1 transition"
+                                    title={locale === 'hi' ? 'मौजूदा आइटम में मर्ज करें' : 'Merge into Canonical Item'}
+                                  >
+                                    <GitMerge className="h-3 w-3" />
+                                    <span className="text-[10px]">{locale === 'hi' ? 'मर्ज' : 'Merge'}</span>
+                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -771,12 +783,13 @@ export function MenuMasterView() {
                           <th className="p-3 text-center">GST Rate</th>
                           <th className="p-3">POS Aliases</th>
                           <th className="p-3 text-center">Status</th>
+                          <th className="p-3 text-center">{locale === 'hi' ? 'कार्रवाई' : 'Actions'}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-100">
                         {filteredItems.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="p-8 text-center text-stone-400 italic">
+                            <td colSpan={8} className="p-8 text-center text-stone-400 italic">
                               No menu items match your search filters.
                             </td>
                           </tr>
@@ -888,6 +901,22 @@ export function MenuMasterView() {
                                   <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-500">
                                     Inactive
                                   </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                {item.is_active && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setMergeSourceItem(item);
+                                      setMergeModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-semibold text-[11px] transition-colors"
+                                    title={locale === 'hi' ? 'मौजूदा आइटम में मर्ज करें' : 'Merge into Canonical Item'}
+                                  >
+                                    <GitMerge className="h-3 w-3" />
+                                    <span>{locale === 'hi' ? 'मर्ज' : 'Merge'}</span>
+                                  </button>
                                 )}
                               </td>
                             </tr>
@@ -1152,7 +1181,10 @@ export function MenuMasterView() {
 
       <ManualMenuMergeModal
         isOpen={mergeModalOpen}
-        onClose={() => setMergeModalOpen(false)}
+        onClose={() => {
+          setMergeModalOpen(false);
+          setMergeSourceItem(null);
+        }}
         onSuccess={loadData}
         allItems={itemsList}
         initialSourceItem={mergeSourceItem}

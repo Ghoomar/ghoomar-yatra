@@ -22,6 +22,12 @@ import {
   clamp,
 } from './math';
 import { classifyBill, associateGroupClusters, RawOrderForClassification, EXCLUDED_NON_RESTAURANT_ITEMS } from './bill-classifier';
+import {
+  CanonicalMenuLookup,
+  isNonFoodOrTestDishName,
+  resolveCanonicalDishName,
+  resolveCanonicalMenuItem,
+} from '@/lib/sales/canonical-menu';
 
 /**
  * Resolves menu item category based on canonical category or menu item patterns.
@@ -129,7 +135,8 @@ export function generateDayForecast(
   targetDate: string,
   modelState: ModelStateRow,
   context?: DayContext | null,
-  groupProfiles?: Map<string, GroupProfile>
+  groupProfiles?: Map<string, GroupProfile>,
+  menuLookup?: CanonicalMenuLookup | null
 ): DayForecastResult {
   const d = new Date(targetDate + 'T00:00:00Z');
   const dow = d.getUTCDay();
@@ -199,45 +206,92 @@ export function generateDayForecast(
       (context?.expected_guests || 0)
   );
 
-  // 4. Per-Dish and Category Forecast Explosion
+  // 4. Per-Dish and Category Forecast Explosion (canonicalized & normalized so SUM(share) === 1.0)
   const dishMix = modelState.dish_volume_mix_json || {};
   const catMix = modelState.category_volume_mix_json || {};
   const catRevMix = modelState.category_revenue_mix_json || {};
 
-  const dishes: DishPredictionItem[] = [];
-  let implied_dish_net_revenue = 0;
+  const aggregatedDishMix = new Map<
+    string,
+    { share: number; priceWeighted: number; shareWeight: number; category?: string }
+  >();
+  for (const [rawDishName, meta] of Object.entries(dishMix)) {
+    const shareVal = Math.max(0, Number(meta?.share || 0));
+    if (shareVal <= 0) continue;
+    const canonicalEntry = menuLookup ? resolveCanonicalMenuItem(rawDishName, menuLookup) : null;
+    const dishName =
+      canonicalEntry?.name ||
+      (menuLookup ? resolveCanonicalDishName(rawDishName, menuLookup) : rawDishName.trim());
+    if (!dishName || isNonFoodOrTestDishName(dishName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+    const avgPrice = Math.max(0, Number(meta?.avg_price || canonicalEntry?.price || 0));
+    const cat = resolveDishCategory(dishName, canonicalEntry?.parent_category || meta?.category);
+    const prev = aggregatedDishMix.get(dishName) || {
+      share: 0,
+      priceWeighted: 0,
+      shareWeight: 0,
+      category: cat,
+    };
+    prev.share += shareVal;
+    prev.priceWeighted += avgPrice * shareVal;
+    prev.shareWeight += shareVal;
+    if (!prev.category && cat) prev.category = cat;
+    aggregatedDishMix.set(dishName, prev);
+  }
 
-  for (const [dishName, meta] of Object.entries(dishMix)) {
-    if (EXCLUDED_NON_RESTAURANT_ITEMS.has(dishName)) continue;
-    const share = meta.share || 0;
-    const avgPrice = meta.avg_price || 0;
-    const pQty = round(predicted_total_units * share, 1);
+  const totalRawDishShare = Array.from(aggregatedDishMix.values()).reduce((sum, d) => sum + d.share, 0);
+
+  let dishes: DishPredictionItem[] = [];
+  for (const [dishName, meta] of aggregatedDishMix.entries()) {
+    const normShare = totalRawDishShare > 0 ? meta.share / totalRawDishShare : 0;
+    const avgPrice = meta.shareWeight > 0 ? meta.priceWeighted / meta.shareWeight : 0;
+    const pQty = round(predicted_total_units * normShare, 1);
     const dishNet = round(pQty * avgPrice, 2);
-    implied_dish_net_revenue += dishNet;
 
     dishes.push({
       dish_name: dishName,
-      category: resolveDishCategory(dishName, meta.category),
+      category: meta.category || resolveDishCategory(dishName, null),
       predicted_quantity: pQty,
       avg_price: round(avgPrice, 2),
       implied_net_sales: dishNet,
-      volume_share_pct: round(share * 100, 2),
+      volume_share_pct: round(normShare * 100, 2),
       qty_confidence_score: modelState.qty_confidence_score,
+    });
+  }
+
+  // Ensure rounding never inflates sum of dish predictions above predicted_total_units
+  const totalDishQty = dishes.reduce((sum, d) => sum + d.predicted_quantity, 0);
+  if (totalDishQty > predicted_total_units && totalDishQty > 0) {
+    const scale = predicted_total_units / totalDishQty;
+    dishes = dishes.map((d) => {
+      const scaledQty = Math.floor(d.predicted_quantity * scale * 10) / 10;
+      return {
+        ...d,
+        predicted_quantity: scaledQty,
+        implied_net_sales: round(scaledQty * d.avg_price, 2),
+      };
     });
   }
 
   // Sort dishes by volume descending
   dishes.sort((a, b) => b.predicted_quantity - a.predicted_quantity);
-  implied_dish_net_revenue = round(implied_dish_net_revenue, 2);
+  const implied_dish_net_revenue = round(
+    dishes.reduce((sum, d) => sum + d.implied_net_sales, 0),
+    2
+  );
   const revenue_reconciliation_delta = round(predicted_net_revenue - implied_dish_net_revenue, 2);
 
-  // Categories
+  // Categories (normalized shares)
   const categories: CategoryPredictionItem[] = [];
-  const hasCatMix = Object.keys(catMix).length > 0;
+  const catVolSum = Object.values(catMix).reduce((sum, v) => sum + Math.max(0, Number(v || 0)), 0);
+  const catRevSum = Object.values(catRevMix).reduce((sum, v) => sum + Math.max(0, Number(v || 0)), 0);
+  const hasCatMix = catVolSum > 0;
   if (hasCatMix) {
-    for (const [catName, volShare] of Object.entries(catMix)) {
+    for (const [catName, rawVolShare] of Object.entries(catMix)) {
+      const volShare = Math.max(0, Number(rawVolShare || 0)) / catVolSum;
+      if (volShare <= 0) continue;
       const pUnits = round(predicted_total_units * volShare, 1);
-      const rShare = catRevMix[catName] || volShare;
+      const rawRev = Math.max(0, Number(catRevMix[catName] ?? rawVolShare ?? 0));
+      const rShare = catRevSum > 0 ? rawRev / catRevSum : volShare;
       const pRev = round(predicted_net_revenue * rShare, 2);
       categories.push({
         category: catName,
@@ -317,7 +371,8 @@ export function gradeDaySnapshot(
   snapshot: DayForecastResult,
   classifications: BillClassificationResult[],
   rawOrders: RawOrderForClassification[],
-  priorModelState: ModelStateRow
+  priorModelState: ModelStateRow,
+  menuLookup?: CanonicalMenuLookup | null
 ): {
   graded: GradedSnapshotRecord;
   updatedModelState: ModelStateRow;
@@ -337,6 +392,7 @@ export function gradeDaySnapshot(
   let decomp_complimentary_menu_value = 0;
 
   let actual_net_revenue = 0;
+  let total_petpooja_net_revenue = 0;
   let actual_gross_revenue = 0;
   let actual_orders = 0;
   let actual_pax = 0;
@@ -376,21 +432,24 @@ export function gradeDaySnapshot(
     actual_orders += 1;
     actual_pax += b.bill_pax;
 
-    // Realized Net Revenue:
-    // Complimentary orders contribute ₹0.00 realized revenue to match daily summary to the exact rupee
+    // Realized Kitchen Food Net Revenue vs Total Petpooja Net Revenue
     const realizedBillNet = isComplimentary ? 0 : b.bill_net_amount;
     const foodNet = isComplimentary ? 0 : b.restaurant_food_net;
+    const outsideNet = isComplimentary ? 0 : b.outside_activities_net;
     const foodQty = b.restaurant_food_qty;
 
-    actual_net_revenue += realizedBillNet;
-    actual_gross_revenue += isComplimentary ? 0 : Number(raw?.gross_amount || realizedBillNet);
+    actual_net_revenue += foodNet;
+    total_petpooja_net_revenue += realizedBillNet;
+    actual_gross_revenue += isComplimentary
+      ? 0
+      : Math.max(0, Number(raw?.gross_amount || realizedBillNet) - outsideNet);
 
     if (isComplimentary) {
       decomp_complimentary_menu_value += b.bill_net_amount;
     }
 
     // Decomposition breakdown
-    decomp_outside_activities_net += isComplimentary ? 0 : b.outside_activities_net;
+    decomp_outside_activities_net += outsideNet;
 
     if (b.bill_class === 'normal') {
       decomp_normal_net += foodNet;
@@ -422,27 +481,33 @@ export function gradeDaySnapshot(
       groupMixByType.set(gType, gCur);
     }
 
-    // Daypart breakdown
+    // Daypart breakdown (Kitchen Food Revenue & Units only)
     const dp = b.daypart || 'lunch';
     if (dayparts[dp]) {
-      dayparts[dp].net += realizedBillNet;
-      dayparts[dp].units += b.restaurant_food_qty + b.outside_activities_qty;
+      dayparts[dp].net += foodNet;
+      dayparts[dp].units += foodQty;
       dayparts[dp].orders += 1;
       dayparts[dp].pax += b.bill_pax;
     }
 
-    // Collect dish and category units (complimentary dishes ARE preserved in volume!)
+    // Collect dish and category units (canonicalized; complimentary dishes ARE preserved in volume!)
     if (raw?.items && raw.items.length > 0) {
       for (const it of raw.items) {
-        if (EXCLUDED_NON_RESTAURANT_ITEMS.has(it.item_name)) continue;
+        if (isNonFoodOrTestDishName(it.item_name, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+        const canonicalEntry = menuLookup ? resolveCanonicalMenuItem(it.item_name, menuLookup) : null;
+        const dishName =
+          canonicalEntry?.name ||
+          (menuLookup ? resolveCanonicalDishName(it.item_name, menuLookup) : (it.item_name || '').trim());
+        if (!dishName || isNonFoodOrTestDishName(dishName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+
         const q = Number(it.quantity || 0);
         const ns = isComplimentary ? 0 : Number(it.net_sales || 0);
-        const cat = resolveDishCategory(it.item_name, it.parent_category);
+        const cat = resolveDishCategory(dishName, canonicalEntry?.parent_category || it.parent_category);
 
-        const curD = actualDishesMap.get(it.item_name) || { qty: 0, net: 0, category: cat };
+        const curD = actualDishesMap.get(dishName) || { qty: 0, net: 0, category: cat };
         curD.qty += q;
         curD.net += ns;
-        actualDishesMap.set(it.item_name, curD);
+        actualDishesMap.set(dishName, curD);
 
         const curC = actualCategoriesMap.get(cat) || { qty: 0, net: 0 };
         curC.qty += q;
@@ -451,10 +516,10 @@ export function gradeDaySnapshot(
 
         // Strictly isolate normal bill dishes for recurring weekday mixes
         if (b.bill_class === 'normal') {
-          const curND = normalDishesMap.get(it.item_name) || { qty: 0, net: 0, category: cat };
+          const curND = normalDishesMap.get(dishName) || { qty: 0, net: 0, category: cat };
           curND.qty += q;
           curND.net += ns;
-          normalDishesMap.set(it.item_name, curND);
+          normalDishesMap.set(dishName, curND);
 
           const curNC = normalCategoriesMap.get(cat) || { qty: 0, net: 0 };
           curNC.qty += q;
@@ -464,7 +529,7 @@ export function gradeDaySnapshot(
           const gType = b.group_type || 'standard_group';
           const gCur = groupMixByType.get(gType);
           if (gCur) {
-            gCur.dishes[it.item_name] = (gCur.dishes[it.item_name] || 0) + q;
+            gCur.dishes[dishName] = (gCur.dishes[dishName] || 0) + q;
           }
         }
       }
@@ -473,6 +538,7 @@ export function gradeDaySnapshot(
 
   // Round metrics
   actual_net_revenue = round(actual_net_revenue, 2);
+  total_petpooja_net_revenue = round(total_petpooja_net_revenue, 2);
   actual_gross_revenue = round(actual_gross_revenue, 2);
   const actual_discount_amount = round(Math.max(0, actual_gross_revenue - actual_net_revenue), 2);
   decomp_normal_net = round(decomp_normal_net, 2);
@@ -487,11 +553,20 @@ export function gradeDaySnapshot(
     2
   );
 
-  // 2. Compute Independent Track Errors
+  // 2. Compute Independent Track EWMA Learning Updates (comparing Normal Actual vs Normal Predicted)
+  const normalPredictedRev = Math.max(
+    1,
+    round(snapshot.predicted_net_revenue - (snapshot.additive_group_revenue || 0), 2)
+  );
+  const normalPredictedUnits = Math.max(
+    1,
+    round(snapshot.predicted_total_units - (snapshot.additive_group_units || 0), 2)
+  );
+
   // Revenue Track Update
   const revUpdate = computeTrackUpdate({
     baseline: priorModelState.rev_baseline_net,
-    predicted: snapshot.predicted_net_revenue,
+    predicted: normalPredictedRev,
     actual_normal: decomp_normal_net,
     actual_total: actual_net_revenue,
     prior_smoothed_signed_error: priorModelState.rev_smoothed_signed_error,
@@ -503,7 +578,7 @@ export function gradeDaySnapshot(
   // Quantity Track Update
   const qtyUpdate = computeTrackUpdate({
     baseline: priorModelState.qty_baseline_total_units,
-    predicted: snapshot.predicted_total_units,
+    predicted: normalPredictedUnits,
     actual_normal: decomp_normal_units,
     actual_total: actual_total_units,
     prior_smoothed_signed_error: priorModelState.qty_smoothed_signed_error,
@@ -512,12 +587,28 @@ export function gradeDaySnapshot(
     prior_error_std: priorModelState.qty_error_std,
   });
 
+  // Headline Error Metrics (strictly consistent with Displayed Actual vs Displayed Predicted)
+  const headline_signed_rev_error = round(actual_net_revenue - snapshot.predicted_net_revenue, 2);
+  const headline_signed_rev_error_pct = round(
+    (headline_signed_rev_error / Math.max(1, snapshot.predicted_net_revenue)) * 100,
+    2
+  );
+  const headline_abs_rev_error_pct = round(Math.abs(headline_signed_rev_error_pct), 2);
+
+  const headline_signed_unit_error = round(actual_total_units - snapshot.predicted_total_units, 2);
+  const headline_signed_unit_error_pct = round(
+    (headline_signed_unit_error / Math.max(1, snapshot.predicted_total_units)) * 100,
+    2
+  );
+
   // Dish WAPE calculation
-  const actualDishesList = Array.from(actualDishesMap.entries()).map(([name, d]) => ({
-    dish_name: name,
-    quantity: round(d.qty, 1),
-    net_sales: round(d.net, 2),
-  }));
+  const actualDishesList = Array.from(actualDishesMap.entries())
+    .map(([name, d]) => ({
+      dish_name: name,
+      quantity: round(d.qty, 1),
+      net_sales: round(d.net, 2),
+    }))
+    .sort((a, b) => b.quantity - a.quantity);
   const dish_wape = computeDishWape(snapshot.dishes, actualDishesList);
 
   // Categories list
@@ -550,9 +641,9 @@ export function gradeDaySnapshot(
     actual_net_revenue,
     actual_gross_revenue,
     actual_discount_amount,
-    signed_rev_error: revUpdate.error,
-    signed_rev_error_pct: revUpdate.signed_error_pct,
-    abs_rev_error_pct: revUpdate.abs_error_pct,
+    signed_rev_error: headline_signed_rev_error,
+    signed_rev_error_pct: headline_signed_rev_error_pct,
+    abs_rev_error_pct: headline_abs_rev_error_pct,
     rev_confidence_score: revUpdate.confidence_score,
     rev_alpha_used: revUpdate.adaptive_alpha,
     rev_bias_correction_used: revUpdate.applied_bias_pct,
@@ -564,8 +655,8 @@ export function gradeDaySnapshot(
     actual_total_units,
     actual_orders,
     actual_pax,
-    signed_unit_error: qtyUpdate.error,
-    signed_unit_error_pct: qtyUpdate.signed_error_pct,
+    signed_unit_error: headline_signed_unit_error,
+    signed_unit_error_pct: headline_signed_unit_error_pct,
     pax_signed_error,
     dish_wape,
     qty_confidence_score: qtyUpdate.confidence_score,
@@ -605,39 +696,136 @@ export function gradeDaySnapshot(
       qty_alpha: qtyUpdate.adaptive_alpha,
       rev_applied_bias_pct: revUpdate.applied_bias_pct,
       qty_applied_bias_pct: qtyUpdate.applied_bias_pct,
+      rev_baseline_before: round(priorModelState.rev_baseline_net, 2),
+      rev_baseline_after: revUpdate.updated_baseline,
+      rev_normal_predicted: normalPredictedRev,
+      rev_normal_actual: decomp_normal_net,
+      rev_normal_error_pct: revUpdate.signed_error_pct,
+      rev_outlier_dampened: revUpdate.was_outlier_dampened,
+      qty_baseline_before: round(priorModelState.qty_baseline_total_units, 2),
+      qty_baseline_after: qtyUpdate.updated_baseline,
+      qty_normal_predicted: normalPredictedUnits,
+      qty_normal_actual: decomp_normal_units,
+      qty_normal_error_pct: qtyUpdate.signed_error_pct,
+      qty_outlier_dampened: qtyUpdate.was_outlier_dampened,
+      total_petpooja_net_revenue,
+      outside_activities_net_excluded: decomp_outside_activities_net,
     },
     graded_at: new Date().toISOString(),
   };
 
   // 4. Update Model State for this day of week STRICTLY using bill_class === 'normal' mixes
-  // (Never let large_group School Picnic or anomalous bills pollute normal recurring weekday forecasts)
-  const updatedCatVolMix = { ...(priorModelState.category_volume_mix_json || {}) };
-  const updatedCatRevMix = { ...(priorModelState.category_revenue_mix_json || {}) };
-  if (decomp_normal_units > 0 && decomp_normal_net > 0) {
-    for (const [catName, c] of normalCategoriesMap.entries()) {
-      const volShare = c.qty / decomp_normal_units;
-      const revShare = c.net / decomp_normal_net;
-      const priorVolShare = updatedCatVolMix[catName] || 0;
-      const priorRevShare = updatedCatRevMix[catName] || 0;
-      updatedCatVolMix[catName] = round(0.15 * volShare + 0.85 * priorVolShare, 4);
-      updatedCatRevMix[catName] = round(0.15 * revShare + 0.85 * priorRevShare, 4);
+  // Decay ALL existing priors by 0.85 so absent dishes/categories fade proportionally and normalize sums to 1.0
+  const decayAndNormalizeScalarMix = (
+    priorMix: Record<string, number> | undefined,
+    observedEntries: Array<[string, number]>,
+    shouldDecay: boolean
+  ): Record<string, number> => {
+    const acc = new Map<string, number>();
+    for (const [k, v] of Object.entries(priorMix || {})) {
+      const val = Math.max(0, Number(v || 0));
+      if (val <= 0) continue;
+      acc.set(k, shouldDecay ? val * 0.85 : val);
+    }
+    if (shouldDecay) {
+      for (const [k, obs] of observedEntries) {
+        acc.set(k, (acc.get(k) || 0) + 0.15 * Math.max(0, obs));
+      }
+    }
+    const total = Array.from(acc.values()).reduce((s, v) => s + v, 0);
+    const out: Record<string, number> = {};
+    if (total > 0) {
+      for (const [k, v] of acc.entries()) {
+        const norm = v / total;
+        if (norm >= 0.0001) {
+          out[k] = round(norm, 6);
+        }
+      }
+    }
+    return out;
+  };
+
+  const hasNormalUnits = decomp_normal_units > 0;
+  const hasNormalNet = decomp_normal_net > 0;
+  const updatedCatVolMix = decayAndNormalizeScalarMix(
+    priorModelState.category_volume_mix_json,
+    hasNormalUnits
+      ? Array.from(normalCategoriesMap.entries()).map(([cat, c]) => [cat, c.qty / decomp_normal_units])
+      : [],
+    hasNormalUnits
+  );
+  const updatedCatRevMix = decayAndNormalizeScalarMix(
+    priorModelState.category_revenue_mix_json,
+    hasNormalNet
+      ? Array.from(normalCategoriesMap.entries()).map(([cat, c]) => [cat, c.net / decomp_normal_net])
+      : [],
+    hasNormalNet
+  );
+
+  // Update & canonicalize dish mix strictly from normalDishesMap (decaying ALL prior dishes by 0.85 & normalizing SUM === 1.0)
+  const dishMixAcc = new Map<
+    string,
+    { share: number; avgPrice: number; category?: string }
+  >();
+
+  for (const [rawDish, priorMeta] of Object.entries(priorModelState.dish_volume_mix_json || {})) {
+    const canonicalEntry = menuLookup ? resolveCanonicalMenuItem(rawDish, menuLookup) : null;
+    const dishName =
+      canonicalEntry?.name ||
+      (menuLookup ? resolveCanonicalDishName(rawDish, menuLookup) : rawDish.trim());
+    if (!dishName || isNonFoodOrTestDishName(dishName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
+    const priorShare = Math.max(0, Number(priorMeta?.share || 0));
+    if (priorShare <= 0) continue;
+    const decayed = hasNormalUnits ? priorShare * 0.85 : priorShare;
+    const prev = dishMixAcc.get(dishName);
+    const pPrice = Number(priorMeta?.avg_price || canonicalEntry?.price || 150);
+    const pCat = resolveDishCategory(dishName, canonicalEntry?.parent_category || priorMeta?.category);
+    if (!prev) {
+      dishMixAcc.set(dishName, { share: decayed, avgPrice: pPrice, category: pCat });
+    } else {
+      const combinedShare = prev.share + decayed;
+      const weightedPrice =
+        combinedShare > 0
+          ? (prev.avgPrice * prev.share + pPrice * decayed) / combinedShare
+          : pPrice;
+      dishMixAcc.set(dishName, { share: combinedShare, avgPrice: weightedPrice, category: pCat || prev.category });
     }
   }
 
-  // Update dish mix strictly from normalDishesMap with EWMA (0.15 fresh / 0.85 persistent)
-  const updatedDishMix = { ...(priorModelState.dish_volume_mix_json || {}) };
-  if (decomp_normal_units > 0) {
+  if (hasNormalUnits) {
     for (const [dishName, d] of normalDishesMap.entries()) {
-      if (EXCLUDED_NON_RESTAURANT_ITEMS.has(dishName)) continue;
+      if (isNonFoodOrTestDishName(dishName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
       const observedShare = d.qty / decomp_normal_units;
-      const priorShare = updatedDishMix[dishName]?.share || 0;
-      const newShare = 0.15 * observedShare + 0.85 * priorShare;
-      const avgPrice = d.qty > 0 ? d.net / d.qty : (updatedDishMix[dishName]?.avg_price || 150);
-      updatedDishMix[dishName] = {
-        share: round(newShare, 4),
-        avg_price: round(avgPrice, 2),
-        category: d.category,
-      };
+      const obsPrice = d.qty > 0 ? d.net / d.qty : 150;
+      const prev = dishMixAcc.get(dishName);
+      if (!prev) {
+        dishMixAcc.set(dishName, {
+          share: 0.15 * observedShare,
+          avgPrice: obsPrice,
+          category: d.category,
+        });
+      } else {
+        dishMixAcc.set(dishName, {
+          share: prev.share + 0.15 * observedShare,
+          avgPrice: d.qty > 0 ? 0.15 * obsPrice + 0.85 * prev.avgPrice : prev.avgPrice,
+          category: d.category || prev.category,
+        });
+      }
+    }
+  }
+
+  const totalDishShare = Array.from(dishMixAcc.values()).reduce((s, d) => s + d.share, 0);
+  const updatedDishMix: Record<string, { share: number; avg_price: number; category?: string }> = {};
+  if (totalDishShare > 0) {
+    for (const [dishName, d] of dishMixAcc.entries()) {
+      const normShare = d.share / totalDishShare;
+      if (normShare >= 0.0001) {
+        updatedDishMix[dishName] = {
+          share: round(normShare, 6),
+          avg_price: round(d.avgPrice, 2),
+          category: d.category,
+        };
+      }
     }
   }
 
@@ -716,14 +904,24 @@ export function mergeGroupProfileUpdates(
 
     const newMix: Record<string, number> = { ...(existing.typical_dish_mix_json || {}) };
     if (delta.units > 0) {
-      // Decay prior entries slightly when blending new observations
+      // Decay prior entries slightly when blending new observations and normalize sum to 1.0
       for (const k of Object.keys(newMix)) {
-        newMix[k] = round(newMix[k] * (1 - alpha), 4);
+        if (isNonFoodOrTestDishName(k, EXCLUDED_NON_RESTAURANT_ITEMS)) {
+          delete newMix[k];
+          continue;
+        }
+        newMix[k] = Math.max(0, Number(newMix[k] || 0)) * (1 - alpha);
       }
       for (const [dishName, qty] of Object.entries(delta.dishes)) {
-        if (EXCLUDED_NON_RESTAURANT_ITEMS.has(dishName)) continue;
+        if (isNonFoodOrTestDishName(dishName, EXCLUDED_NON_RESTAURANT_ITEMS)) continue;
         const obsShare = qty / delta.units;
-        newMix[dishName] = round((newMix[dishName] || 0) + alpha * obsShare, 4);
+        newMix[dishName] = (newMix[dishName] || 0) + alpha * obsShare;
+      }
+      const mixTotal = Object.values(newMix).reduce((s, v) => s + v, 0);
+      if (mixTotal > 0) {
+        for (const k of Object.keys(newMix)) {
+          newMix[k] = round(newMix[k] / mixTotal, 6);
+        }
       }
     }
 

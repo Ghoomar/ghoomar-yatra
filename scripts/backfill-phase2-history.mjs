@@ -10,6 +10,7 @@ import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import { DEFAULT_THRESHOLDS, classifyBill, associateGroupClusters } from '../src/lib/forecasting/bill-classifier.ts';
 import { generateDayForecast, gradeDaySnapshot, mergeGroupProfileUpdates } from '../src/lib/forecasting/engine.ts';
+import { loadCanonicalMenuLookup } from '../src/lib/sales/canonical-menu.ts';
 
 const env = fs.readFileSync('.env.local', 'utf8');
 const getEnv = (name) => env.split('\n').find(l => l.startsWith(`${name}=`))?.split('=').slice(1).join('=').trim() || '';
@@ -96,14 +97,15 @@ async function run() {
     .map((o) => Number(o.net_sales || 0) / Math.max(1, Number(o.covers_pax)))
     .sort((a, b) => a - b);
 
+  const computedSppP99 = round(percentile(sppSorted, 0.99) || 840.7, 2);
   const thresholds = {
     ...DEFAULT_THRESHOLDS,
     dine_in_pax_p95: round(percentile(paxSorted, 0.95) || 7.0, 2),
     dine_in_pax_p99: round(percentile(paxSorted, 0.99) || 10.0, 2),
     dine_in_spp_p95: round(percentile(sppSorted, 0.95) || 553.54, 2),
-    dine_in_spp_p99: round(percentile(sppSorted, 0.99) || 840.7, 2),
+    dine_in_spp_p99: computedSppP99,
     pax_large_group_threshold: 20,
-    spend_per_pax_anomaly_threshold: 750.0,
+    spend_per_pax_anomaly_threshold: Math.max(800, computedSppP99),
     bill_net_sales_anomaly_threshold: 10000.0,
     iqr_multiplier: 2.5,
     trained_on_bills_count: dineInOrders.length || 4948,
@@ -114,6 +116,12 @@ async function run() {
     (max, o) => (toDateStr(o.business_date) > max ? toDateStr(o.business_date) : max),
     '2026-11-22'
   );
+
+  // Deduplicate thresholds table cleanly to a single authoritative learned row
+  await supabase
+    .from('sales_bill_classification_thresholds')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000');
 
   await supabase.from('sales_bill_classification_thresholds').insert({
     effective_date: latestDate,
@@ -127,6 +135,10 @@ async function run() {
     iqr_multiplier: thresholds.iqr_multiplier,
     trained_on_bills_count: thresholds.trained_on_bills_count,
   });
+
+  // Load authoritative canonical menu lookup (post-merge active catalog + aliases)
+  const menuLookup = await loadCanonicalMenuLookup(supabase);
+  console.log(`📚 Loaded canonical menu lookup (${menuLookup.activeItems.length} active items).`);
 
   // 3. Group orders and items by date
   const itemsByDateInvoice = new Map();
@@ -279,12 +291,13 @@ async function run() {
     const dayContext = dayContextMap.get(bDate) || null;
     const curState = modelStateMap.get(dow);
 
-    const forecast = generateDayForecast(bDate, curState, dayContext, groupProfilesMap);
+    const forecast = generateDayForecast(bDate, curState, dayContext, groupProfilesMap, menuLookup);
     const { graded, updatedModelState, groupMixUpdates } = gradeDaySnapshot(
       forecast,
       finalClassifications,
       rawOrders,
-      curState
+      curState,
+      menuLookup
     );
 
     if (groupMixUpdates && groupMixUpdates.length > 0) {
@@ -361,7 +374,8 @@ async function run() {
     .eq('business_date', '2026-11-17')
     .single();
   console.log('\n🔎 2026-11-17 Verification:');
-  console.log(`  Actual Net Revenue: ₹${r17.actual_net_revenue} (Expected: ₹91521.87)`);
+  console.log(`  Kitchen Food Net Revenue: ₹${r17.actual_net_revenue}, Outside Act: ₹${r17.decomp_outside_activities_net}`);
+  console.log(`  Petpooja Total Net (food+outside): ₹${r17.learning_summary_json?.total_petpooja_net_revenue} (Expected: ₹91521.87)`);
   console.log(`  Complimentary Menu Value: ₹${r17.decomp_complimentary_menu_value}`);
   console.log(`  Group Net: ₹${r17.decomp_group_net}, Normal Net: ₹${r17.decomp_normal_net}`);
 

@@ -153,6 +153,7 @@ export async function GET(request: NextRequest) {
       admin
         .from('pos_menu_items')
         .select('*')
+        .eq('is_active', true)
         .order('name'),
       admin
         .from('yatra_menu_item_variants')

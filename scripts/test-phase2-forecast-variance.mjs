@@ -79,12 +79,19 @@ async function runTests() {
 
     assert(Boolean(nov17), 'Nov 17, 2026 snapshot exists');
     if (nov17) {
-      const nov17ActualRev = Number(nov17.actual_net_revenue);
+      const nov17FoodRev = Number(nov17.actual_net_revenue);
+      const nov17OutsideRev = Number(nov17.decomp_outside_activities_net || 0);
+      const nov17PetpoojaTotal = Number(
+        nov17.learning_summary_json?.total_petpooja_net_revenue ?? (nov17FoodRev + nov17OutsideRev)
+      );
       const nov17CompMenuVal = Number(nov17.decomp_complimentary_menu_value);
       const nov17ActualPax = Number(nov17.actual_pax);
       const nov17BillsCount = Number(nov17.actual_orders);
 
-      assert(nov17ActualRev === 91521.87, `Nov 17 realized net revenue is exactly ₹91,521.87 (actual: ₹${nov17ActualRev})`);
+      assert(
+        Math.abs(nov17PetpoojaTotal - 91521.87) < 0.05 && Math.abs((nov17FoodRev + nov17OutsideRev) - 91521.87) < 0.05,
+        `Nov 17 Kitchen Food (₹${nov17FoodRev}) + Outside Act (₹${nov17OutsideRev}) reconciles exactly to ₹91,521.87`
+      );
       assert(nov17CompMenuVal === 4844.85, `Nov 17 complimentary menu value tracked at ₹4,844.85 (actual: ₹${nov17CompMenuVal})`);
       assert(nov17ActualPax === 321, `Nov 17 total PAX preserved in quantity track is 321 (318 success + 3 comp, actual: ${nov17ActualPax})`);
       assert(nov17BillsCount === 73, `Nov 17 total orders preserved in quantity track is 73 (71 success + 2 comp, actual: ${nov17BillsCount})`);
@@ -116,7 +123,8 @@ async function runTests() {
 
     assert(Boolean(nov10Snap), 'Nov 10, 2026 snapshot exists');
     if (nov10Snap) {
-      assert(Number(nov10Snap.actual_net_revenue) === 64146.00, `Nov 10 realized net revenue is ₹64,146.00 with ₹0 comp revenue (actual: ₹${nov10Snap.actual_net_revenue})`);
+      const nov10TotalReconciled = Math.round((Number(nov10Snap.actual_net_revenue) + Number(nov10Snap.decomp_outside_activities_net || 0)) * 100) / 100;
+      assert(nov10TotalReconciled === 64146.00, `Nov 10 Kitchen Food + Outside reconciled revenue is ₹64,146.00 with ₹0 comp revenue (actual: ₹${nov10TotalReconciled})`);
       assert(Number(nov10Snap.decomp_complimentary_menu_value) === 595.00, `Nov 10 complimentary menu value is ₹595.00 (actual: ₹${nov10Snap.decomp_complimentary_menu_value})`);
       assert(Number(nov10Snap.actual_orders) === 63, `Nov 10 total orders preserved is 63 (actual: ${nov10Snap.actual_orders})`);
       assert(Number(nov10Snap.actual_pax) === 221, `Nov 10 total PAX preserved is 221 (actual: ${nov10Snap.actual_pax})`);
@@ -196,11 +204,18 @@ async function runTests() {
       const nov14HighValNet = Number(nov14.decomp_high_value_net || 0);
       const nov14AnomalyNet = Number(nov14.decomp_data_anomaly_net || 0);
       const nov14OutsideNet = Number(nov14.decomp_outside_activities_net);
-      const decomposedSum = nov14GroupNet + nov14NormalNet + nov14HighValNet + nov14AnomalyNet + nov14OutsideNet;
+      const nov14FoodSum = nov14GroupNet + nov14NormalNet + nov14HighValNet + nov14AnomalyNet;
+      const nov14PetpoojaTotal = Number(
+        nov14.learning_summary_json?.total_petpooja_net_revenue ?? (nov14TotalNet + nov14OutsideNet)
+      );
 
       assert(
-        Math.abs(decomposedSum - nov14TotalNet) < 0.05,
-        `Nov 14 decomposition reconciles exactly: Group (₹${nov14GroupNet}) + Normal (₹${nov14NormalNet}) + HighVal (₹${nov14HighValNet}) + Anomaly (₹${nov14AnomalyNet}) + Outside (₹${nov14OutsideNet}) = Total (₹${nov14TotalNet})`
+        Math.abs(nov14FoodSum - nov14TotalNet) < 0.05,
+        `Nov 14 Kitchen Food decomposition reconciles exactly: Group (₹${nov14GroupNet}) + Normal (₹${nov14NormalNet}) + HighVal (₹${nov14HighValNet}) + Anomaly (₹${nov14AnomalyNet}) = Food Actual (₹${nov14TotalNet})`
+      );
+      assert(
+        Math.abs((nov14TotalNet + nov14OutsideNet) - nov14PetpoojaTotal) < 0.05,
+        `Nov 14 Kitchen Food + Outside Activities (₹${nov14OutsideNet}) reconciles to Petpooja Total (₹${nov14PetpoojaTotal})`
       );
     }
 
@@ -457,6 +472,126 @@ async function runTests() {
     );
     const skRes = await getVariance(skReq);
     assert(skRes.status === 403, `Storekeeper GET /api/inventory/variance strictly returns 403 Forbidden (actual: ${skRes.status})`);
+
+    // ----------------------------------------------------
+    // TEST 15: Bill #8228 Override, Threshold Deduplication & Channel Reasons
+    // ----------------------------------------------------
+    console.log('\nTest 15: Bill #8228 PAX=12 Normal, #2014 Anomaly, Thresholds & Channel Reasons');
+    const [{ data: b8228Order }, { data: b8228Class }, { data: b8228Edit }, { data: b8228Items }, { count: threshCnt }] =
+      await Promise.all([
+        supabase.from('sales_orders').select('id, covers_pax').eq('id', '7404e3dc-7791-4933-92e4-b958e1bdd3fc').single(),
+        supabase.from('sales_bill_classifications').select('bill_class, bill_pax, bill_apc').eq('sales_order_id', '7404e3dc-7791-4933-92e4-b958e1bdd3fc').single(),
+        supabase.from('sales_bill_manual_edits').select('override_covers_pax, is_active').eq('sales_order_id', '7404e3dc-7791-4933-92e4-b958e1bdd3fc').eq('is_active', true).maybeSingle(),
+        supabase.from('sales_order_items').select('covers').eq('business_date', '2026-11-25').eq('invoice_no', '8228'),
+        supabase.from('sales_bill_classification_thresholds').select('*', { count: 'exact', head: true }),
+      ]);
+
+    assert(b8228Order?.covers_pax === 12, `Bill #8228 covers_pax is 12 in sales_orders (actual: ${b8228Order?.covers_pax})`);
+    assert(b8228Edit?.override_covers_pax === 12 && b8228Edit?.is_active === true, 'Bill #8228 has active sales_bill_manual_edits override = 12');
+    assert(b8228Class?.bill_class === 'normal' && b8228Class?.bill_pax === 12, `Bill #8228 re-classified as normal at 12 PAX / ₹${b8228Class?.bill_apc} APC`);
+    assert((b8228Items || []).length > 0 && (b8228Items || []).every((i) => i.covers === 12), 'All Bill #8228 sales_order_items synced to covers = 12');
+    assert(threshCnt === 1, `sales_bill_classification_thresholds deduplicated to 1 clean row (actual: ${threshCnt})`);
+
+    const { PATCH: patchBill } = await import('../src/app/api/finance/sales/bills/[id]/route.ts');
+    const nonAdminPatchReq = new NextRequest(
+      'http://localhost:3000/api/finance/sales/bills/7404e3dc-7791-4933-92e4-b958e1bdd3fc',
+      {
+        method: 'PATCH',
+        headers: { 'x-test-user-id': STOREKEEPER_USER_ID, 'content-type': 'application/json' },
+        body: JSON.stringify({ covers_pax: 10, reason: 'Unauthorized attempt' }),
+      }
+    );
+    const nonAdminPatchRes = await patchBill(nonAdminPatchReq, {
+      params: Promise.resolve({ id: '7404e3dc-7791-4933-92e4-b958e1bdd3fc' }),
+    });
+    assert(nonAdminPatchRes.status === 403, `Non-Admin PATCH /api/finance/sales/bills/[id] returns 403 Forbidden (actual: ${nonAdminPatchRes.status})`);
+
+    // ----------------------------------------------------
+    // TEST 16: Canonical Menu Merge Integrity & 5-Dal / Chilli Potato Rules
+    // ----------------------------------------------------
+    console.log('\nTest 16: Menu Merge Integrity, Canonical Rollup & Preserved Distinctions');
+    const [
+      { count: activeNsCount },
+      { data: activeDItems },
+      { data: keyItems },
+      { data: aliasesCheck },
+      { data: rpcSales },
+    ] = await Promise.all([
+      supabase.from('pos_menu_items').select('*', { count: 'exact', head: true }).eq('is_active', true).eq('needs_setup', true),
+      supabase.from('pos_menu_items').select('name').eq('is_active', true).ilike('name', '%[d]%'),
+      supabase.from('pos_menu_items').select('id, name, is_active, needs_setup').in('name', [
+        'Yellow Dal Fry', 'Yellow Dal Takda', 'Dal Makhani', 'Punjabi Dal Tadka', 'Dhaba Dal Tadka',
+        'Chilli Potato', 'Honey Chilli Potato', 'Gondpak Halwa', 'Premium Thali', 'Jodhpuri Gatte Ri Sabzi', 'Buttermilk',
+      ]),
+      supabase.from('pos_menu_item_aliases').select('alias, menu_item:pos_menu_items!pos_menu_item_aliases_menu_item_id_fkey(name)'),
+      supabase.rpc('get_menu_sales_aggregation', { p_date_from: null, p_date_to: null, p_channel: 'ALL' }),
+    ]);
+
+    assert(activeNsCount === 0, `Active needs_setup count is 0 (actual: ${activeNsCount})`);
+    assert((activeDItems || []).length === 0, `Active [D] items count is 0 (actual: ${(activeDItems || []).length})`);
+
+    const activeNamesSet = new Set((keyItems || []).filter((i) => i.is_active && !i.needs_setup).map((i) => i.name));
+    assert(
+      ['Yellow Dal Fry', 'Yellow Dal Takda', 'Dal Makhani', 'Punjabi Dal Tadka', 'Dhaba Dal Tadka'].every((n) => activeNamesSet.has(n)),
+      'All 5 distinct Dals preserved active with needs_setup = false'
+    );
+    assert(
+      activeNamesSet.has('Chilli Potato') && activeNamesSet.has('Honey Chilli Potato'),
+      'Chilli Potato and Honey Chilli Potato preserved as distinct active items'
+    );
+
+    const aliasMapCheck = new Map((aliasesCheck || []).map((a) => [a.alias, a.menu_item?.name]));
+    assert(aliasMapCheck.get('Halwa') === 'Gondpak Halwa', `Halwa alias resolves to Gondpak Halwa (actual: ${aliasMapCheck.get('Halwa')})`);
+    assert(
+      aliasMapCheck.get('Punjabi Premium Thali') === 'Premium Thali' &&
+      aliasMapCheck.get('Yatra Premium Thali') === 'Premium Thali',
+      'Punjabi Premium Thali & Yatra Premium Thali resolve cleanly to Premium Thali'
+    );
+
+    const buttermilkRow = (keyItems || []).find((i) => i.name === 'Buttermilk');
+    const rpcById = new Map((rpcSales || []).map((r) => [r.menu_item_id, r]));
+    const buttermilkSales = buttermilkRow ? rpcById.get(buttermilkRow.id) : null;
+    assert(Boolean(buttermilkSales) && Number(buttermilkSales.units_sold) > 0, `get_menu_sales_aggregation rolls up Buttermilk cleanly (units: ${buttermilkSales?.units_sold})`);
+
+    const gattaRow = (keyItems || []).find((i) => i.name === 'Jodhpuri Gatte Ri Sabzi');
+    const { data: gattaVariants } = gattaRow
+      ? await supabase.from('yatra_menu_item_variants').select('id, is_active').eq('menu_item_id', gattaRow.id)
+      : { data: [] };
+    assert((gattaVariants || []).length > 0, 'Jodhpuri Gatte Ri Sabzi owns moved Gatta Curry recipe variant');
+
+    // ----------------------------------------------------
+    // TEST 17: Normalized Dish Mix, Headline Sign Parity & Mapped Volume Cap
+    // ----------------------------------------------------
+    console.log('\nTest 17: Normalized Dish Shares, Sign Parity & Mapped Volume <= Predicted Total Units');
+    const { generateDayForecast } = await import('../src/lib/forecasting/engine.ts');
+    const { data: fullModelStates } = await supabase.from('sales_forecast_model_state').select('*');
+
+    let badMixSum = false;
+    let badForecastCap = false;
+    let leakedDishName = false;
+    for (const ms of fullModelStates || []) {
+      const sharesSum = Object.values(ms.dish_volume_mix_json || {}).reduce((acc, v) => acc + Number(v?.share || 0), 0);
+      if (sharesSum > 1.01 || sharesSum < 0.98) badMixSum = true;
+      if (Object.keys(ms.dish_volume_mix_json || {}).some((k) => /\s*\[d\]$/i.test(k) || /^test item$/i.test(k))) {
+        leakedDishName = true;
+      }
+      const fc = generateDayForecast('2026-11-26', ms, null, undefined, null);
+      const mappedQtySum = fc.dishes.reduce((acc, d) => acc + Number(d.predicted_quantity || 0), 0);
+      if (mappedQtySum > fc.predicted_total_units + 0.05) badForecastCap = true;
+    }
+    assert(!badMixSum, 'All 7 DOW dish_volume_mix_json share sums normalized cleanly to ~1.00');
+    assert(!leakedDishName, 'Zero [D] or Test Item entries present in dish_volume_mix_json');
+    assert(!badForecastCap, 'SUM(dishes.predicted_quantity) <= predicted_total_units on all 7 DOWs');
+
+    const { data: snapParityRows } = await supabase
+      .from('sales_forecast_snapshots')
+      .select('business_date, predicted_net_revenue, actual_net_revenue, signed_rev_error, predicted_total_units, actual_total_units, signed_unit_error');
+    const signMismatch = (snapParityRows || []).filter((s) => {
+      const revDiff = Number(s.actual_net_revenue || 0) - Number(s.predicted_net_revenue || 0);
+      const unitDiff = Number(s.actual_total_units || 0) - Number(s.predicted_total_units || 0);
+      return Math.abs(revDiff - Number(s.signed_rev_error || 0)) > 0.1 || Math.abs(unitDiff - Number(s.signed_unit_error || 0)) > 0.2;
+    });
+    assert(signMismatch.length === 0, `100% of ${totalDistinctDates} snapshots have headline signed_rev_error & signed_unit_error matching Displayed Actual - Predicted`);
   } catch (err) {
     console.error('Test execution error:', err);
     failedTests++;

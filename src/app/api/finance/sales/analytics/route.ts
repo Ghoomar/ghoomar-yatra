@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { HourlyCategoryDataPoint, SalesAnalyticsResponse } from '@/lib/types/sales';
 import { getOrderBusinessUnit } from '@/lib/sales/business-units';
+import { loadCanonicalMenuLookup, resolveCanonicalMenuItem } from '@/lib/sales/canonical-menu';
 
 async function fetchAllRows<T = any>(queryBuilder: any): Promise<T[]> {
   const PAGE_SIZE = 1000;
@@ -67,13 +68,15 @@ export async function GET(request: NextRequest) {
       { data: dbParents },
       { data: dbCats },
       { data: allMenu },
+      canonicalMenu,
       reconRes,
       execRes,
       { data: itemDateRows },
     ] = await Promise.all([
       supabase.from('pos_parent_categories').select('name, name_hi, color').order('display_order'),
       supabase.from('pos_categories').select('name, name_hi').order('display_order'),
-      supabase.from('pos_menu_items').select('parent_category, category, name').order('name'),
+      supabase.from('pos_menu_items').select('parent_category, category, name').eq('is_active', true).order('name'),
+      loadCanonicalMenuLookup(supabase),
       supabase
         .from('daily_sales_reconciliation')
         .select('*')
@@ -201,9 +204,6 @@ export async function GET(request: NextRequest) {
         .lte('business_date', endDate)
         .eq('status', 'Success');
 
-      if (parentCategoryFilter) itemQuery = itemQuery.eq('parent_category', parentCategoryFilter);
-      if (categoryFilter) itemQuery = itemQuery.eq('category', categoryFilter);
-      if (itemFilter) itemQuery = itemQuery.ilike('item_name', `%${itemFilter}%`);
       if (captainFilter) itemQuery = itemQuery.eq('captain_name', captainFilter);
       if (paymentTypeFilter) itemQuery = itemQuery.eq('payment_type', paymentTypeFilter);
       if (orderTypeFilter) {
@@ -220,7 +220,28 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      detailedItems = await fetchAllRows(itemQuery);
+      const rawDetailedItems = await fetchAllRows(itemQuery);
+      detailedItems = rawDetailedItems.map((it: any) => {
+        const canonical = resolveCanonicalMenuItem(it.item_name, canonicalMenu);
+        if (!canonical) return it;
+        return {
+          ...it,
+          item_name: canonical.name,
+          parent_category: canonical.parent_category,
+          category: canonical.category,
+        };
+      });
+
+      if (parentCategoryFilter) {
+        detailedItems = detailedItems.filter((it) => it.parent_category === parentCategoryFilter);
+      }
+      if (categoryFilter) {
+        detailedItems = detailedItems.filter((it) => it.category === categoryFilter);
+      }
+      if (itemFilter) {
+        const needle = itemFilter.toLowerCase();
+        detailedItems = detailedItems.filter((it) => (it.item_name || '').toLowerCase().includes(needle));
+      }
     }
 
     // 2. Fetch legacy orders and hourly items for dates NOT in detailedDates
@@ -229,15 +250,11 @@ export async function GET(request: NextRequest) {
     const isSingleDayCovered = startDate === endDate && detailedDates.has(startDate);
 
     if (!isSingleDayCovered) {
-      let hourlyQuery = supabase
+      const hourlyQuery = supabase
         .from('sales_hourly_items')
         .select('*')
         .gte('business_date', startDate)
         .lte('business_date', endDate);
-
-      if (parentCategoryFilter) hourlyQuery = hourlyQuery.eq('parent_category', parentCategoryFilter);
-      if (categoryFilter) hourlyQuery = hourlyQuery.eq('category', categoryFilter);
-      if (itemFilter) hourlyQuery = hourlyQuery.ilike('item_name', `%${itemFilter}%`);
 
       let ordersQuery = supabase
         .from('sales_orders')
@@ -268,7 +285,29 @@ export async function GET(request: NextRequest) {
       ]);
 
       legacyOrders = allOrderRows.filter((o) => !detailedDates.has(o.business_date));
-      legacyHourly = allHourlyRows.filter((h) => !detailedDates.has(h.business_date));
+      legacyHourly = allHourlyRows
+        .filter((h) => !detailedDates.has(h.business_date))
+        .map((h: any) => {
+          const canonical = resolveCanonicalMenuItem(h.item_name, canonicalMenu);
+          if (!canonical) return h;
+          return {
+            ...h,
+            item_name: canonical.name,
+            parent_category: canonical.parent_category,
+            category: canonical.category,
+          };
+        });
+
+      if (parentCategoryFilter) {
+        legacyHourly = legacyHourly.filter((h) => h.parent_category === parentCategoryFilter);
+      }
+      if (categoryFilter) {
+        legacyHourly = legacyHourly.filter((h) => h.category === categoryFilter);
+      }
+      if (itemFilter) {
+        const needle = itemFilter.toLowerCase();
+        legacyHourly = legacyHourly.filter((h) => (h.item_name || '').toLowerCase().includes(needle));
+      }
     }
 
     // Compute Executive KPIs

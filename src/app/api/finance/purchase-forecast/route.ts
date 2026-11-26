@@ -4,6 +4,7 @@ import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { generateDayForecast } from '@/lib/forecasting/engine';
 import { explodeBomDemands } from '@/lib/inventory/bom-explosion';
 import { GroupProfile } from '@/lib/forecasting/types';
+import { loadCanonicalMenuLookup } from '@/lib/sales/canonical-menu';
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,13 +53,14 @@ export async function GET(request: NextRequest) {
       .eq('business_date', targetDate)
       .maybeSingle();
 
-    const { data: grpProfiles } = await admin
-      .from('sales_forecast_group_profiles')
-      .select('*');
+    const [{ data: grpProfiles }, menuLookup] = await Promise.all([
+      admin.from('sales_forecast_group_profiles').select('*'),
+      loadCanonicalMenuLookup(admin),
+    ]);
     const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
 
     // 3. Generate Day Forecast
-    const forecast = generateDayForecast(targetDate, modelState, dayContext, groupProfileMap);
+    const forecast = generateDayForecast(targetDate, modelState, dayContext, groupProfileMap, menuLookup);
 
     // 4. Extract Dish Demands and Explode BOM
     const dishDemands = forecast.dishes.map((dish) => ({

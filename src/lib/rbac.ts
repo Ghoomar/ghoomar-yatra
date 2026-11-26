@@ -159,6 +159,7 @@ export interface LandingPageOption {
 export const LANDING_PAGE_OPTIONS: LandingPageOption[] = [
   { route: '/dashboard', labelKey: 'navigation.items.dashboard', requiredPermission: 'dashboard.view', module: 'dashboard' },
   { route: '/operations/daily', labelKey: 'navigation.items.dailyOperations', requiredPermission: 'operations.daily', module: 'operations' },
+  { route: '/finance/sales', labelKey: 'navigation.items.dailySales', requiredPermission: 'finance.sales', module: 'finance' },
   { route: '/operations/gate', labelKey: 'navigation.items.gateCounter', requiredPermission: 'operations.gate', module: 'operations' },
   { route: '/finance/purchases', labelKey: 'navigation.items.purchases', requiredPermission: 'finance.purchases', module: 'finance' },
   { route: '/finance/expenses', labelKey: 'navigation.items.expenses', requiredPermission: 'finance.expenses', module: 'finance' },

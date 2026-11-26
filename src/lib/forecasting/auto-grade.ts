@@ -4,9 +4,15 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { classifyBill, associateGroupClusters, RawOrderForClassification } from './bill-classifier';
+import {
+  classifyBill,
+  associateGroupClusters,
+  DEFAULT_THRESHOLDS,
+  RawOrderForClassification,
+} from './bill-classifier';
 import { generateDayForecast, gradeDaySnapshot, mergeGroupProfileUpdates } from './engine';
 import { ModelStateRow, GroupProfile } from './types';
+import { loadCanonicalMenuLookup } from '@/lib/sales/canonical-menu';
 
 export async function runAutoGradingForDate(supabase: SupabaseClient, businessDate: string): Promise<void> {
   // 1. Fetch raw sales orders for this date
@@ -35,11 +41,23 @@ export async function runAutoGradingForDate(supabase: SupabaseClient, businessDa
     items: itemsByInvoice.get(o.invoice_no) || [],
   }));
 
-  // 3. Check for existing manual overrides
-  const { data: existingClassifications } = await supabase
-    .from('sales_bill_classifications')
-    .select('sales_order_id, bill_class, is_manually_overridden, manager_override_notes')
-    .eq('business_date', businessDate);
+  // 3. Check for existing manual overrides + latest learned classification thresholds + canonical menu
+  const [{ data: existingClassifications }, { data: thresholdRow }, menuLookup] = await Promise.all([
+    supabase
+      .from('sales_bill_classifications')
+      .select('sales_order_id, bill_class, is_manually_overridden, manager_override_notes')
+      .eq('business_date', businessDate),
+    supabase
+      .from('sales_bill_classification_thresholds')
+      .select('*')
+      .order('effective_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    loadCanonicalMenuLookup(supabase),
+  ]);
+
+  const activeThresholds = thresholdRow || DEFAULT_THRESHOLDS;
 
   const manualOverrides = new Map<string, { bill_class: any; notes: string | null }>();
   for (const c of (existingClassifications || [])) {
@@ -50,7 +68,7 @@ export async function runAutoGradingForDate(supabase: SupabaseClient, businessDa
 
   // 4. Classify individual bills
   const baseClassifications = fullOrders.map((ord) => {
-    const res = classifyBill(ord);
+    const res = classifyBill(ord, activeThresholds);
     const manual = manualOverrides.get(ord.id);
     if (manual) {
       res.bill_class = manual.bill_class;
@@ -118,12 +136,13 @@ export async function runAutoGradingForDate(supabase: SupabaseClient, businessDa
     .select('*');
   const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
 
-  const forecast = generateDayForecast(businessDate, modelState, dayContext, groupProfileMap);
+  const forecast = generateDayForecast(businessDate, modelState, dayContext, groupProfileMap, menuLookup);
   const { graded, updatedModelState, groupMixUpdates } = gradeDaySnapshot(
     forecast,
     finalClassifications,
     fullOrders,
-    modelState
+    modelState,
+    menuLookup
   );
 
   await supabase.from('sales_forecast_snapshots').upsert(

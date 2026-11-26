@@ -512,8 +512,18 @@ export async function reconcileNeedsSetupItems(supabase: any): Promise<{
         })
         .ilike('item_name', item.name.trim());
 
-      // 3. Delete redundant item from pos_menu_items
-      await supabase.from('pos_menu_items').delete().eq('id', item.id);
+      // 3. Delete redundant item from pos_menu_items (soft-deactivate safely if FK-referenced)
+      const { error: delErr } = await supabase.from('pos_menu_items').delete().eq('id', item.id);
+      if (delErr) {
+        await supabase
+          .from('pos_menu_items')
+          .update({
+            is_active: false,
+            needs_setup: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', item.id);
+      }
 
       reconciledItems.push({
         sourceName: item.name,

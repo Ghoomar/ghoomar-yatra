@@ -12,6 +12,8 @@ import { getCategoryColor, getCategoryBadgeClasses } from '@/lib/constants/categ
 import { getOrderBusinessUnit } from '@/lib/sales/business-units';
 import { HourlyCategoryStackedBarChart } from './HourlyCategoryStackedBarChart';
 import { SalesReconciliationBanner } from './SalesReconciliationBanner';
+import { EditBillModal, EditableBillData } from './EditBillModal';
+import { useAppRole } from '@/components/layout/AppShell';
 import {
   TrendingUp,
   Receipt,
@@ -28,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Edit2,
 } from 'lucide-react';
 
 export interface SalesAnalyticsDashboardProps {
@@ -70,6 +73,9 @@ export function SalesAnalyticsDashboard({
   onSelectDate,
 }: SalesAnalyticsDashboardProps) {
   const { t, locale } = useI18n();
+  const { role } = useAppRole();
+  const isAdmin = role === 'Admin';
+  const [editingBill, setEditingBill] = useState<EditableBillData | null>(null);
   const todayIST = getTodayBusinessDate();
   const currentYearMonth = todayIST.substring(0, 7);
 
@@ -1125,19 +1131,20 @@ export function SalesAnalyticsDashboard({
                       <th className="p-2.5 text-right">{t('finance.sales.analytics.tables.colTaxes')}</th>
                       <th className="p-2.5 text-right">{t('finance.sales.analytics.kpis.grandTotal')}</th>
                       <th className="p-2.5 text-center">{t('common.status')}</th>
+                      {isAdmin && <th className="p-2.5 text-center">{t('finance.sales.action')}</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {billsLoading ? (
                       <tr>
-                        <td colSpan={13} className="p-10 text-center text-stone-400">
+                        <td colSpan={isAdmin ? 14 : 13} className="p-10 text-center text-stone-400">
                           <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-500" />
                           {t('finance.sales.analytics.pagination.loadingBills')}
                         </td>
                       </tr>
                     ) : bills.length === 0 ? (
                       <tr>
-                        <td colSpan={13} className="p-8 text-center text-stone-400">
+                        <td colSpan={isAdmin ? 14 : 13} className="p-8 text-center text-stone-400">
                           {t('finance.sales.analytics.tables.noData')}
                         </td>
                       </tr>
@@ -1167,7 +1174,17 @@ export function SalesAnalyticsDashboard({
                         return (
                           <tr key={bill.id} className="hover:bg-stone-50/70 transition-colors">
                             <td className="p-2.5 font-bold text-stone-900 font-mono">
-                              #{bill.invoice_no}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span>#{bill.invoice_no}</span>
+                                {bill.manual_edit && (
+                                  <span
+                                    className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-sans font-bold"
+                                    title={bill.manual_edit.reason || ''}
+                                  >
+                                    {t('finance.sales.editBill.editedBadge')}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="p-2.5 text-stone-500 whitespace-nowrap">
                               {timeStr}
@@ -1249,6 +1266,33 @@ export function SalesAnalyticsDashboard({
                                 {bill.status}
                               </Badge>
                             </td>
+                            {isAdmin && (
+                              <td className="p-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingBill({
+                                      id: bill.id,
+                                      business_date: bill.business_date,
+                                      invoice_no: bill.invoice_no,
+                                      covers_pax: bill.covers_pax ?? 1,
+                                      status: bill.status,
+                                      order_type: bill.order_type || null,
+                                      area: bill.area || null,
+                                      payment_type: bill.payment_type || null,
+                                      customer_name: bill.customer_name || null,
+                                      customer_phone: bill.customer_phone || null,
+                                      net_sales: Number(bill.net_sales || 0),
+                                      manual_edit: bill.manual_edit || null,
+                                    })
+                                  }
+                                  className="inline-flex items-center justify-center p-1.5 rounded border border-stone-200 text-stone-600 hover:text-amber-700 hover:border-amber-400 hover:bg-amber-50 transition-colors"
+                                  title={t('finance.sales.editBill.editButton')}
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })
@@ -1270,6 +1314,7 @@ export function SalesAnalyticsDashboard({
                           {formatINR(billsTotalGrand)}
                         </td>
                         <td></td>
+                        {isAdmin && <td></td>}
                       </tr>
                     </tfoot>
                   )}
@@ -1332,6 +1377,17 @@ export function SalesAnalyticsDashboard({
           )}
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <EditBillModal
+          isOpen={Boolean(editingBill)}
+          bill={editingBill}
+          onClose={() => setEditingBill(null)}
+          onSaved={async () => {
+            await Promise.all([loadBills(), loadAnalytics()]);
+          }}
+        />
+      )}
     </div>
   );
 }
