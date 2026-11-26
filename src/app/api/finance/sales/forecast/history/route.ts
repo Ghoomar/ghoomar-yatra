@@ -1,25 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { hasPermission } from '@/lib/rbac';
 import { gradeDaySnapshot, generateDayForecast } from '@/lib/forecasting/engine';
-import { ModelStateRow, GroupProfile } from '@/lib/forecasting/types';
+import { GroupProfile } from '@/lib/forecasting/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
+    }
+
+    const canViewHistory =
+      auth.isAdmin ||
+      hasPermission(auth.roleName, auth.permissionCodes, 'finance.sales') ||
+      hasPermission(auth.roleName, auth.permissionCodes, 'reports.view');
+
+    if (!canViewHistory) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
+    }
+
+    const admin = createAdminClient();
     const searchParams = request.nextUrl.searchParams;
     const requestedDate = searchParams.get('date');
     const limit = parseInt(searchParams.get('limit') || '90', 10);
 
     // If specific date requested -> return snapshot + all classified bills for that date ("Why This Day Happened")
     if (requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
-      const { data: snapshot } = await supabase
+      const { data: snapshot } = await admin
         .from('sales_forecast_snapshots')
         .select('*')
         .eq('business_date', requestedDate)
         .maybeSingle();
 
-      const { data: bills, error: billsErr } = await supabase
+      const { data: bills, error: billsErr } = await admin
         .from('sales_bill_classifications')
         .select(`
           id, sales_order_id, business_date, primary_table_no, bill_status, bill_class,
@@ -40,7 +55,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: billsErr.message }, { status: 500 });
       }
 
-      const { data: context } = await supabase
+      const { data: context } = await admin
         .from('sales_forecast_day_context')
         .select('*, event_type:sales_forecast_event_types(*)')
         .eq('business_date', requestedDate)
@@ -56,7 +71,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Otherwise return historical snapshots list
-    const { data: snapshots, error: snapErr } = await supabase
+    const { data: snapshots, error: snapErr } = await admin
       .from('sales_forecast_snapshots')
       .select('*')
       .order('business_date', { ascending: false })
@@ -115,27 +130,16 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
     }
 
-    // Verify RBAC
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role:roles(name), role_permissions(permission:permissions(code))')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    const userRole = (profile?.role as any)?.name;
-    const userPermissions = (profile?.role_permissions || []).map((rp: any) => rp?.permission?.code).filter(Boolean);
-
-    if (!hasPermission(userRole, userPermissions, 'finance.sales') && userRole !== 'Admin') {
+    if (!auth.isAdmin && !hasPermission(auth.roleName, auth.permissionCodes, 'finance.sales')) {
       return NextResponse.json({ error: 'Forbidden: Insufficient permissions to reclassify bills' }, { status: 403 });
     }
 
+    const admin = createAdminClient();
     const body = await request.json();
     const { sales_order_id, bill_class, manager_override_notes } = body;
 
@@ -149,7 +153,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Update bill classification
-    const { data: updatedBill, error: updateErr } = await supabase
+    const { data: updatedBill, error: updateErr } = await admin
       .from('sales_bill_classifications')
       .update({
         bill_class,
@@ -168,21 +172,20 @@ export async function POST(request: NextRequest) {
     const businessDate = updatedBill.business_date;
 
     // 2. Retrospectively re-grade snapshot for that business date
-    // Fetch all classifications for this business date
-    const { data: allDateBills } = await supabase
+    const { data: allDateBills } = await admin
       .from('sales_bill_classifications')
       .select('*')
       .eq('business_date', businessDate);
 
     // Fetch raw orders with items for this date
-    const { data: rawOrders } = await supabase
+    const { data: rawOrders } = await admin
       .from('sales_orders')
       .select('id, business_date, invoice_no, order_timestamp, hour_of_day, status, order_type, area, payment_type, customer_name, customer_phone, covers_pax, net_sales, gross_amount')
       .eq('business_date', businessDate);
 
-    const { data: rawItems } = await supabase
+    const { data: rawItems } = await admin
       .from('sales_order_items')
-      .select('invoice_no, item_name, quantity, net_sales, table_no, status')
+      .select('invoice_no, item_name, parent_category, quantity, net_sales, table_no, status')
       .eq('business_date', businessDate);
 
     const itemsByInvoice = new Map<string, any[]>();
@@ -201,19 +204,19 @@ export async function POST(request: NextRequest) {
     const d = new Date(businessDate + 'T00:00:00Z');
     const dow = d.getUTCDay();
 
-    const { data: modelState } = await supabase
+    const { data: modelState } = await admin
       .from('sales_forecast_model_state')
       .select('*')
       .eq('day_of_week', dow)
       .single();
 
-    const { data: dayContext } = await supabase
+    const { data: dayContext } = await admin
       .from('sales_forecast_day_context')
       .select('*, event_type:sales_forecast_event_types(*)')
       .eq('business_date', businessDate)
       .maybeSingle();
 
-    const { data: grpProfiles } = await supabase
+    const { data: grpProfiles } = await admin
       .from('sales_forecast_group_profiles')
       .select('*');
     const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
@@ -222,16 +225,14 @@ export async function POST(request: NextRequest) {
       const forecast = generateDayForecast(businessDate, modelState, dayContext, groupProfileMap);
       const { graded, updatedModelState } = gradeDaySnapshot(forecast, allDateBills || [], fullRawOrders, modelState);
 
-      // Upsert graded snapshot
-      await supabase
+      await admin
         .from('sales_forecast_snapshots')
         .upsert({
           ...graded,
           snapshot_source: 'live_freeze',
         }, { onConflict: 'business_date' });
 
-      // Update model state
-      await supabase
+      await admin
         .from('sales_forecast_model_state')
         .update(updatedModelState)
         .eq('day_of_week', dow);

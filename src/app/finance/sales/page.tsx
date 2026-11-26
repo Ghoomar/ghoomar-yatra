@@ -24,11 +24,12 @@ function SalesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const rawTab = searchParams.get('tab') || searchParams.get('view');
+  const rawTab = searchParams.get('view') || searchParams.get('tab');
   const activeTab: SalesTab = rawTab === 'history' ? 'history' : rawTab === 'import' ? 'import' : 'forecast';
 
   const setTab = (tab: SalesTab) => {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete('view');
     params.set('tab', tab);
     router.replace(`/finance/sales?${params.toString()}`);
   };

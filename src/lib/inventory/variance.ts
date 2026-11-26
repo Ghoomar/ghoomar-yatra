@@ -6,6 +6,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { round } from '@/lib/forecasting/math';
 import { EXCLUDED_NON_RESTAURANT_ITEMS } from '@/lib/forecasting/bill-classifier';
+import { explodeDishDemandsToRawMaterials } from './bom-explosion';
 
 export interface VarianceItem {
   item_id: string;
@@ -18,6 +19,7 @@ export interface VarianceItem {
   variance_qty: number;
   variance_pct: number;
   status: 'favorable' | 'unfavorable' | 'aligned';
+  count_status: 'verified' | 'count_pending' | 'movement_logged';
   unit_cost?: number;
   variance_cost?: number;
 }
@@ -30,6 +32,7 @@ export interface VarianceReport {
   unfavorable_count: number;
   favorable_count: number;
   aligned_count: number;
+  count_pending_count: number;
   total_variance_cost?: number;
   items: VarianceItem[];
 }
@@ -44,185 +47,167 @@ export async function calculateInventoryVariance(
   mode: 'movement_based' | 'count_bounded' = 'movement_based',
   canViewCosts: boolean = false
 ): Promise<VarianceReport> {
-  // 1. Fetch Sales Items sold during the date range
-  // Exclude Cancelled, preserve Success and Complimentary
-  const { data: soldLines } = await supabase
-    .from('sales_order_items')
-    .select('item_name, quantity, status')
-    .gte('business_date', startDate)
-    .lte('business_date', endDate)
-    .neq('status', 'Cancelled');
+  // 1. Fetch Sales Items sold during the date range (exclude Cancelled, preserve Success & Complimentary)
+  // Note: handle pagination if large range (>1000 rows) cleanly in chunks or single high-limit read
+  let soldLines: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('sales_order_items')
+      .select('item_name, quantity, status')
+      .gte('business_date', startDate)
+      .lte('business_date', endDate)
+      .neq('status', 'Cancelled')
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    soldLines = soldLines.concat(data);
+    if (data.length < pageSize) break;
+    page++;
+  }
 
   // Aggregate dish quantities
   const dishQuantities = new Map<string, number>();
-  for (const line of (soldLines || [])) {
+  for (const line of soldLines) {
     if (EXCLUDED_NON_RESTAURANT_ITEMS.has(line.item_name)) continue;
-    const cleanName = line.item_name.trim();
+    const cleanName = (line.item_name || '').trim();
+    if (!cleanName) continue;
     dishQuantities.set(cleanName, (dishQuantities.get(cleanName) || 0) + Number(line.quantity || 0));
   }
 
-  // 2. Explode Dish Quantities into Theoretical Raw Material Demand
-  const { data: menuItems } = await supabase
-    .from('pos_menu_items')
-    .select('id, name, normalized_name, canonical_dish_id')
-    .not('canonical_dish_id', 'is', null);
+  const dishDemands = Array.from(dishQuantities.entries()).map(([dish_name, predicted_quantity]) => ({
+    dish_name,
+    predicted_quantity,
+  }));
 
-  const { data: formulations } = await supabase
-    .from('yatra_recipe_formulations')
-    .select('id, canonical_dish_id, batch_yield_quantity, batch_yield_unit, is_active')
-    .eq('is_active', true);
+  // 2. Explode Dish Quantities through shared 4-tier DAG engine
+  const { rawDemands: theoreticalDemandMap, invItemMap } = await explodeDishDemandsToRawMaterials(
+    supabase,
+    dishDemands
+  );
 
-  const { data: ingredients } = await supabase
-    .from('yatra_recipe_formulation_ingredients')
-    .select('*');
+  // 3. Fetch logged issues & wastage (used in movement_based AND as honest fallback when count_bounded lacks closing count)
+  const loggedUsageMap = new Map<string, number>();
 
-  const { data: invItems } = await supabase
-    .from('inventory_items')
-    .select(`
-      id, item_code, name, category_id, current_stock, current_weighted_average_cost,
-      unit:units!inventory_items_unit_id_fkey(symbol),
-      category:inventory_categories!inventory_items_category_id_fkey(name)
-    `)
-    .eq('is_active', true);
-
-  const invItemMap = new Map<string, any>((invItems || []).map((i: any) => [i.id, i]));
-
-  const nameToCanonical = new Map<string, string>();
-  for (const m of (menuItems || [])) {
-    if (m.canonical_dish_id) {
-      nameToCanonical.set(m.name.toLowerCase().trim(), m.canonical_dish_id);
-      if (m.normalized_name) {
-        nameToCanonical.set(m.normalized_name.toLowerCase().trim(), m.canonical_dish_id);
-      }
-    }
-  }
-
-  const dishToFormulation = new Map<string, any>();
-  const formulationMap = new Map<string, any>();
-  for (const f of (formulations || [])) {
-    dishToFormulation.set(f.canonical_dish_id, f);
-    formulationMap.set(f.id, f);
-  }
-
-  const formulationIngredients = new Map<string, any[]>();
-  for (const ing of (ingredients || [])) {
-    const list = formulationIngredients.get(ing.formulation_id) || [];
-    list.push(ing);
-    formulationIngredients.set(ing.formulation_id, list);
-  }
-
-  const theoreticalDemandMap = new Map<string, number>();
-
-  function explodeFormulation(formulationId: string, requiredUnits: number, depth: number = 0) {
-    if (depth > 4) return;
-    const f = formulationMap.get(formulationId);
-    if (!f) return;
-
-    const yieldQty = Math.max(1, f.batch_yield_quantity || 1);
-    const scale = requiredUnits / yieldQty;
-
-    const ings = formulationIngredients.get(formulationId) || [];
-    for (const ing of ings) {
-      const ingQty = Number(ing.quantity || 0) * scale;
-      if (ing.ingredient_type === 'RAW_MATERIAL') {
-        const itemId = ing.inventory_item_id;
-        if (itemId) {
-          theoreticalDemandMap.set(itemId, (theoreticalDemandMap.get(itemId) || 0) + ingQty);
-        }
-      } else if (ing.ingredient_type === 'PREPARATION') {
-        const subFormId = ing.sub_preparation_formulation_id ||
-          (ing.sub_preparation_dish_id ? dishToFormulation.get(ing.sub_preparation_dish_id)?.id : null);
-        if (subFormId) {
-          explodeFormulation(subFormId, ingQty, depth + 1);
-        }
-      }
-    }
-  }
-
-  for (const [dishName, qty] of dishQuantities.entries()) {
-    const clean = dishName.toLowerCase().trim();
-    const canId = nameToCanonical.get(clean);
-    const form = canId ? dishToFormulation.get(canId) : null;
-    if (form) {
-      explodeFormulation(form.id, qty, 1);
-    }
-  }
-
-  // 3. Fetch Actual Consumption based on mode
-  const actualConsumptionMap = new Map<string, number>();
-
-  if (mode === 'count_bounded') {
-    // Mode A: Count-Bounded mode
-    // Actual Consumption = Opening Stock + Inward Purchases - Closing Stock
-    const { data: movements } = await supabase
-      .from('stock_movements')
-      .select('item_id, movement_type, quantity, business_date')
+  const [{ data: issues }, { data: usageMovements }] = await Promise.all([
+    supabase
+      .from('consumption_issues')
+      .select('business_date, items:consumption_issue_items(item_id, quantity)')
       .gte('business_date', startDate)
-      .lte('business_date', endDate);
-
-    const purchaseMap = new Map<string, number>();
-    const countMap = new Map<string, { earliest: number; latest: number }>();
-
-    for (const mov of (movements || [])) {
-      const q = Number(mov.quantity || 0);
-      if (mov.movement_type === 'purchase') {
-        purchaseMap.set(mov.item_id, (purchaseMap.get(mov.item_id) || 0) + q);
-      } else if (mov.movement_type === 'count_adjustment') {
-        const cur = countMap.get(mov.item_id) || { earliest: q, latest: q };
-        cur.latest = q;
-        countMap.set(mov.item_id, cur);
-      }
-    }
-
-    for (const itemId of theoreticalDemandMap.keys()) {
-      const p = purchaseMap.get(itemId) || 0;
-      const c = countMap.get(itemId);
-      if (c) {
-        // Consumption = Opening + Purchases - Closing
-        const consumed = Math.max(0, c.earliest + p - c.latest);
-        actualConsumptionMap.set(itemId, consumed);
-      } else if (p > 0) {
-        // If purchases occurred without counts, consumption matches theoretical capped by purchases
-        const theo = theoreticalDemandMap.get(itemId) || 0;
-        actualConsumptionMap.set(itemId, Math.min(theo, p));
-      }
-    }
-  } else {
-    // Mode B: Movement-Based mode
-    // Actual Consumption = Store Issues + Kitchen Wastage + Direct Usage Movements
-    // Note: 'purchase' is strictly INWARD receipt, NEVER consumption!
-    const { data: issues } = await supabase
-      .from('consumption_issue_items')
-      .select('item_id, quantity, issue:consumption_issues!consumption_issue_items_issue_id_fkey(business_date)')
-      .gte('issue.business_date', startDate)
-      .lte('issue.business_date', endDate);
-
-    for (const iss of (issues || [])) {
-      const q = Number(iss.quantity || 0);
-      actualConsumptionMap.set(iss.item_id, (actualConsumptionMap.get(iss.item_id) || 0) + q);
-    }
-
-    const { data: movements } = await supabase
+      .lte('business_date', endDate),
+    supabase
       .from('stock_movements')
       .select('item_id, movement_type, quantity')
       .gte('business_date', startDate)
       .lte('business_date', endDate)
-      .in('movement_type', ['issue', 'consumption', 'wastage']);
+      .in('movement_type', ['issue', 'consumption', 'consumption_issue', 'wastage', 'spoilage', 'breakage', 'loss']),
+  ]);
 
-    for (const mov of (movements || [])) {
-      const q = Number(mov.quantity || 0);
-      actualConsumptionMap.set(mov.item_id, (actualConsumptionMap.get(mov.item_id) || 0) + q);
+  for (const issue of (issues || [])) {
+    for (const iss of (issue.items || [])) {
+      const q = Math.abs(Number(iss.quantity || 0));
+      loggedUsageMap.set(iss.item_id, (loggedUsageMap.get(iss.item_id) || 0) + q);
     }
   }
 
-  // 4. Assemble Variance Items
+  for (const mov of (usageMovements || [])) {
+    const q = Math.abs(Number(mov.quantity || 0));
+    loggedUsageMap.set(mov.item_id, (loggedUsageMap.get(mov.item_id) || 0) + q);
+  }
+
+  // 4. Compute Actual Consumption & Count Status
+  const actualConsumptionMap = new Map<string, number>();
+  const countStatusMap = new Map<string, 'verified' | 'count_pending' | 'movement_logged'>();
+
+  if (mode === 'count_bounded') {
+    // True Count-Bounded Mode: Read physical balances from inventory_count_items joined to approved inventory_counts
+    const [{ data: approvedCounts }, { data: purchaseMovements }] = await Promise.all([
+      supabase
+        .from('inventory_counts')
+        .select('id, business_date, status, items:inventory_count_items(item_id, physical_quantity)')
+        .eq('status', 'approved')
+        .lte('business_date', endDate)
+        .order('business_date', { ascending: true }),
+      supabase
+        .from('stock_movements')
+        .select('item_id, quantity, business_date')
+        .eq('movement_type', 'purchase')
+        .lte('business_date', endDate),
+    ]);
+
+    // Map item_id -> ordered count snapshots [{ business_date, physical_quantity }]
+    const itemCountHistory = new Map<string, Array<{ date: string; qty: number }>>();
+    for (const cnt of (approvedCounts || [])) {
+      const cntDate = String(cnt.business_date).slice(0, 10);
+      for (const ci of (cnt.items || [])) {
+        const list = itemCountHistory.get(ci.item_id) || [];
+        list.push({ date: cntDate, qty: Number(ci.physical_quantity || 0) });
+        itemCountHistory.set(ci.item_id, list);
+      }
+    }
+
+    // Map item_id -> purchase movements [{ date, qty }]
+    const itemPurchases = new Map<string, Array<{ date: string; qty: number }>>();
+    for (const p of (purchaseMovements || [])) {
+      const pDate = String(p.business_date).slice(0, 10);
+      const list = itemPurchases.get(p.item_id) || [];
+      list.push({ date: pDate, qty: Number(p.quantity || 0) });
+      itemPurchases.set(p.item_id, list);
+    }
+
+    const allCandidateIds = new Set<string>([
+      ...theoreticalDemandMap.keys(),
+      ...loggedUsageMap.keys(),
+    ]);
+
+    for (const itemId of allCandidateIds) {
+      const history = itemCountHistory.get(itemId) || [];
+      // Opening count: latest approved count on or before startDate (or earliest count in [startDate, endDate])
+      const beforeOrAtStart = history.filter((h) => h.date <= startDate);
+      const opening =
+        beforeOrAtStart.length > 0
+          ? beforeOrAtStart[beforeOrAtStart.length - 1]
+          : history.find((h) => h.date >= startDate && h.date <= endDate) || null;
+
+      // Closing count: latest approved count strictly after opening date and <= endDate
+      const closingCandidates = opening
+        ? history.filter((h) => h.date > opening.date && h.date <= endDate)
+        : [];
+      const closing = closingCandidates.length > 0 ? closingCandidates[closingCandidates.length - 1] : null;
+
+      if (opening && closing) {
+        const purchasesBetween = (itemPurchases.get(itemId) || [])
+          .filter((p) => p.date > opening.date && p.date <= closing.date)
+          .reduce((sum, p) => sum + p.qty, 0);
+
+        const consumed = Math.max(0, opening.qty + purchasesBetween - closing.qty);
+        actualConsumptionMap.set(itemId, consumed);
+        countStatusMap.set(itemId, 'verified');
+      } else {
+        // Missing either opening or closing count -> NEVER fabricate via Math.min(theo, p)
+        const logged = loggedUsageMap.get(itemId) || 0;
+        actualConsumptionMap.set(itemId, logged);
+        countStatusMap.set(itemId, 'count_pending');
+      }
+    }
+  } else {
+    // Movement-Based Mode: Strictly logged store issues & wastage (0 if none logged)
+    for (const [itemId, q] of loggedUsageMap.entries()) {
+      actualConsumptionMap.set(itemId, q);
+      countStatusMap.set(itemId, q > 0 ? 'movement_logged' : 'count_pending');
+    }
+  }
+
+  // 5. Assemble Variance Items
   const items: VarianceItem[] = [];
   let unfavorableCount = 0;
   let favorableCount = 0;
   let alignedCount = 0;
+  let countPendingCount = 0;
   let totalVarianceCost = 0;
 
-  // Evaluate items that have either theoretical demand or actual consumption
   const evaluatedItemIds = new Set<string>([
     ...theoreticalDemandMap.keys(),
     ...actualConsumptionMap.keys(),
@@ -235,6 +220,11 @@ export async function calculateInventoryVariance(
     const theo = round(theoreticalDemandMap.get(itemId) || 0, 2);
     const act = round(actualConsumptionMap.get(itemId) || 0, 2);
     const varQty = round(act - theo, 2);
+    const countStatus = countStatusMap.get(itemId) || 'count_pending';
+
+    if (countStatus === 'count_pending') {
+      countPendingCount++;
+    }
 
     let varPct = 0;
     if (theo > 0) {
@@ -262,13 +252,15 @@ export async function calculateInventoryVariance(
       item_id: inv.id,
       item_code: inv.item_code || '',
       item_name: inv.name,
-      unit_symbol: (Array.isArray(inv.unit) ? inv.unit[0]?.symbol : (inv.unit as any)?.symbol) || 'pcs',
-      category_name: (Array.isArray(inv.category) ? inv.category[0]?.name : (inv.category as any)?.name) || 'Kitchen',
+      unit_symbol: (Array.isArray(inv.unit) ? inv.unit[0]?.symbol : inv.unit?.symbol) || 'pcs',
+      category_name:
+        (Array.isArray(inv.category) ? inv.category[0]?.name : inv.category?.name) || 'Kitchen',
       theoretical_consumption: theo,
       actual_consumption: act,
       variance_qty: varQty,
       variance_pct: varPct,
       status,
+      count_status: countStatus,
     };
 
     if (canViewCosts) {
@@ -279,8 +271,8 @@ export async function calculateInventoryVariance(
     items.push(item);
   }
 
-  // Sort by unfavorable variance cost descending (or variance qty descending)
-  items.sort((a, b) => b.variance_qty - a.variance_qty);
+  // Sort by theoretical consumption descending (so highest impact kitchen items surface first)
+  items.sort((a, b) => Math.abs(b.variance_qty) - Math.abs(a.variance_qty));
 
   const report: VarianceReport = {
     start_date: startDate,
@@ -290,6 +282,7 @@ export async function calculateInventoryVariance(
     unfavorable_count: unfavorableCount,
     favorable_count: favorableCount,
     aligned_count: alignedCount,
+    count_pending_count: countPendingCount,
     items,
   };
 

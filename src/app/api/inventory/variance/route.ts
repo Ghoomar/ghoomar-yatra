@@ -1,33 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { calculateInventoryVariance } from '@/lib/inventory/variance';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
     }
 
-    // RBAC Check: Strictly requires sops.costing.view, reports.view, finance.profitability, or Admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role:roles(name), role_permissions(permission:permissions(code))')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    const userRole = (profile?.role as any)?.name;
-    const userPermissions = (profile?.role_permissions || []).map((rp: any) => rp?.permission?.code).filter(Boolean);
-
+    // RBAC Check: Strictly requires sops.costing.view, reports.view, finance.profitability, admin.manage, or Admin
     const hasVariancePermission =
-      userRole === 'Admin' ||
-      userRole === 'Owner' ||
-      userPermissions.includes('sops.costing.view') ||
-      userPermissions.includes('reports.view') ||
-      userPermissions.includes('finance.profitability') ||
-      userPermissions.includes('admin.manage');
+      auth.isAdmin ||
+      auth.permissionCodes.includes('sops.costing.view') ||
+      auth.permissionCodes.includes('reports.view') ||
+      auth.permissionCodes.includes('finance.profitability') ||
+      auth.permissionCodes.includes('admin.manage');
 
     if (!hasVariancePermission) {
       return NextResponse.json(
@@ -49,8 +38,9 @@ export async function GET(request: NextRequest) {
     const istWeekAgo = new Date(istToday.getTime() - 7 * 24 * 60 * 60 * 1000);
     const startStr = requestedStart && /^\d{4}-\d{2}-\d{2}$/.test(requestedStart) ? requestedStart : istWeekAgo.toISOString().slice(0, 10);
 
+    const admin = createAdminClient();
     const report = await calculateInventoryVariance(
-      supabase,
+      admin,
       startStr,
       endStr,
       mode,

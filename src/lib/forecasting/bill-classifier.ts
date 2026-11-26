@@ -72,6 +72,8 @@ export interface RawOrderForClassification {
   gross_amount?: number | string | null;
   items?: Array<{
     item_name: string;
+    parent_category?: string | null;
+    category?: string | null;
     quantity: number | string;
     net_sales: number | string;
     unit_price?: number | string;

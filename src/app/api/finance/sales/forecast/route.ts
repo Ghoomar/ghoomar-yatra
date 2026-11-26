@@ -1,28 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { hasPermission } from '@/lib/rbac';
 import { generateDayForecast } from '@/lib/forecasting/engine';
 import { ModelStateRow, DayContext, GroupProfile, EventType } from '@/lib/forecasting/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    // Check sales permission
-    let userRole = null;
-    let userPermissions: string[] = [];
-    if (user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role:roles(name), role_permissions(permission:permissions(code))')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      userRole = (profile?.role as any)?.name;
-      userPermissions = (profile?.role_permissions || []).map((rp: any) => rp?.permission?.code).filter(Boolean);
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
     }
 
+    const canViewForecast =
+      auth.isAdmin ||
+      hasPermission(auth.roleName, auth.permissionCodes, 'finance.sales') ||
+      hasPermission(auth.roleName, auth.permissionCodes, 'reports.view') ||
+      hasPermission(auth.roleName, auth.permissionCodes, 'dashboard.view');
+
+    if (!canViewForecast) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to view sales forecast' }, { status: 403 });
+    }
+
+    const admin = createAdminClient();
     const searchParams = request.nextUrl.searchParams;
     const requestedStart = searchParams.get('start_date');
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const startDateStr = requestedStart && /^\d{4}-\d{2}-\d{2}$/.test(requestedStart) ? requestedStart : todayStr;
 
     // 1. Fetch Model State for all 7 days of week
-    const { data: modelStates, error: stateErr } = await supabase
+    const { data: modelStates, error: stateErr } = await admin
       .from('sales_forecast_model_state')
       .select('*');
 
@@ -49,12 +49,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Fetch Group Profiles & Event Types
-    const { data: grpProfiles } = await supabase
+    const { data: grpProfiles } = await admin
       .from('sales_forecast_group_profiles')
       .select('*');
     const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
 
-    const { data: eventTypes } = await supabase
+    const { data: eventTypes } = await admin
       .from('sales_forecast_event_types')
       .select('*')
       .eq('is_active', true);
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
       forecastDates.push(cur.toISOString().slice(0, 10));
     }
 
-    const { data: contexts } = await supabase
+    const { data: contexts } = await admin
       .from('sales_forecast_day_context')
       .select('*')
       .in('business_date', forecastDates);
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     // 5. Fetch Yesterday's Graded Scorecard
     const yestDate = new Date(baseDate.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const { data: yestSnapshot } = await supabase
+    const { data: yestSnapshot } = await admin
       .from('sales_forecast_snapshots')
       .select('*')
       .eq('business_date', yestDate)
@@ -116,27 +116,16 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
     }
 
-    // Verify RBAC
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role:roles(name), role_permissions(permission:permissions(code))')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    const userRole = (profile?.role as any)?.name;
-    const userPermissions = (profile?.role_permissions || []).map((rp: any) => rp?.permission?.code).filter(Boolean);
-
-    if (!hasPermission(userRole, userPermissions, 'finance.sales') && userRole !== 'Admin') {
+    if (!auth.isAdmin && !hasPermission(auth.roleName, auth.permissionCodes, 'finance.sales')) {
       return NextResponse.json({ error: 'Forbidden: Insufficient permissions to manage forecast context' }, { status: 403 });
     }
 
+    const admin = createAdminClient();
     const body = await request.json();
     const {
       business_date,
@@ -154,7 +143,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid business_date (YYYY-MM-DD) is required.' }, { status: 400 });
     }
 
-    const { data: savedContext, error: saveErr } = await supabase
+    const { data: savedContext, error: saveErr } = await admin
       .from('sales_forecast_day_context')
       .upsert({
         business_date,
@@ -166,7 +155,7 @@ export async function POST(request: NextRequest) {
         group_notes: group_notes || null,
         custom_rev_multiplier_override: custom_rev_multiplier_override ? Number(custom_rev_multiplier_override) : null,
         custom_qty_multiplier_override: custom_qty_multiplier_override ? Number(custom_qty_multiplier_override) : null,
-        updated_by: user.id,
+        updated_by: auth.user.id,
         updated_at: new Date().toISOString(),
       })
       .select()

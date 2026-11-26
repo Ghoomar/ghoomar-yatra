@@ -69,13 +69,21 @@ export function PurchaseRequestsView({
   const [forecastConfidence, setForecastConfidence] = useState<number>(85);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [buildingRequest, setBuildingRequest] = useState(false);
+  const [toastBanner, setToastBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToastBanner({ type, message });
+    setTimeout(() => {
+      setToastBanner((prev) => (prev?.message === message ? null : prev));
+    }, 5000);
+  };
 
   React.useEffect(() => {
     let active = true;
     const loadSuggestions = async () => {
       setLoadingSuggestions(true);
       try {
-        const res = await fetch('/api/finance/purchase-forecast');
+        const res = await fetch('/api/finance/purchase-forecast', { credentials: 'include' });
         const data = await res.json();
         if (active && data.success) {
           setForecastSuggestions((data.suggestions || []).filter((s: any) => s.suggested_order_qty > 0));
@@ -109,6 +117,7 @@ export function PurchaseRequestsView({
       const res = await fetch('/api/finance/purchase-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           target_purchase_date: new Date().toISOString().slice(0, 10),
           notes: t('purchases.autoBuiltFromSuggestions') || 'Auto-built from Tomorrow Forecast Smart Suggestions',
@@ -119,12 +128,12 @@ export function PurchaseRequestsView({
       const data = await res.json();
       if (data.success) {
         onRefresh();
-        alert(t('purchases.requestBuiltSuccess') || 'Successfully created purchase request from Smart Suggestions!');
+        showToast('success', t('purchases.requestBuiltSuccess') || 'Successfully created purchase request from Smart Suggestions!');
       } else {
-        alert(data.error || 'Failed to create request');
+        showToast('error', data.error || 'Failed to create request');
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to build request');
+      showToast('error', err.message || 'Failed to build request');
     } finally {
       setBuildingRequest(false);
     }
@@ -281,6 +290,32 @@ export function PurchaseRequestsView({
 
   return (
     <div className="space-y-6">
+      {toastBanner && (
+        <div
+          className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-xs font-semibold shadow-sm transition-all ${
+            toastBanner.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : 'bg-rose-50 border-rose-200 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toastBanner.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+            )}
+            <span>{toastBanner.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastBanner(null)}
+            className="p-1 rounded hover:bg-black/5 text-current"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Action Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-stone-200 shadow-2xs">
         <div>

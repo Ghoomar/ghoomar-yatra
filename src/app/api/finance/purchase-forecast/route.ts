@@ -1,39 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveFinanceCallerAuth } from '@/lib/auth/finance-auth';
 import { generateDayForecast } from '@/lib/forecasting/engine';
 import { explodeBomDemands } from '@/lib/inventory/bom-explosion';
-import { ModelStateRow, GroupProfile, EventType } from '@/lib/forecasting/types';
+import { GroupProfile } from '@/lib/forecasting/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    // Check RBAC costing permission
-    let canViewCosts = false;
-    if (user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role:roles(name), role_permissions(permission:permissions(code))')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const userRole = (profile?.role as any)?.name;
-      const userPermissions = (profile?.role_permissions || []).map((rp: any) => rp?.permission?.code).filter(Boolean);
-
-      // Sensitive costing protection: Storekeepers (who have finance.purchases) MUST NOT see costs!
-      // Only users with sops.costing.view, finance.profitability, reports.view, or Admin can view costs.
-      if (
-        userRole === 'Admin' ||
-        userRole === 'Owner' ||
-        userPermissions.includes('sops.costing.view') ||
-        userPermissions.includes('finance.profitability') ||
-        userPermissions.includes('admin.manage')
-      ) {
-        canViewCosts = true;
-      }
+    const auth = await resolveFinanceCallerAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 });
     }
 
+    // Sensitive costing protection: Storekeepers (who have finance.purchases) MUST NOT see costs!
+    // Only users with sops.costing.view, finance.profitability, admin.manage, or Admin can view costs.
+    const canViewCosts =
+      auth.isAdmin ||
+      auth.permissionCodes.includes('sops.costing.view') ||
+      auth.permissionCodes.includes('finance.profitability') ||
+      auth.permissionCodes.includes('admin.manage');
+
+    const admin = createAdminClient();
     const searchParams = request.nextUrl.searchParams;
     const requestedDate = searchParams.get('date');
 
@@ -48,7 +35,7 @@ export async function GET(request: NextRequest) {
     const dow = d.getUTCDay();
 
     // 1. Fetch Model State for this day of week
-    const { data: modelState, error: stateErr } = await supabase
+    const { data: modelState, error: stateErr } = await admin
       .from('sales_forecast_model_state')
       .select('*')
       .eq('day_of_week', dow)
@@ -59,13 +46,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Fetch Day Context & Group Profiles
-    const { data: dayContext } = await supabase
+    const { data: dayContext } = await admin
       .from('sales_forecast_day_context')
       .select('*, event_type:sales_forecast_event_types(*)')
       .eq('business_date', targetDate)
       .maybeSingle();
 
-    const { data: grpProfiles } = await supabase
+    const { data: grpProfiles } = await admin
       .from('sales_forecast_group_profiles')
       .select('*');
     const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
@@ -81,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Strictly uses Quantity Track confidence score (qty_confidence_score)
     const suggestions = await explodeBomDemands(
-      supabase,
+      admin,
       dishDemands,
       forecast.qty_confidence_score,
       canViewCosts

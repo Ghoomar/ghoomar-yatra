@@ -121,6 +121,12 @@ function InventoryContent() {
   const canAccessStock = hasPermission('inventory.stock');
   const canAccessAssets = hasPermission('inventory.assets');
   const hasCostAccess = canViewCosting(activeRole, permissions);
+  const canViewVariance =
+    activeRole === 'Admin' ||
+    hasPermission('sops.costing.view') ||
+    hasPermission('reports.view') ||
+    hasPermission('finance.profitability') ||
+    hasPermission('admin.manage');
 
   const tabParam = searchParams.get('tab');
   const subtabParam = searchParams.get('subtab');
@@ -141,7 +147,7 @@ function InventoryContent() {
   const isTabAuthorized =
     (effectiveTopTab === 'stock' && canAccessStock) ||
     (effectiveTopTab === 'assets' && canAccessAssets) ||
-    (effectiveTopTab === 'variance' && (canAccessStock || canAccessAssets));
+    (effectiveTopTab === 'variance' && (canViewVariance || canAccessStock || canAccessAssets));
 
   const topTab = effectiveTopTab;
 
@@ -478,51 +484,57 @@ function InventoryContent() {
 
   return (
     <div className="space-y-6 max-w-full overflow-hidden">
-      {/* Top-Level Navigation: [ Inventory ] [ Physical Assets ] */}
-      {canAccessStock && canAccessAssets && (
+      {/* Top-Level Navigation: [ Inventory ] [ Physical Assets ] [ Theo-vs-Act Variance ] */}
+      {((canAccessStock && canAccessAssets) || (canAccessStock && canViewVariance)) && (
         <div className="overflow-x-auto scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
           <div className="flex border-b border-stone-200 bg-white rounded-t-xl min-w-max shadow-xs">
-            <button
-              onClick={() => {
-                router.push('/inventory?tab=stock');
-              }}
-              className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-                topTab === 'stock'
-                  ? 'border-amber-600 text-amber-800 bg-amber-50/50'
-                  : 'border-transparent text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              <Package className="h-4 w-4" />
-              {t('inventory.stock.topTabs.stock')}
-            </button>
+            {canAccessStock && (
+              <button
+                onClick={() => {
+                  router.push('/inventory?tab=stock');
+                }}
+                className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  topTab === 'stock'
+                    ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <Package className="h-4 w-4" />
+                {t('inventory.stock.topTabs.stock')}
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                router.push('/inventory?tab=assets');
-              }}
-              className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-                topTab === 'assets'
-                  ? 'border-amber-600 text-amber-800 bg-amber-50/50'
-                  : 'border-transparent text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              <Layers className="h-4 w-4" />
-              {t('inventory.stock.topTabs.assets')}
-            </button>
+            {canAccessAssets && (
+              <button
+                onClick={() => {
+                  router.push('/inventory?tab=assets');
+                }}
+                className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  topTab === 'assets'
+                    ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <Layers className="h-4 w-4" />
+                {t('inventory.stock.topTabs.assets')}
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                router.push('/inventory?tab=variance');
-              }}
-              className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
-                topTab === 'variance'
-                  ? 'border-amber-600 text-amber-800 bg-amber-50/50'
-                  : 'border-transparent text-stone-500 hover:text-stone-800'
-              }`}
-            >
-              <Scale className="h-4 w-4" />
-              {t('inventory.stock.topTabs.variance') || 'Theo-vs-Act Variance'}
-            </button>
+            {canViewVariance && (
+              <button
+                onClick={() => {
+                  router.push('/inventory?tab=variance');
+                }}
+                className={`flex items-center gap-2 py-3 px-6 text-sm font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                  topTab === 'variance'
+                    ? 'border-amber-600 text-amber-800 bg-amber-50/50'
+                    : 'border-transparent text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <Scale className="h-4 w-4" />
+                {t('inventory.stock.topTabs.variance')}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -26,11 +26,19 @@ import { classifyBill, associateGroupClusters, RawOrderForClassification, EXCLUD
 /**
  * Resolves menu item category based on canonical category or menu item patterns.
  */
-export function resolveDishCategory(dishName: string, explicitCategory?: string): string {
+export function resolveDishCategory(dishName: string, explicitCategory?: string | null): string {
+  const n = (dishName || '').toLowerCase().trim();
+  if (
+    n.includes('school picnic') ||
+    n.includes('wedding lunch') ||
+    n.includes('group package') ||
+    n.includes('group thali')
+  ) {
+    return 'Group Packages';
+  }
   if (explicitCategory && explicitCategory !== 'Uncategorized' && explicitCategory !== 'Main Course') {
     return explicitCategory;
   }
-  const n = (dishName || '').toLowerCase().trim();
   if (
     n.includes('tea') ||
     n.includes('chai') ||
@@ -294,6 +302,14 @@ export function generateDayForecast(
   };
 }
 
+export interface GroupDayMixDelta {
+  group_type: string;
+  net: number;
+  units: number;
+  pax: number;
+  dishes: Record<string, number>;
+}
+
 /**
  * Grades a frozen forecast snapshot against real actuals for a date and updates model state.
  */
@@ -302,7 +318,11 @@ export function gradeDaySnapshot(
   classifications: BillClassificationResult[],
   rawOrders: RawOrderForClassification[],
   priorModelState: ModelStateRow
-): { graded: GradedSnapshotRecord; updatedModelState: ModelStateRow } {
+): {
+  graded: GradedSnapshotRecord;
+  updatedModelState: ModelStateRow;
+  groupMixUpdates: GroupDayMixDelta[];
+} {
   // 1. Decompose Actuals from Classifications
   let decomp_normal_net = 0;
   let decomp_group_net = 0;
@@ -328,8 +348,19 @@ export function gradeDaySnapshot(
     late_night: { net: 0, units: 0, orders: 0, pax: 0 },
   };
 
-  const actualDishesMap = new Map<string, { qty: number; net: number }>();
+  // Full day actuals (preserved for historical audit display)
+  const actualDishesMap = new Map<string, { qty: number; net: number; category: string }>();
   const actualCategoriesMap = new Map<string, { qty: number; net: number }>();
+
+  // Normal-only dishes & categories (strictly isolated for recurring weekday model state training)
+  const normalDishesMap = new Map<string, { qty: number; net: number; category: string }>();
+  const normalCategoriesMap = new Map<string, { qty: number; net: number }>();
+
+  // Group-only accumulation by group_type (routed to sales_forecast_group_profiles)
+  const groupMixByType = new Map<
+    string,
+    { group_type: string; net: number; units: number; pax: number; dishes: Record<string, number> }
+  >();
 
   const orderMap = new Map<string, RawOrderForClassification>(rawOrders.map((o) => [o.id, o]));
 
@@ -375,6 +406,22 @@ export function gradeDaySnapshot(
       decomp_data_anomaly_units += foodQty;
     }
 
+    // Track group profile totals when large_group
+    if (b.bill_class === 'large_group') {
+      const gType = b.group_type || 'standard_group';
+      const gCur = groupMixByType.get(gType) || {
+        group_type: gType,
+        net: 0,
+        units: 0,
+        pax: 0,
+        dishes: {},
+      };
+      gCur.net += foodNet;
+      gCur.units += foodQty;
+      gCur.pax += b.bill_pax;
+      groupMixByType.set(gType, gCur);
+    }
+
     // Daypart breakdown
     const dp = b.daypart || 'lunch';
     if (dayparts[dp]) {
@@ -390,17 +437,36 @@ export function gradeDaySnapshot(
         if (EXCLUDED_NON_RESTAURANT_ITEMS.has(it.item_name)) continue;
         const q = Number(it.quantity || 0);
         const ns = isComplimentary ? 0 : Number(it.net_sales || 0);
+        const cat = resolveDishCategory(it.item_name, it.parent_category);
 
-        const curD = actualDishesMap.get(it.item_name) || { qty: 0, net: 0 };
+        const curD = actualDishesMap.get(it.item_name) || { qty: 0, net: 0, category: cat };
         curD.qty += q;
         curD.net += ns;
         actualDishesMap.set(it.item_name, curD);
 
-        const cat = resolveDishCategory(it.item_name);
         const curC = actualCategoriesMap.get(cat) || { qty: 0, net: 0 };
         curC.qty += q;
         curC.net += ns;
         actualCategoriesMap.set(cat, curC);
+
+        // Strictly isolate normal bill dishes for recurring weekday mixes
+        if (b.bill_class === 'normal') {
+          const curND = normalDishesMap.get(it.item_name) || { qty: 0, net: 0, category: cat };
+          curND.qty += q;
+          curND.net += ns;
+          normalDishesMap.set(it.item_name, curND);
+
+          const curNC = normalCategoriesMap.get(cat) || { qty: 0, net: 0 };
+          curNC.qty += q;
+          curNC.net += ns;
+          normalCategoriesMap.set(cat, curNC);
+        } else if (b.bill_class === 'large_group') {
+          const gType = b.group_type || 'standard_group';
+          const gCur = groupMixByType.get(gType);
+          if (gCur) {
+            gCur.dishes[it.item_name] = (gCur.dishes[it.item_name] || 0) + q;
+          }
+        }
       }
     }
   }
@@ -543,34 +609,34 @@ export function gradeDaySnapshot(
     graded_at: new Date().toISOString(),
   };
 
-  // 4. Update Model State for this day of week
-  // Update category mixes with EWMA (0.15 fresh / 0.85 persistent)
+  // 4. Update Model State for this day of week STRICTLY using bill_class === 'normal' mixes
+  // (Never let large_group School Picnic or anomalous bills pollute normal recurring weekday forecasts)
   const updatedCatVolMix = { ...(priorModelState.category_volume_mix_json || {}) };
   const updatedCatRevMix = { ...(priorModelState.category_revenue_mix_json || {}) };
-  if (actual_total_units > 0 && actual_net_revenue > 0) {
-    for (const c of actualCategoriesList) {
-      const volShare = c.quantity / actual_total_units;
-      const revShare = c.net_sales / actual_net_revenue;
-      const priorVolShare = updatedCatVolMix[c.category] || 0;
-      const priorRevShare = updatedCatRevMix[c.category] || 0;
-      updatedCatVolMix[c.category] = round(0.15 * volShare + 0.85 * priorVolShare, 4);
-      updatedCatRevMix[c.category] = round(0.15 * revShare + 0.85 * priorRevShare, 4);
+  if (decomp_normal_units > 0 && decomp_normal_net > 0) {
+    for (const [catName, c] of normalCategoriesMap.entries()) {
+      const volShare = c.qty / decomp_normal_units;
+      const revShare = c.net / decomp_normal_net;
+      const priorVolShare = updatedCatVolMix[catName] || 0;
+      const priorRevShare = updatedCatRevMix[catName] || 0;
+      updatedCatVolMix[catName] = round(0.15 * volShare + 0.85 * priorVolShare, 4);
+      updatedCatRevMix[catName] = round(0.15 * revShare + 0.85 * priorRevShare, 4);
     }
   }
 
-  // Update dish mix with EWMA (0.15 fresh / 0.85 persistent)
+  // Update dish mix strictly from normalDishesMap with EWMA (0.15 fresh / 0.85 persistent)
   const updatedDishMix = { ...(priorModelState.dish_volume_mix_json || {}) };
-  if (actual_total_units > 0) {
-    for (const d of actualDishesList) {
-      if (EXCLUDED_NON_RESTAURANT_ITEMS.has(d.dish_name)) continue;
-      const observedShare = d.quantity / actual_total_units;
-      const priorShare = updatedDishMix[d.dish_name]?.share || 0;
+  if (decomp_normal_units > 0) {
+    for (const [dishName, d] of normalDishesMap.entries()) {
+      if (EXCLUDED_NON_RESTAURANT_ITEMS.has(dishName)) continue;
+      const observedShare = d.qty / decomp_normal_units;
+      const priorShare = updatedDishMix[dishName]?.share || 0;
       const newShare = 0.15 * observedShare + 0.85 * priorShare;
-      const avgPrice = d.quantity > 0 ? d.net_sales / d.quantity : (updatedDishMix[d.dish_name]?.avg_price || 150);
-      updatedDishMix[d.dish_name] = {
+      const avgPrice = d.qty > 0 ? d.net / d.qty : (updatedDishMix[dishName]?.avg_price || 150);
+      updatedDishMix[dishName] = {
         share: round(newShare, 4),
         avg_price: round(avgPrice, 2),
-        category: resolveDishCategory(d.dish_name),
+        category: d.category,
       };
     }
   }
@@ -610,5 +676,68 @@ export function gradeDaySnapshot(
     updated_at: new Date().toISOString(),
   };
 
-  return { graded, updatedModelState };
+  return {
+    graded,
+    updatedModelState,
+    groupMixUpdates: Array.from(groupMixByType.values()),
+  };
+}
+
+/**
+ * Merges observed large_group day mix deltas into sales_forecast_group_profiles.
+ */
+export function mergeGroupProfileUpdates(
+  priorProfilesMap: Map<string, GroupProfile>,
+  deltas: GroupDayMixDelta[]
+): GroupProfile[] {
+  const updated: GroupProfile[] = [];
+
+  for (const delta of deltas) {
+    if (delta.units <= 0 && delta.pax <= 0) continue;
+    const existing = priorProfilesMap.get(delta.group_type) || {
+      group_type: delta.group_type as any,
+      sample_events_count: 0,
+      learned_apc: 240,
+      learned_units_per_guest: 1,
+      primary_daypart: 'lunch' as const,
+      typical_dish_mix_json: {},
+    };
+
+    const obsApc = delta.pax > 0 ? delta.net / delta.pax : existing.learned_apc;
+    const obsUpg = delta.pax > 0 ? delta.units / delta.pax : existing.learned_units_per_guest;
+
+    const newSampleCount = (existing.sample_events_count || 0) + 1;
+    const alpha = newSampleCount === 1 ? 1.0 : 0.35;
+    const newApc = round(alpha * obsApc + (1 - alpha) * Number(existing.learned_apc || 240), 2);
+    const newUpg = round(
+      alpha * obsUpg + (1 - alpha) * Number(existing.learned_units_per_guest || 1),
+      2
+    );
+
+    const newMix: Record<string, number> = { ...(existing.typical_dish_mix_json || {}) };
+    if (delta.units > 0) {
+      // Decay prior entries slightly when blending new observations
+      for (const k of Object.keys(newMix)) {
+        newMix[k] = round(newMix[k] * (1 - alpha), 4);
+      }
+      for (const [dishName, qty] of Object.entries(delta.dishes)) {
+        if (EXCLUDED_NON_RESTAURANT_ITEMS.has(dishName)) continue;
+        const obsShare = qty / delta.units;
+        newMix[dishName] = round((newMix[dishName] || 0) + alpha * obsShare, 4);
+      }
+    }
+
+    const nextProfile: GroupProfile = {
+      ...existing,
+      sample_events_count: newSampleCount,
+      learned_apc: newApc,
+      learned_units_per_guest: newUpg,
+      typical_dish_mix_json: newMix,
+    };
+
+    priorProfilesMap.set(delta.group_type, nextProfile);
+    updated.push(nextProfile);
+  }
+
+  return updated;
 }

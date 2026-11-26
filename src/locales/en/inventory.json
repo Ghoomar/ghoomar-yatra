@@ -796,6 +796,12 @@
     "statusFavorable": "FAVORABLE",
     "statusAligned": "ALIGNED",
     "noItemsMatch": "No items match the current filters.",
-    "loadingVariance": "Exploding BOM recipe demands & calculating variance..."
+    "loadingVariance": "Exploding BOM recipe demands & calculating variance...",
+    "errorTitle": "Unable to Load Variance Report",
+    "retry": "Retry",
+    "countPendingBadge": "Count Pending",
+    "verifiedCountBadge": "Verified Count",
+    "movementLoggedBadge": "Movement Logged",
+    "countPendingNotice": "{count} item(s) lack both opening and closing verified counts in this window and show logged movement usage only."
   }
 }

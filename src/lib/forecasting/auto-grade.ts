@@ -5,7 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { classifyBill, associateGroupClusters, RawOrderForClassification } from './bill-classifier';
-import { generateDayForecast, gradeDaySnapshot } from './engine';
+import { generateDayForecast, gradeDaySnapshot, mergeGroupProfileUpdates } from './engine';
 import { ModelStateRow, GroupProfile } from './types';
 
 export async function runAutoGradingForDate(supabase: SupabaseClient, businessDate: string): Promise<void> {
@@ -17,10 +17,10 @@ export async function runAutoGradingForDate(supabase: SupabaseClient, businessDa
 
   if (!rawOrders || rawOrders.length === 0) return;
 
-  // 2. Fetch order items for this date
+  // 2. Fetch order items for this date (including parent_category)
   const { data: rawItems } = await supabase
     .from('sales_order_items')
-    .select('invoice_no, item_name, quantity, net_sales, table_no, status')
+    .select('invoice_no, item_name, parent_category, quantity, net_sales, table_no, status')
     .eq('business_date', businessDate);
 
   const itemsByInvoice = new Map<string, any[]>();
@@ -119,7 +119,12 @@ export async function runAutoGradingForDate(supabase: SupabaseClient, businessDa
   const groupProfileMap = new Map<string, GroupProfile>((grpProfiles || []).map((g) => [g.group_type, g]));
 
   const forecast = generateDayForecast(businessDate, modelState, dayContext, groupProfileMap);
-  const { graded, updatedModelState } = gradeDaySnapshot(forecast, finalClassifications, fullOrders, modelState);
+  const { graded, updatedModelState, groupMixUpdates } = gradeDaySnapshot(
+    forecast,
+    finalClassifications,
+    fullOrders,
+    modelState
+  );
 
   await supabase.from('sales_forecast_snapshots').upsert(
     {
@@ -133,4 +138,23 @@ export async function runAutoGradingForDate(supabase: SupabaseClient, businessDa
     .from('sales_forecast_model_state')
     .update(updatedModelState)
     .eq('day_of_week', dow);
+
+  if (groupMixUpdates.length > 0) {
+    const updatedGroups = mergeGroupProfileUpdates(groupProfileMap, groupMixUpdates);
+    for (const grp of updatedGroups) {
+      await supabase
+        .from('sales_forecast_group_profiles')
+        .upsert(
+          {
+            group_type: grp.group_type,
+            sample_events_count: grp.sample_events_count,
+            learned_apc: grp.learned_apc,
+            learned_units_per_guest: grp.learned_units_per_guest,
+            typical_dish_mix_json: grp.typical_dish_mix_json,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'group_type' }
+        );
+    }
+  }
 }
